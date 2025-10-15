@@ -1,0 +1,26 @@
+class MySQL:
+    host: str = "localhost"
+    port: int = 3306
+    user: str = "root"
+    password: str = "password"
+    database: str = "rapid_wire"
+
+    @classmethod
+    def to_dict(cls) -> dict[str, str|int]:
+        return {
+            "host": cls.host,
+            "port": cls.port,
+            "user": cls.user,
+            "password": cls.password,
+            "database": cls.database,
+        }
+
+class Discord:
+    token: str = "BOT_TOKEN"
+    admins: list[int] = []
+
+class APIServer:
+    host: str = "0.0.0.0"
+    port: int = 8000
+
+decimal_places = 3
