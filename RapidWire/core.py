@@ -43,14 +43,6 @@ class RapidWire:
         self.Claims = ClaimModel(self.db)
         self.Stakes = StakeModel(self.db)
 
-        contract_config = {
-            'augassign': True,
-            'if': True,
-            'ifexp': True,
-            'raise': True
-        }
-        self.aeval = Interpreter(minimal=True, use_numpy=False, symtable={}, config=contract_config)
-
     def get_user(self, user_id: int) -> UserModel:
         return UserModel(user_id, self.db)
 
@@ -153,22 +145,27 @@ class RapidWire:
                     }
                     api_methods = self._create_contract_api(transaction_context)
 
-                    self.aeval.symtable = {
+                    contract_config = {
+                        'augassign': True,
+                        'if': True,
+                        'ifexp': True,
+                        'raise': True
+                    }
+                    aeval = Interpreter(minimal=True, use_numpy=False, symtable={}, config=contract_config)
+                    aeval.symtable = {
                         'api': api_methods,
                         'tx': transaction_context,
                         'Cancel': TransactionCanceledByContract
                     }
 
                     try:
-                        self.aeval.eval(contract.script)
-                        if 'return_message' in self.aeval.symtable:
-                            contract_message = str(self.aeval.symtable['return_message'])
+                        aeval.eval(contract.script)
+                        if 'return_message' in aeval.symtable:
+                            contract_message = str(aeval.symtable['return_message'])
                     except TransactionCanceledByContract:
                         raise
                     except Exception as e:
                         raise TransactionError(f"Contract execution failed: {e}")
-                    finally:
-                        self.aeval.symtable = {}
 
             with self.db as cursor:
                 source = self.get_user(source_id)
