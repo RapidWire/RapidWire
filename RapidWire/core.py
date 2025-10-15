@@ -151,15 +151,17 @@ class RapidWire:
                         'ifexp': True,
                         'raise': True
                     }
-                    aeval = Interpreter(minimal=True, use_numpy=False, symtable={}, config=contract_config)
-                    aeval.symtable = {
+
+                    user_symbols = {
                         'api': api_methods,
                         'tx': transaction_context,
                         'Cancel': TransactionCanceledByContract
                     }
 
+                    aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, config=contract_config)
+
                     try:
-                        aeval.eval(contract.script)
+                        aeval.eval(contract.script, show_errors=False, raise_errors=True)
                         if 'return_message' in aeval.symtable:
                             contract_message = str(aeval.symtable['return_message'])
                     except TransactionCanceledByContract:
