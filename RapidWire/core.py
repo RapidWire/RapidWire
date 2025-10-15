@@ -1,10 +1,12 @@
 import mysql.connector
 import re
+import ast
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
 from asteval import Interpreter
 from decimal import Decimal
 
+import config
 from .database import DatabaseConnection
 from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel
 from .structs import Currency, Transaction, Claim, Stake
@@ -18,6 +20,17 @@ from .exceptions import (
 
 SYSTEM_USER_ID = 0
 SECONDS_IN_A_DAY = 86400
+CONTRACT_METHOD_COSTS = {
+    'get_balance': 1,
+    'get_transaction': 2,
+    'transfer': 10,
+    'search_transactions': 5,
+    'get_currency': 1,
+    'create_claim': 3,
+    'get_claim': 2,
+    'pay_claim': 5,
+    'cancel_claim': 2,
+}
 
 class RapidWire:
     def __init__(self, db_config: dict):
@@ -40,6 +53,20 @@ class RapidWire:
 
     def get_user(self, user_id: int) -> UserModel:
         return UserModel(user_id, self.db)
+
+    def _calculate_contract_cost(self, script: str) -> int:
+        try:
+            tree = ast.parse(script)
+        except SyntaxError:
+            raise ValueError("Invalid syntax in contract script.")
+
+        cost = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == 'api':
+                    method_name = node.func.attr
+                    cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
+        return cost
 
     def _create_contract_api(self, transaction_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         def _api_get_balance(user_id: int, currency_id: int) -> int:
@@ -112,6 +139,11 @@ class RapidWire:
             if execute_contract:
                 contract = self.Contracts.get(destination_id)
                 if contract and contract.script:
+                    if contract.cost > config.Contract.max_cost:
+                        raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({config.Contract.max_cost}).")
+                    if contract.max_cost > 0 and contract.cost > contract.max_cost:
+                        raise TransactionError(f"Contract cost ({contract.cost}) exceeds user-defined max cost ({contract.max_cost}).")
+
                     transaction_context = {
                         'source': source_id,
                         'dest': destination_id,
@@ -273,3 +305,7 @@ class RapidWire:
                 cursor.callproc('sp_update_interest_rate', (currency_id, new_rate))
         except mysql.connector.Error as err:
             raise TransactionError(f"Failed to update interest rate via stored procedure: {err}")
+
+    def set_contract(self, user_id: int, script: str, max_cost: int = 0):
+        cost = self._calculate_contract_cost(script)
+        return self.Contracts.set(user_id, script, cost, max_cost)

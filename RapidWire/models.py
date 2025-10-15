@@ -149,15 +149,15 @@ class ContractModel:
             result = cursor.fetchone()
             return Contract(**result) if result else None
 
-    def set(self, user_id: int, script: str) -> Contract:
+    def set(self, user_id: int, script: str, cost: int, max_cost: int) -> Contract:
         with self.db as cursor:
             cursor.execute(
                 """
-                INSERT INTO contract (user_id, script)
-                VALUES (%s, %s)
-                ON DUPLICATE KEY UPDATE script = VALUES(script)
+                INSERT INTO contract (user_id, script, cost, max_cost)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE script = VALUES(script), cost = VALUES(cost), max_cost = VALUES(max_cost)
                 """,
-                (user_id, script)
+                (user_id, script, cost, max_cost)
             )
         return self.get(user_id)
 

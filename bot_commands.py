@@ -388,13 +388,21 @@ async def stake_info(interaction: discord.Interaction, symbol: Optional[str] = N
 contract_group = app_commands.Group(name="contract", description="あなたのアカウントのコントラクトを管理します。")
 
 @contract_group.command(name="set", description="あなたのアカウントにコントラクトを設定します。")
-@app_commands.describe(script="コントラクトとして実行するPythonコードが書かれたファイル")
-async def contract_set(interaction: discord.Interaction, script: discord.Attachment):
+@app_commands.describe(
+    script="コントラクトとして実行するPythonコードが書かれたファイル",
+    max_cost="このコントラクトの実行を許可する最大コスト (0で無制限)"
+)
+async def contract_set(interaction: discord.Interaction, script: discord.Attachment, max_cost: Optional[int] = 0):
     await interaction.response.defer(thinking=True)
     try:
         script_content = (await script.read()).decode('utf-8')
-        Rapid.Contracts.set(interaction.user.id, script_content)
-        await interaction.followup.send(embed=create_success_embed("コントラクトを正常に設定しました。"))
+        contract = Rapid.set_contract(interaction.user.id, script_content, max_cost)
+
+        embed = create_success_embed("コントラクトを正常に設定しました。")
+        embed.add_field(name="計算されたコスト", value=f"`{contract.cost}`", inline=False)
+        embed.add_field(name="設定された最大コスト", value=f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", inline=False)
+
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n`{e}`"))
 

@@ -23,4 +23,7 @@ class APIServer:
     host: str = "0.0.0.0"
     port: int = 8000
 
+class Contract:
+    max_cost: int = 100
+
 decimal_places = 3
