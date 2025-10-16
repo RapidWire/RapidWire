@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List, Tuple, Literal
 from asteval import Interpreter
 from decimal import Decimal
 
-import config
+from .config import Config
 from .database import DatabaseConnection
 from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel
 from .structs import Currency, Transaction, Claim, Stake
@@ -153,8 +153,8 @@ class RapidWire:
                 if execute_contract:
                     contract = self.Contracts.get(destination_id)
                     if contract and contract.script:
-                        if contract.cost > config.Contract.max_cost:
-                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({config.Contract.max_cost}).")
+                        if contract.cost > Config.Contract.max_cost:
+                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({Config.Contract.max_cost}).")
                         if contract.max_cost > 0 and contract.cost > contract.max_cost:
                             raise TransactionError(f"Contract cost ({contract.cost}) exceeds user-defined max cost ({contract.max_cost}).")
 
@@ -302,6 +302,8 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Failed to update interest rate via stored procedure: {err}")
 
-    def set_contract(self, user_id: int, script: str, max_cost: int = 0):
+    def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
+        if max_cost is None:
+            max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
         return self.Contracts.set(user_id, script, cost, max_cost)
