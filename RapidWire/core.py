@@ -32,6 +32,50 @@ CONTRACT_METHOD_COSTS = {
     'cancel_claim': 2,
 }
 
+
+class ContractAPI:
+    def __init__(self, rapidwire_instance: 'RapidWire', transaction_context: Dict[str, Any]):
+        self.core = rapidwire_instance
+        self.tx = transaction_context
+
+    def get_balance(self, user_id: int, currency_id: int) -> int:
+        return self.core.get_user(user_id).get_balance(currency_id).amount
+
+    def get_transaction(self, tx_id: int) -> Optional[dict]:
+        tx = self.core.Transactions.get(tx_id)
+        return tx.dict() if tx else None
+
+    def transfer(self, source: int, dest: int, currency: int, amount: int) -> dict:
+        if source != self.tx['dest']:
+            raise PermissionError("Contract can only initiate transfers from its own account.")
+        new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
+        return new_tx.dict()
+
+    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[dict]:
+        txs = self.core.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
+        return [tx.dict() for tx in txs]
+
+    def get_currency(self, currency_id: int) -> Optional[dict]:
+        curr = self.core.Currencies.get(currency_id=currency_id)
+        return curr.dict() if curr else None
+
+    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> dict:
+        claim = self.core.Claims.create(claimant, payer, currency, amount, desc)
+        return claim.dict()
+
+    def get_claim(self, claim_id: int) -> Optional[dict]:
+        claim = self.core.Claims.get(claim_id)
+        return claim.dict() if claim else None
+    
+    def pay_claim(self, claim_id: int, payer_id: int) -> dict:
+        tx, _ = self.core.pay_claim(claim_id, payer_id)
+        return tx.dict()
+
+    def cancel_claim(self, claim_id: int, user_id: int) -> dict:
+        claim = self.core.cancel_claim(claim_id, user_id)
+        return claim.dict()
+
+
 class RapidWire:
     def __init__(self, db_config: dict):
         self.connection = mysql.connector.connect(**db_config)
@@ -59,56 +103,6 @@ class RapidWire:
                     method_name = node.func.attr
                     cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
         return cost
-
-    def _create_contract_api(self, transaction_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        def _api_get_balance(user_id: int, currency_id: int) -> int:
-            return self.get_user(user_id).get_balance(currency_id).amount
-
-        def _api_get_transaction(tx_id: int) -> Optional[dict]:
-            tx = self.Transactions.get(tx_id)
-            return tx.dict() if tx else None
-
-        def _api_transfer(source: int, dest: int, currency: int, amount: int) -> dict:
-            if transaction_context and source != transaction_context['dest']:
-                raise PermissionError("Contract can only initiate transfers from its own account.")
-            new_tx, _ = self.transfer(source, dest, currency, amount, execute_contract=False)
-            return new_tx.dict()
-
-        def _api_search_transactions(source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[dict]:
-            txs = self.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
-            return [tx.dict() for tx in txs]
-
-        def _api_get_currency(currency_id: int) -> Optional[dict]:
-            curr = self.Currencies.get(currency_id=currency_id)
-            return curr.dict() if curr else None
-
-        def _api_create_claim(claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> dict:
-            claim = self.Claims.create(claimant, payer, currency, amount, desc)
-            return claim.dict()
-
-        def _api_get_claim(claim_id: int) -> Optional[dict]:
-            claim = self.Claims.get(claim_id)
-            return claim.dict() if claim else None
-        
-        def _api_pay_claim(claim_id: int, payer_id: int) -> dict:
-            tx, _ = self.pay_claim(claim_id, payer_id)
-            return tx.dict()
-
-        def _api_cancel_claim(claim_id: int, user_id: int) -> dict:
-            claim = self.cancel_claim(claim_id, user_id)
-            return claim.dict()
-
-        return {
-            'get_balance': _api_get_balance,
-            'get_transaction': _api_get_transaction,
-            'transfer': _api_transfer,
-            'search_transactions': _api_search_transactions,
-            'get_currency': _api_get_currency,
-            'create_claim': _api_create_claim,
-            'get_claim': _api_get_claim,
-            'pay_claim': _api_pay_claim,
-            'cancel_claim': _api_cancel_claim,
-        }
 
     def transfer(
         self,
@@ -143,22 +137,24 @@ class RapidWire:
                         'amount': amount,
                         'input_data': input_data
                     }
-                    api_methods = self._create_contract_api(transaction_context)
+                    
+                    api_handler = ContractAPI(self, transaction_context)
 
                     contract_config = {
                         'augassign': True,
                         'if': True,
                         'ifexp': True,
-                        'raise': True
+                        'raise': True,
+                        'formattedvalue': True
                     }
 
                     user_symbols = {
-                        'api': api_methods,
+                        'api': api_handler,
                         'tx': transaction_context,
                         'Cancel': TransactionCanceledByContract
                     }
 
-                    aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, config=contract_config)
+                    aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
 
                     try:
                         aeval.eval(contract.script, show_errors=False, raise_errors=True)
