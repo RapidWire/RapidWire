@@ -56,6 +56,7 @@ async def on_message(message: discord.Message):
 def main():
     global Rapid
     Rapid = RapidWire(db_config=config.MySQL.to_dict())
+    Rapid.Config.Contract.max_cost = 100
     bot_commands.setup(tree)
     client.run(config.Discord.token)
 

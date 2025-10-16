@@ -33,6 +33,8 @@ class APIKey(BaseModel):
 class Contract(BaseModel):
     user_id: int
     script: str
+    cost: int
+    max_cost: int
 
 class Claim(BaseModel):
     claim_id: int
