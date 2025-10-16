@@ -122,49 +122,6 @@ class RapidWire:
 
         contract_message = None
         try:
-            if execute_contract:
-                contract = self.Contracts.get(destination_id)
-                if contract and contract.script:
-                    if contract.cost > config.Contract.max_cost:
-                        raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({config.Contract.max_cost}).")
-                    if contract.max_cost > 0 and contract.cost > contract.max_cost:
-                        raise TransactionError(f"Contract cost ({contract.cost}) exceeds user-defined max cost ({contract.max_cost}).")
-
-                    transaction_context = {
-                        'source': source_id,
-                        'dest': destination_id,
-                        'currency': currency_id,
-                        'amount': amount,
-                        'input_data': input_data
-                    }
-                    
-                    api_handler = ContractAPI(self, transaction_context)
-
-                    contract_config = {
-                        'augassign': True,
-                        'if': True,
-                        'ifexp': True,
-                        'raise': True,
-                        'formattedvalue': True
-                    }
-
-                    user_symbols = {
-                        'api': api_handler,
-                        'tx': transaction_context,
-                        'Cancel': TransactionCanceledByContract
-                    }
-
-                    aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
-
-                    try:
-                        aeval.eval(contract.script, show_errors=False, raise_errors=True)
-                        if 'return_message' in aeval.symtable:
-                            contract_message = str(aeval.symtable['return_message'])
-                    except TransactionCanceledByContract:
-                        raise
-                    except Exception as e:
-                        raise TransactionError(f"Contract execution failed: {e}")
-
             with self.db as cursor:
                 source = self.get_user(source_id)
                 destination = self.get_user(destination_id)
@@ -192,6 +149,50 @@ class RapidWire:
                     (source_id, destination_id, currency_id, amount, input_data, int(time()))
                 )
                 transaction_id = cursor.lastrowid
+
+                if execute_contract:
+                    contract = self.Contracts.get(destination_id)
+                    if contract and contract.script:
+                        if contract.cost > config.Contract.max_cost:
+                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({config.Contract.max_cost}).")
+                        if contract.max_cost > 0 and contract.cost > contract.max_cost:
+                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds user-defined max cost ({contract.max_cost}).")
+
+                        transaction_context = {
+                            'source': source_id,
+                            'dest': destination_id,
+                            'currency': currency_id,
+                            'amount': amount,
+                            'input_data': input_data,
+                            'transaction_id': transaction_id
+                        }
+
+                        api_handler = ContractAPI(self, transaction_context)
+
+                        contract_config = {
+                            'augassign': True,
+                            'if': True,
+                            'ifexp': True,
+                            'raise': True,
+                            'formattedvalue': True
+                        }
+
+                        user_symbols = {
+                            'api': api_handler,
+                            'tx': transaction_context,
+                            'Cancel': TransactionCanceledByContract
+                        }
+
+                        aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
+
+                        try:
+                            aeval.eval(contract.script, show_errors=False, raise_errors=True)
+                            if 'return_message' in aeval.symtable:
+                                contract_message = str(aeval.symtable['return_message'])
+                        except TransactionCanceledByContract:
+                            raise
+                        except Exception as e:
+                            raise TransactionError(f"Contract execution failed: {e}")
 
                 cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
                 result = cursor.fetchone()
