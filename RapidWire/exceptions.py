@@ -18,6 +18,11 @@ class TransactionError(RapidWireError):
     """Raised for general transaction failures."""
     pass
 
+class ContractError(RapidWireError):
+    """Raised for general contract failures."""
+    def __init__(self, errors, *args):
+        super().__init__(*args)
+
 class DuplicateEntryError(RapidWireError):
     """Raised when trying to insert a duplicate entry into the database."""
     pass

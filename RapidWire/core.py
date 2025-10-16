@@ -3,7 +3,7 @@ import re
 import ast
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
-from asteval import Interpreter
+import asteval
 from decimal import Decimal
 
 from .config import Config
@@ -175,21 +175,30 @@ class RapidWire:
                             'if': True,
                             'ifexp': True,
                             'raise': True,
-                            'formattedvalue': True
                         }
+
+                        network_config = Config
 
                         user_symbols = {
                             'api': api_handler,
                             'tx': transaction_context,
+                            'network_config': network_config,
                             'Cancel': TransactionCanceledByContract
                         }
 
-                        aeval = Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
+                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
 
                         try:
-                            aeval.eval(contract.script, show_errors=False, raise_errors=True)
+                            aeval.eval(contract.script, show_errors=False)
                             if 'return_message' in aeval.symtable:
                                 contract_message = str(aeval.symtable['return_message'])
+                            if aeval.error:
+                                errors: list[asteval.astutils.ExceptionHolder] = aeval.error
+                                errrrr = errors[0]
+                                print(aeval.error)
+                                print(errrrr)
+                                for err in aeval.error:
+                                    print(err)
                         except TransactionCanceledByContract:
                             raise
                         except Exception as e:
