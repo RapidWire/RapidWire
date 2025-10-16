@@ -190,13 +190,24 @@ class RapidWire:
                         aeval = asteval.Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
 
                         try:
-                            aeval.eval(contract.script, show_errors=False, raise_errors=True)
+                            aeval.eval(contract.script, show_errors=False)
                             if 'return_message' in aeval.symtable:
                                 contract_message = str(aeval.symtable['return_message'])
+                            if aeval.error:
+                                err_dict:dict[str,str] = {}
+                                aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
+                                for err in aeval_error:
+                                    err_dict[str(err.exc.__name__)] = str(err.msg)
+                                if 'TransactionCanceledByContract' in err_dict:
+                                    raise TransactionCanceledByContract(err_dict['TransactionCanceledByContract'])
+                                raise ContractError(err_dict)
+                            
                         except TransactionCanceledByContract:
                             raise
+                        except ContractError:
+                            raise
                         except Exception as e:
-                            raise ContractError(e)
+                            raise TransactionError(f"{e.__class__.__name__}: {str(e)}")
 
                 cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
                 result = cursor.fetchone()
