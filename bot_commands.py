@@ -91,6 +91,8 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
     except exceptions.TransactionCanceledByContract as e:
         await interaction.followup.send(embed=create_error_embed(f"送金は受信者のコントラクトによってキャンセルされました。\n**理由:** `{e}`"))
+    except exceptions.ContractError as e:
+        await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
     except exceptions.TransactionError as e:
         await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
     except Exception as e:

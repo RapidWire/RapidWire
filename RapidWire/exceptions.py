@@ -20,8 +20,14 @@ class TransactionError(RapidWireError):
 
 class ContractError(RapidWireError):
     """Raised for general contract failures."""
-    def __init__(self, errors, *args):
-        super().__init__(*args)
+    def __init__(self, exc: Exception):
+        self.exc = exc
+
+    def __str__(self):
+        return str({self.exc.__class__.__name__: self.exc.__repr__()})
+    
+    def __repr__(self):
+        return self.__str__
 
 class DuplicateEntryError(RapidWireError):
     """Raised when trying to insert a duplicate entry into the database."""

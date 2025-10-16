@@ -15,6 +15,7 @@ from .exceptions import (
     CurrencyNotFound,
     InsufficientFunds,
     TransactionError,
+    ContractError,
     TransactionCanceledByContract,
 )
 
@@ -189,20 +190,13 @@ class RapidWire:
                         aeval = asteval.Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
 
                         try:
-                            aeval.eval(contract.script, show_errors=False)
+                            aeval.eval(contract.script, show_errors=False, raise_errors=True)
                             if 'return_message' in aeval.symtable:
                                 contract_message = str(aeval.symtable['return_message'])
-                            if aeval.error:
-                                errors: list[asteval.astutils.ExceptionHolder] = aeval.error
-                                errrrr = errors[0]
-                                print(aeval.error)
-                                print(errrrr)
-                                for err in aeval.error:
-                                    print(err)
                         except TransactionCanceledByContract:
                             raise
                         except Exception as e:
-                            raise TransactionError(f"Contract execution failed: {e}")
+                            raise ContractError(e)
 
                 cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
                 result = cursor.fetchone()
