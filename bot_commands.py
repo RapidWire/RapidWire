@@ -10,6 +10,7 @@ import config
 from RapidWire import RapidWire, exceptions, structs
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
+Rapid.Config.Contract.max_cost = config.Contract.max_cost
 SYSTEM_USER_ID = 0
 
 def create_error_embed(description: str) -> Embed:

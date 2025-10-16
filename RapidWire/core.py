@@ -86,6 +86,7 @@ class RapidWire:
         self.APIKeys = APIKeyModel(self.db)
         self.Claims = ClaimModel(self.db)
         self.Stakes = StakeModel(self.db)
+        self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
         return UserModel(user_id, self.db)

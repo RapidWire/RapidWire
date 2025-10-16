@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 import config
 import bot_commands
-from RapidWire import RapidWire, Config
+from RapidWire import RapidWire
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -55,8 +55,8 @@ async def on_message(message: discord.Message):
 
 def main():
     global Rapid
-    Config.Contract.max_cost = 100
     Rapid = RapidWire(db_config=config.MySQL.to_dict())
+    Rapid.Config.Contract.max_cost = 100
     bot_commands.setup(tree)
     client.run(config.Discord.token)
 

@@ -1,5 +1,3 @@
-class __Config:
+class Config:
     class Contract:
-        max_cost = 1000
-
-Config = __Config()
+        max_cost: int = 100
