@@ -21,26 +21,10 @@ RapidWireは、カスタマイズ可能な通貨と高度なスマートコン�
 2.  **設定ファイルを作成する**:
     `config.py.example`を`config.py`にコピーし、データベースの接続情報やDiscordボットのトークンなど、必要な設定を編集します。
 
-    ```python
-    # config.py
-
-    # Discordボットトークン
-    DISCORD_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN"
-
-    # データベース設定
-    DATABASE_CONFIG = {
-        'host': 'localhost',
-        'user': 'your_db_user',
-        'password': 'your_db_password',
-        'database': 'rapid_wire'
-    }
-    ```
-
 3.  **依存関係をインストールする**:
     ```bash
     pip install -r requirements.txt
     ```
-    *(注: `requirements.txt`が存在しない場合は、`pip install discord mysql-connector-python asteval pydantic`を実行してください)*
 
 4.  **データベースをセットアップする**:
     `rapid-wire.sql`ファイルを使用して、MySQLデータベースにテーブルを作成します。
