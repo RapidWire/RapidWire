@@ -93,6 +93,24 @@ class CurrencyModel:
          with self.db as cursor:
             cursor.execute("DELETE FROM currency WHERE currency_id = %s", (currency_id,))
 
+    def request_rate_change(self, currency_id: int, new_rate: Decimal) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute(
+                "UPDATE currency SET new_daily_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",
+                (new_rate, int(time()), currency_id)
+            )
+            if cursor.rowcount == 0: return None
+        return self.get(currency_id)
+
+    def apply_rate_change(self, currency: Currency) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute(
+                "UPDATE currency SET daily_interest_rate = %s, new_daily_interest_rate = NULL, rate_change_requested_at = NULL WHERE currency_id = %s",
+                (currency.new_daily_interest_rate, currency.currency_id)
+            )
+            if cursor.rowcount == 0: return None
+        return self.get(currency.currency_id)
+
 class TransactionModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
@@ -237,33 +255,33 @@ class StakeModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    def create(self, user_id: int, currency_id: int, amount: int, rate: Decimal) -> Stake:
+    def get(self, user_id: int, currency_id: int) -> Optional[Stake]:
         with self.db as cursor:
-            cursor.execute(
-                "INSERT INTO staking (user_id, currency_id, amount, staked_at, daily_interest_rate) VALUES (%s, %s, %s, %s, %s)",
-                (user_id, currency_id, amount, int(time()), rate)
-            )
-            stake_id = cursor.lastrowid
-        return self.get(stake_id)
-
-    def get(self, stake_id: int) -> Optional[Stake]:
-        with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE stake_id = %s", (stake_id,))
+            cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
             result = cursor.fetchone()
             return Stake(**result) if result else None
 
-    def get_for_user(self, user_id: int, currency_id: int) -> List[Stake]:
+    def get_for_user(self, user_id: int) -> List[Stake]:
         with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+            cursor.execute("SELECT * FROM staking WHERE user_id = %s", (user_id,))
             results = cursor.fetchall()
             return [Stake(**row) for row in results]
 
-    def get_all_for_currency(self, currency_id: int) -> List[Stake]:
-        with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE currency_id = %s", (currency_id,))
-            results = cursor.fetchall()
-            return [Stake(**row) for row in results]
+    def upsert(self, cursor, user_id: int, currency_id: int, amount_change: int, last_updated_at: int):
+        cursor.execute(
+            """
+            INSERT INTO staking (user_id, currency_id, amount, last_updated_at)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE amount = amount + %s, last_updated_at = %s
+            """,
+            (user_id, currency_id, amount_change, last_updated_at, amount_change, last_updated_at)
+        )
 
-    def delete(self, stake_id: int):
-        with self.db as cursor:
-            cursor.execute("DELETE FROM staking WHERE stake_id = %s", (stake_id,))
+    def update_amount(self, cursor, user_id: int, currency_id: int, new_amount: int, last_updated_at: int):
+        cursor.execute(
+            "UPDATE staking SET amount = %s, last_updated_at = %s WHERE user_id = %s AND currency_id = %s",
+            (new_amount, last_updated_at, user_id, currency_id)
+        )
+
+    def delete(self, cursor, user_id: int, currency_id: int):
+        cursor.execute("DELETE FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))

@@ -113,6 +113,40 @@ class RapidWire:
     def get_user(self, user_id: int) -> UserModel:
         return UserModel(user_id, self.db)
 
+    def _compound_interest(self, cursor, user_id: int, currency_id: int) -> Stake:
+        stake = self.Stakes.get(user_id, currency_id)
+        if not stake:
+            return None
+
+        currency = self.Currencies.get(currency_id)
+        if not currency or currency.daily_interest_rate <= 0:
+            return stake
+
+        current_time = int(time())
+        elapsed_seconds = current_time - stake.last_updated_at
+        if elapsed_seconds <= SECONDS_IN_A_DAY:
+            return stake
+
+        days_passed = elapsed_seconds // SECONDS_IN_A_DAY
+        reward = int(Decimal(stake.amount) * (Decimal(1) + currency.daily_interest_rate)**Decimal(days_passed) - Decimal(stake.amount))
+
+        if reward > 0:
+            new_amount = stake.amount + reward
+            self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
+            # We need to create a transaction for the reward
+            cursor.execute(
+                """
+                INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
+            )
+            # Update the supply
+            self.Currencies.update_supply(cursor, currency_id, reward)
+            return self.Stakes.get(user_id, currency_id)
+
+        return stake
+
     def _calculate_contract_cost(self, script: str) -> int:
         try:
             tree = ast.parse(script)
@@ -311,38 +345,96 @@ class RapidWire:
         return self.Claims.update_status(claim_id, 'canceled')
 
     def stake_deposit(self, user_id: int, currency_id: int, amount: int) -> Stake:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive.")
+
         currency = self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency for staking not found.")
-        
-        self.transfer(user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit")
-        stake = self.Stakes.create(user_id, currency_id, amount, currency.daily_interest_rate)
-        return stake
 
-    def stake_withdraw(self, stake_id: int, user_id: int) -> Tuple[int, Transaction]:
-        stake = self.Stakes.get(stake_id)
-        if not stake:
-            raise ValueError("Stake not found.")
-        if stake.user_id != user_id:
-            raise PermissionError("You do not own this stake.")
-            
-        days_staked = (int(time()) - stake.staked_at) // SECONDS_IN_A_DAY
-        reward = 0
-        if days_staked > 0:
-            reward = int(Decimal(stake.amount) * Decimal(days_staked) * stake.daily_interest_rate)
-        
-        total_payout = stake.amount + reward
-        
-        tx, _ = self.transfer(SYSTEM_USER_ID, user_id, stake.currency_id, total_payout, f"stake:withdraw:{stake_id}")
-        self.Stakes.delete(stake_id)
-        return reward, tx
-
-    def update_daily_interest_rate(self, currency_id: int, new_rate: Decimal):
         try:
             with self.db as cursor:
-                cursor.callproc('sp_update_interest_rate', (currency_id, new_rate))
+                # First, compound any existing interest
+                self._compound_interest(cursor, user_id, currency_id)
+
+                # Then, perform the transfer from user to system
+                source_balance = self.get_user(user_id).get_balance(currency_id)
+                if source_balance.amount < amount:
+                    raise InsufficientFunds("User has insufficient funds.")
+
+                self.get_user(user_id)._update_balance(cursor, currency_id, -amount)
+
+                # Upsert the stake
+                self.Stakes.upsert(cursor, user_id, currency_id, amount, int(time()))
+
+                # Create a transaction for the deposit
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
+                )
+            return self.Stakes.get(user_id, currency_id)
         except mysql.connector.Error as err:
-            raise TransactionError(f"Failed to update interest rate via stored procedure: {err}")
+            raise TransactionError(f"Database error during stake deposit: {err}")
+
+    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transaction:
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be positive.")
+
+        try:
+            with self.db as cursor:
+                stake = self._compound_interest(cursor, user_id, currency_id)
+                if not stake or stake.amount < amount:
+                    raise InsufficientFunds("Withdrawal amount exceeds staked balance.")
+
+                # Reduce the stake amount
+                new_stake_amount = stake.amount - amount
+                if new_stake_amount > 0:
+                    self.Stakes.update_amount(cursor, user_id, currency_id, new_stake_amount, int(time()))
+                else:
+                    self.Stakes.delete(cursor, user_id, currency_id)
+
+                # Transfer funds back to the user
+                self.get_user(user_id)._update_balance(cursor, currency_id, amount)
+
+                # Create a transaction for the withdrawal
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
+                )
+                tx_id = cursor.lastrowid
+            return self.Transactions.get(tx_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during stake withdrawal: {err}")
+
+    def request_interest_rate_change(self, currency_id: int, new_rate: Decimal, user_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the currency issuer can change the interest rate.")
+        if currency.rate_change_requested_at is not None:
+            raise ValueError("An interest rate change is already pending.")
+
+        return self.Currencies.request_rate_change(currency_id, new_rate)
+
+    def apply_interest_rate_change(self, currency_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+        if currency.rate_change_requested_at is None or currency.new_daily_interest_rate is None:
+            raise ValueError("No interest rate change is pending.")
+
+        # Check if the timelock period has passed (e.g., 7 days)
+        if time() - currency.rate_change_requested_at < self.Config.Staking.rate_change_timelock:
+            raise PermissionError("The timelock period for the interest rate change has not passed yet.")
+
+        return self.Currencies.apply_rate_change(currency)
 
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
         if max_cost is None:

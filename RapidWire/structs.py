@@ -11,6 +11,8 @@ class Currency(BaseModel):
     minting_renounced: bool
     delete_requested_at: Optional[int] = None
     daily_interest_rate: Decimal
+    new_daily_interest_rate: Optional[Decimal] = None
+    rate_change_requested_at: Optional[int] = None
 
 class Balance(BaseModel):
     user_id: int
@@ -47,12 +49,10 @@ class Claim(BaseModel):
     description: Optional[str] = None
 
 class Stake(BaseModel):
-    stake_id: int
     user_id: int
     currency_id: int
     amount: int
-    staked_at: int
-    daily_interest_rate: Decimal
+    last_updated_at: int
 
 class TransactionContext(BaseModel):
     source: int
