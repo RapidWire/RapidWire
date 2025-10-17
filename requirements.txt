@@ -1,0 +1,4 @@
+discord
+mysql-connector-python
+asteval
+pydantic

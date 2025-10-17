@@ -53,3 +53,15 @@ class Stake(BaseModel):
     amount: int
     staked_at: int
     daily_interest_rate: Decimal
+
+class TransactionContext(BaseModel):
+    source: int
+    dest: int
+    currency: int
+    amount: int
+    input_data: Optional[str] = None
+    transaction_id: int
+
+class ChainContext(BaseModel):
+    total_cost: int
+    budget: int

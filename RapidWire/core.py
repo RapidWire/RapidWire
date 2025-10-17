@@ -9,7 +9,7 @@ from decimal import Decimal
 from .config import Config
 from .database import DatabaseConnection
 from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel
-from .structs import Currency, Transaction, Claim, Stake
+from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext
 from .exceptions import (
     UserNotFound,
     CurrencyNotFound,
@@ -31,13 +31,15 @@ CONTRACT_METHOD_COSTS = {
     'get_claim': 2,
     'pay_claim': 5,
     'cancel_claim': 2,
+    'execute_contract': 15,
 }
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', transaction_context: Dict[str, Any]):
+    def __init__(self, rapidwire_instance: 'RapidWire', transaction_context: TransactionContext, chain_context: Optional[ChainContext] = None):
         self.core = rapidwire_instance
         self.tx = transaction_context
+        self.chain_context = chain_context
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
@@ -47,7 +49,7 @@ class ContractAPI:
         return tx.dict() if tx else None
 
     def transfer(self, source: int, dest: int, currency: int, amount: int) -> dict:
-        if source != self.tx['dest']:
+        if source != self.tx.dest:
             raise PermissionError("Contract can only initiate transfers from its own account.")
         new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
         return new_tx.dict()
@@ -75,6 +77,25 @@ class ContractAPI:
     def cancel_claim(self, claim_id: int, user_id: int) -> dict:
         claim = self.core.cancel_claim(claim_id, user_id)
         return claim.dict()
+
+    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[dict, Optional[str]]:
+        source_id = self.tx.dest
+
+        callee_contract = self.core.Contracts.get(destination_id)
+        if not callee_contract:
+            raise ContractError(f"Contract not found at address {destination_id}")
+
+        self.chain_context.total_cost += callee_contract.cost
+
+        new_tx, message = self.core.transfer(
+            source_id=source_id,
+            destination_id=destination_id,
+            currency_id=currency_id,
+            amount=amount,
+            input_data=input_data,
+            chain_context=self.chain_context
+        )
+        return new_tx.dict(), message
 
 
 class RapidWire:
@@ -113,7 +134,8 @@ class RapidWire:
         currency_id: int,
         amount: int,
         input_data: Optional[str] = None,
-        execute_contract: bool = True
+        execute_contract: bool = True,
+        chain_context: Optional[ChainContext] = None
     ) -> Tuple[Transaction, Optional[str]]:
         if source_id == destination_id:
             raise ValueError("Source and destination cannot be the same.")
@@ -155,21 +177,26 @@ class RapidWire:
                 if execute_contract:
                     contract = self.Contracts.get(destination_id)
                     if contract and contract.script:
-                        if contract.cost > Config.Contract.max_cost:
-                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds network max cost ({Config.Contract.max_cost}).")
-                        if contract.max_cost > 0 and contract.cost > contract.max_cost:
-                            raise TransactionError(f"Contract cost ({contract.cost}) exceeds user-defined max cost ({contract.max_cost}).")
+                        if chain_context is None:
+                            # Start of a new chain
+                            chain_context = ChainContext(
+                                total_cost=contract.cost,
+                                budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
+                            )
 
-                        transaction_context = {
-                            'source': source_id,
-                            'dest': destination_id,
-                            'currency': currency_id,
-                            'amount': amount,
-                            'input_data': input_data,
-                            'transaction_id': transaction_id
-                        }
+                        if chain_context.total_cost > chain_context.budget:
+                            raise TransactionError(f"Aggregated contract cost ({chain_context.total_cost}) exceeds budget ({chain_context.budget}).")
 
-                        api_handler = ContractAPI(self, transaction_context)
+                        transaction_context = TransactionContext(
+                            source=source_id,
+                            dest=destination_id,
+                            currency=currency_id,
+                            amount=amount,
+                            input_data=input_data,
+                            transaction_id=transaction_id
+                        )
+
+                        api_handler = ContractAPI(self, transaction_context, chain_context)
 
                         contract_config = {
                             'augassign': True,
