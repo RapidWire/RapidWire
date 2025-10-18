@@ -307,24 +307,42 @@ async def currency_delete(interaction: discord.Interaction):
                 "通貨削除完了"
             ))
 
-@currency_group.command(name="set-interest", description="[管理者] ステーキングの日利を変更します。")
+@currency_group.command(name="request-interest-change", description="[管理者] ステーキングの日利変更を予約します。")
 @app_commands.describe(rate="新しい日利 (%)")
 @app_commands.checks.has_permissions(administrator=True)
-async def currency_set_interest(interaction: discord.Interaction, rate: float):
+async def currency_request_interest_change(interaction: discord.Interaction, rate: float):
+    await interaction.response.defer(thinking=True)
+    if not interaction.guild: return
+    
+    try:
+        new_rate_decimal = Decimal(str(rate)) / Decimal(100)
+        currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_decimal, interaction.user.id)
+
+        timelock_seconds = Rapid.Config.Staking.rate_change_timelock
+        apply_time = int(time()) + timelock_seconds
+
+        desc = (f"ステーキングの日利を`{rate:.4f}%`に変更するリクエストを受け付けました。\n"
+                f"この変更は <t:{apply_time}:F> (<t:{apply_time}:R>) 以降に適用可能になります。")
+        await interaction.followup.send(embed=create_success_embed(desc, "利率変更予約完了"))
+    except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
+
+@currency_group.command(name="apply-interest-change", description="[管理者] 予約されている利率変更を適用します。")
+@app_commands.checks.has_permissions(administrator=True)
+async def currency_apply_interest_change(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
 
-    currency = Rapid.Currencies.get(interaction.guild.id)
-    if not currency:
-        await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
-        return
-    if currency.minting_renounced:
-        await interaction.followup.send(embed=create_error_embed("この通貨の利率変更機能は放棄されています。"))
-        return
-    
-    new_rate_decimal = Decimal(str(rate)) / Decimal(100)
-    Rapid.update_daily_interest_rate(currency.currency_id, new_rate_decimal)
-    await interaction.followup.send(embed=create_success_embed(f"ステーキングの日利を`{rate:.4f}%`に変更しました。\n既存のステークは自動的に更新されます。", "利率変更完了"))
+    try:
+        currency = Rapid.apply_interest_rate_change(interaction.guild.id)
+        desc = f"ステーキングの日利が `{currency.daily_interest_rate * 100:.4f}%` に正常に更新されました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
+    except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
 
 stake_group = app_commands.Group(name="stake", description="ステーキングに関連するコマンド")
 
@@ -340,50 +358,56 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
         stake = Rapid.stake_deposit(interaction.user.id, currency.currency_id, int_amount)
-        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキングを開始しました。\n**ステークID:** `{stake.stake_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, "ステーキング開始"))
+        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキング（または追加預け入れ）が完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
+        await interaction.followup.send(embed=create_success_embed(desc, "ステーキング完了"))
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("ステーキングするための残高が不足しています。"))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
-@stake_group.command(name="withdraw", description="指定したステークを引き出します。")
-@app_commands.describe(stake_id="引き出すステークのID")
-async def stake_withdraw(interaction: discord.Interaction, stake_id: int):
+@stake_group.command(name="withdraw", description="ステーキングした通貨の一部または全部を引き出します。")
+@app_commands.describe(amount="引き出す量", symbol="引き出す通貨のシンボル (任意)")
+async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
-        reward, tx = Rapid.stake_withdraw(stake_id, interaction.user.id)
-        currency = Rapid.Currencies.get(tx.currency_id)
-        desc = f"ステークID `{stake_id}` を引き出しました。\n"
-        desc += f"元本: `{format_amount(tx.amount - reward)} {currency.symbol}`\n"
-        desc += f"報酬: `{format_amount(reward)} {currency.symbol}`\n"
-        desc += f"合計: `{format_amount(tx.amount)} {currency.symbol}`"
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        tx = Rapid.stake_withdraw(interaction.user.id, currency.currency_id, int_amount)
+
+        stake = Rapid.Stakes.get(interaction.user.id, currency.currency_id)
+        remaining_amount = stake.amount if stake else 0
+
+        desc = f"`{format_amount(tx.amount)} {currency.symbol}` を引き出しました。\n"
+        desc += f"残りのステーク額: `{format_amount(remaining_amount)} {currency.symbol}`"
         await interaction.followup.send(embed=create_success_embed(desc, "引き出し完了"))
-    except (ValueError, PermissionError) as e:
+    except (ValueError, PermissionError, exceptions.InsufficientFunds) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
 @stake_group.command(name="info", description="あなたのステーキング状況を表示します。")
-@app_commands.describe(symbol="表示する通貨のシンボル (任意)")
-async def stake_info(interaction: discord.Interaction, symbol: Optional[str] = None):
+async def stake_info(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     
-    currency = await _get_currency(interaction, symbol)
-    if not currency:
-        await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
-        return
-    
-    stakes = Rapid.Stakes.get_for_user(interaction.user.id, currency.currency_id)
+    stakes = Rapid.Stakes.get_for_user(interaction.user.id)
     if not stakes:
-        await interaction.followup.send(embed=create_success_embed(f"`{currency.symbol}`のステークはありません。", "ステーク情報"))
+        await interaction.followup.send(embed=create_success_embed("現在、アクティブなステークはありません。", "ステーク情報"))
         return
         
-    embed = Embed(title=f"{interaction.user.display_name}のステーク情報 ({currency.symbol})", color=Color.purple())
+    embed = Embed(title=f"{interaction.user.display_name}のステーク情報", color=Color.purple())
     
     for stake in stakes:
-        field_name = f"ID: {stake.stake_id} | `{format_amount(stake.amount)} {currency.symbol}`"
-        field_value = f"開始日時: <t:{stake.staked_at}:F>\n日利: `{stake.daily_interest_rate * 100:.4f}%`"
+        currency = Rapid.Currencies.get(stake.currency_id)
+        if not currency: continue
+
+        field_name = f"通貨: **{currency.name} ({currency.symbol})**"
+        field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
+                       f"現在の日利: `{currency.daily_interest_rate * 100:.4f}%`\n"
+                       f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
         
     await interaction.followup.send(embed=embed)
