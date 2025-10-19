@@ -5,6 +5,7 @@ import io
 import re
 from decimal import Decimal
 from time import time
+from datetime import datetime
 
 import config
 from RapidWire import RapidWire, exceptions, structs
@@ -99,8 +100,33 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
 
 @app_commands.command(name="history", description="取引履歴を表示します。")
-@app_commands.describe(transaction_id="詳細を表示する取引ID (任意)", user="履歴を表示するユーザー (任意)", page="ページ番号")
-async def history(interaction: discord.Interaction, transaction_id: Optional[int] = None, user: Optional[User] = None, page: int = 1):
+@app_commands.describe(
+    transaction_id="詳細を表示する取引ID (任意)",
+    user="対象ユーザー",
+    source="送金元ユーザー",
+    destination="送金先ユーザー",
+    currency_symbol="通貨シンボル",
+    start_date="開始日 (YYYY-MM-DD)",
+    end_date="終了日 (YYYY-MM-DD)",
+    min_amount="最小金額",
+    max_amount="最大金額",
+    input_data="Input Data",
+    page="ページ番号"
+)
+async def history(
+    interaction: discord.Interaction,
+    transaction_id: Optional[int] = None,
+    user: Optional[User] = None,
+    source: Optional[User] = None,
+    destination: Optional[User] = None,
+    currency_symbol: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    input_data: Optional[str] = None,
+    page: int = 1
+):
     await interaction.response.defer(thinking=True)
     try:
         if transaction_id:
@@ -110,13 +136,13 @@ async def history(interaction: discord.Interaction, transaction_id: Optional[int
                 return
 
             currency = Rapid.Currencies.get(tx.currency_id)
-            source_user = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
             
             embed = Embed(title=f"取引詳細: ID {tx.transaction_id}", color=Color.blue())
             embed.add_field(name="日時", value=f"<t:{tx.timestamp}:F>", inline=False)
-            embed.add_field(name="From", value=source_user, inline=True)
-            embed.add_field(name="To", value=dest_user, inline=True)
+            embed.add_field(name="From", value=source_user_mention, inline=True)
+            embed.add_field(name="To", value=dest_user_mention, inline=True)
             embed.add_field(name="金額", value=f"`{format_amount(tx.amount)} {currency.symbol if currency else '???'}`", inline=False)
             if tx.input_data:
                 embed.add_field(name="メモ (Input Data)", value=f"```{tx.input_data}```", inline=False)
@@ -124,28 +150,66 @@ async def history(interaction: discord.Interaction, transaction_id: Optional[int
             await interaction.followup.send(embed=embed)
             return
 
-        target_user = user or interaction.user
-        transactions = Rapid.Transactions.get_user_history(target_user.id, page=page)
+        search_params = {
+            "source_id": source.id if source else None,
+            "dest_id": destination.id if destination else None,
+            "input_data": input_data,
+            "page": page
+        }
+
+        target_user = user or source or destination
+        if not target_user:
+            search_params["user_id"] = interaction.user.id
+            target_user = interaction.user
+        elif user:
+            search_params["user_id"] = user.id
+
+        if currency_symbol:
+            currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
+            search_params["currency_id"] = currency.currency_id if currency else -1
+
+        def parse_date(date_str: str) -> Optional[int]:
+            try:
+                return int(datetime.strptime(date_str, "%Y-%m-%d").timestamp())
+            except ValueError:
+                return None
+
+        if start_date:
+            search_params["start_timestamp"] = parse_date(start_date)
+        if end_date:
+            search_params["end_timestamp"] = parse_date(end_date)
+
+        if min_amount is not None:
+            search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**config.decimal_places))
+        if max_amount is not None:
+            search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
+
+        transactions = Rapid.Transactions.search(**search_params)
+
+        target_user = user or source or destination or interaction.user
+
         if not transactions:
-            await interaction.followup.send(embed=create_success_embed(f"{target_user.display_name}の取引履歴はありません。", "取引履歴"))
+            await interaction.followup.send(embed=create_success_embed(f"指定された条件の取引履歴はありません。", "取引履歴"))
             return
 
-        embed = Embed(title=f"{target_user.display_name}の取引履歴 (ページ {page})", color=Color.blue())
+        embed = Embed(title=f"取引履歴 (ページ {page})", color=Color.blue())
         for tx in transactions:
             currency = Rapid.Currencies.get(tx.currency_id)
             if not currency: continue
 
-            source_user = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
             
             direction_emoji = "↔️"
-            direction_text = ""
-            if tx.source_id == target_user.id:
-                direction_emoji = "📤"
-                direction_text = f"to {dest_user}"
-            elif tx.destination_id == target_user.id:
-                direction_emoji = "📥"
-                direction_text = f"from {source_user}"
+            direction_text = f"from {source_user_mention} to {dest_user_mention}"
+
+            if target_user:
+                if tx.source_id == target_user.id:
+                    direction_emoji = "📤"
+                    direction_text = f"to {dest_user_mention}"
+                elif tx.destination_id == target_user.id:
+                    direction_emoji = "📥"
+                    direction_text = f"from {source_user_mention}"
 
             field_name = f"{direction_emoji} | ID: {tx.transaction_id} | <t:{tx.timestamp}:R>"
             field_value = f"`{format_amount(tx.amount)} {currency.symbol}` {direction_text}"
