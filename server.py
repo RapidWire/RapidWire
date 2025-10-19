@@ -200,6 +200,5 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host=config.APIServer.host,
-        port=config.APIServer.port,
-        reload=True
+        port=config.APIServer.port
     )
