@@ -198,7 +198,7 @@ async def search_transactions(
 
 if __name__ == "__main__":
     uvicorn.run(
-        "server:app",
+        app,
         host=config.APIServer.host,
         port=config.APIServer.port,
         reload=True
