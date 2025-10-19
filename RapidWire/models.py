@@ -131,7 +131,20 @@ class TransactionModel:
             results = cursor.fetchall()
             return [Transaction(**row) for row in results]
 
-    def search(self, source_id: Optional[int] = None, dest_id: Optional[int] = None, currency_id: Optional[int] = None, page: int = 1, limit: int = 10) -> List[Transaction]:
+    def search(
+        self,
+        source_id: Optional[int] = None,
+        dest_id: Optional[int] = None,
+        currency_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        start_timestamp: Optional[int] = None,
+        end_timestamp: Optional[int] = None,
+        min_amount: Optional[int] = None,
+        max_amount: Optional[int] = None,
+        input_data: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10
+    ) -> List[Transaction]:
         offset = (page - 1) * limit
         conditions = []
         params = []
@@ -145,12 +158,33 @@ class TransactionModel:
         if currency_id is not None:
             conditions.append("currency_id = %s")
             params.append(currency_id)
+        if user_id is not None:
+            conditions.append("(source = %s OR dest = %s)")
+            params.extend([user_id, user_id])
+        if start_timestamp is not None:
+            conditions.append("timestamp >= %s")
+            params.append(start_timestamp)
+        if end_timestamp is not None:
+            conditions.append("timestamp <= %s")
+            params.append(end_timestamp)
+        if min_amount is not None:
+            conditions.append("amount >= %s")
+            params.append(min_amount)
+        if max_amount is not None:
+            conditions.append("amount <= %s")
+            params.append(max_amount)
+        if input_data is not None:
+            conditions.append("inputData = %s")
+            params.append(input_data)
 
         if not conditions:
-            return []
-
-        query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
+            # Add a condition that's always true to prevent an empty WHERE clause
+            # and still allow for pagination, etc.
+            query = "SELECT * FROM transaction ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+        else:
+            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
 
         with self.db as cursor:
             cursor.execute(query, tuple(params))
