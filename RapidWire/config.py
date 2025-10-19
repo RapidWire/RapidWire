@@ -4,3 +4,6 @@ class Config:
 
     class Staking:
         rate_change_timelock: int = 604800 # 7 days
+
+    class Swap:
+        fee: float = 0.003 # 0.3%
