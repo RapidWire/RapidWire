@@ -515,6 +515,98 @@ async def claim_cancel(interaction: discord.Interaction, claim_id: int):
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"キャンセル処理中にエラーが発生しました: {e}"))
 
+async def _get_pool_info_embed(pool: structs.LiquidityPool) -> Embed:
+    currency_a = Rapid.Currencies.get(pool.currency_a_id)
+    currency_b = Rapid.Currencies.get(pool.currency_b_id)
+    embed = Embed(title=f"流動性プール情報: {currency_a.symbol}-{currency_b.symbol}", color=Color.purple())
+    embed.add_field(name="プールID", value=f"`{pool.pool_id}`", inline=False)
+    embed.add_field(name=f"{currency_a.symbol} リザーブ", value=f"`{format_amount(pool.reserve_a)}`", inline=True)
+    embed.add_field(name=f"{currency_b.symbol} リザーブ", value=f"`{format_amount(pool.reserve_b)}`", inline=True)
+    embed.add_field(name="合計シェア", value=f"`{format_amount(pool.total_shares)}`", inline=False)
+    return embed
+
+lp_group = app_commands.Group(name="lp", description="流動性プールに関連するコマンド")
+
+@lp_group.command(name="create", description="新しい流動性プールを作成します。")
+@app_commands.describe(symbol_a="通貨Aのシンボル", amount_a="通貨Aの量", symbol_b="通貨Bのシンボル", amount_b="通貨Bの量")
+async def lp_create(interaction: discord.Interaction, symbol_a: str, amount_a: float, symbol_b: str, amount_b: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        currency_a = Rapid.Currencies.get_by_symbol(symbol_a.upper())
+        currency_b = Rapid.Currencies.get_by_symbol(symbol_b.upper())
+        if not currency_a or not currency_b:
+            await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
+            return
+
+        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+
+        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, int_amount_a, int_amount_b, interaction.user.id)
+        embed = await _get_pool_info_embed(pool)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"プールの作成中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="add", description="流動性プールに流動性を追加します。")
+@app_commands.describe(pool_id="プールID", amount_a="通貨Aの量", amount_b="通貨Bの量")
+async def lp_add(interaction: discord.Interaction, pool_id: int, amount_a: float, amount_b: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+
+        shares = Rapid.add_liquidity(pool_id, int_amount_a, int_amount_b, interaction.user.id)
+        desc = f"`{format_amount(shares)}` シェアを受け取りました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "流動性追加完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"流動性の追加中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="remove", description="流動性プールから流動性を削除します。")
+@app_commands.describe(pool_id="プールID", shares="削除するシェアの量")
+async def lp_remove(interaction: discord.Interaction, pool_id: int, shares: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        int_shares = int(Decimal(str(shares)) * (10**config.decimal_places))
+        amount_a, amount_b = Rapid.remove_liquidity(pool_id, int_shares, interaction.user.id)
+        pool = Rapid.LiquidityPools.get(pool_id)
+        currency_a = Rapid.Currencies.get(pool.currency_a_id)
+        currency_b = Rapid.Currencies.get(pool.currency_b_id)
+
+        desc = f"`{format_amount(amount_a)} {currency_a.symbol}` と `{format_amount(amount_b)} {currency_b.symbol}` を受け取りました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "流動性削除完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"流動性の削除中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="info", description="流動性プールの情報を表示します。")
+@app_commands.describe(pool_id="プールID")
+async def lp_info(interaction: discord.Interaction, pool_id: int):
+    await interaction.response.defer(thinking=True)
+    pool = Rapid.LiquidityPools.get(pool_id)
+    if not pool:
+        await interaction.followup.send(embed=create_error_embed("指定されたプールIDは見つかりませんでした。"))
+        return
+    embed = await _get_pool_info_embed(pool)
+    await interaction.followup.send(embed=embed)
+
+@app_commands.command(name="swap", description="通貨をスワップします。")
+@app_commands.describe(pool_id="プールID", from_symbol="スワップ元の通貨シンボル", amount="スワップする量")
+async def swap(interaction: discord.Interaction, pool_id: int, from_symbol: str, amount: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        from_currency = Rapid.Currencies.get_by_symbol(from_symbol.upper())
+        if not from_currency:
+            await interaction.followup.send(embed=create_error_embed("スワップ元の通貨が見つかりませんでした。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        amount_out, to_currency_id = Rapid.swap(pool_id, from_currency.currency_id, int_amount, interaction.user.id)
+        to_currency = Rapid.Currencies.get(to_currency_id)
+
+        desc = f"`{format_amount(int_amount)} {from_currency.symbol}` を `{format_amount(amount_out)} {to_currency.symbol}` にスワップしました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "スワップ完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"))
+
 def setup(tree: app_commands.CommandTree):
     tree.add_command(balance)
     tree.add_command(transfer)
@@ -523,3 +615,5 @@ def setup(tree: app_commands.CommandTree):
     tree.add_command(stake_group)
     tree.add_command(contract_group)
     tree.add_command(claim_group)
+    tree.add_command(lp_group)
+    tree.add_command(swap)

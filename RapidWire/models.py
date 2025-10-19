@@ -6,7 +6,7 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake
+from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -285,3 +285,64 @@ class StakeModel:
 
     def delete(self, cursor, user_id: int, currency_id: int):
         cursor.execute("DELETE FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+
+
+class LiquidityPoolModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, pool_id: int) -> Optional[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_pool WHERE pool_id = %s", (pool_id,))
+            result = cursor.fetchone()
+            return LiquidityPool(**result) if result else None
+
+    def get_by_currency_pair(self, currency_a_id: int, currency_b_id: int) -> Optional[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT * FROM liquidity_pool WHERE (currency_a_id = %s AND currency_b_id = %s) OR (currency_a_id = %s AND currency_b_id = %s)",
+                (currency_a_id, currency_b_id, currency_b_id, currency_a_id)
+            )
+            result = cursor.fetchone()
+            return LiquidityPool(**result) if result else None
+
+    def create(self, currency_a_id: int, currency_b_id: int, reserve_a: int, reserve_b: int, total_shares: int) -> LiquidityPool:
+        with self.db as cursor:
+            cursor.execute(
+                "INSERT INTO liquidity_pool (currency_a_id, currency_b_id, reserve_a, reserve_b, total_shares) VALUES (%s, %s, %s, %s, %s)",
+                (currency_a_id, currency_b_id, reserve_a, reserve_b, total_shares)
+            )
+            pool_id = cursor.lastrowid
+        return self.get(pool_id)
+
+    def update_reserves(self, cursor, pool_id: int, reserve_a_change: int, reserve_b_change: int, shares_change: int):
+        cursor.execute(
+            "UPDATE liquidity_pool SET reserve_a = reserve_a + %s, reserve_b = reserve_b + %s, total_shares = total_shares + %s WHERE pool_id = %s",
+            (reserve_a_change, reserve_b_change, shares_change, pool_id)
+        )
+
+class LiquidityProviderModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, provider_id: int) -> Optional[LiquidityProvider]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_provider WHERE provider_id = %s", (provider_id,))
+            result = cursor.fetchone()
+            return LiquidityProvider(**result) if result else None
+
+    def get_by_pool_and_user(self, pool_id: int, user_id: int) -> Optional[LiquidityProvider]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_provider WHERE pool_id = %s AND user_id = %s", (pool_id, user_id))
+            result = cursor.fetchone()
+            return LiquidityProvider(**result) if result else None
+
+    def upsert(self, cursor, pool_id: int, user_id: int, shares_change: int):
+        cursor.execute(
+            """
+            INSERT INTO liquidity_provider (pool_id, user_id, shares)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE shares = shares + %s
+            """,
+            (pool_id, user_id, shares_change, shares_change)
+        )

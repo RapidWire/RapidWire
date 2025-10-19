@@ -8,8 +8,8 @@ from decimal import Decimal
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel
-from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext
+from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel
+from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
 from .exceptions import (
     UserNotFound,
     CurrencyNotFound,
@@ -108,6 +108,8 @@ class RapidWire:
         self.APIKeys = APIKeyModel(self.db)
         self.Claims = ClaimModel(self.db)
         self.Stakes = StakeModel(self.db)
+        self.LiquidityPools = LiquidityPoolModel(self.db)
+        self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
@@ -441,3 +443,111 @@ class RapidWire:
             max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
         return self.Contracts.set(user_id, script, cost, max_cost)
+
+    def create_liquidity_pool(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int, user_id: int) -> LiquidityPool:
+        if self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id):
+            raise ValueError("Liquidity pool already exists for this currency pair.")
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, currency_a_id, -amount_a)
+                user._update_balance(cursor, currency_b_id, -amount_b)
+
+                initial_shares = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
+                pool = self.LiquidityPools.create(currency_a_id, currency_b_id, amount_a, amount_b, initial_shares)
+                self.LiquidityProviders.upsert(cursor, pool.pool_id, user_id, initial_shares)
+            return pool
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during liquidity pool creation: {err}")
+
+    def add_liquidity(self, pool_id: int, amount_a: int, amount_b: int, user_id: int) -> Tuple[int, int]:
+        pool = self.LiquidityPools.get(pool_id)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        if pool.reserve_a == 0 or pool.reserve_b == 0:
+            shares_a = amount_a
+            shares_b = amount_b
+        else:
+            shares_a = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
+            shares_b = int(Decimal(amount_b) * Decimal(pool.total_shares) / Decimal(pool.reserve_b))
+
+        shares_to_mint = min(shares_a, shares_b)
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, pool.currency_a_id, -amount_a)
+                user._update_balance(cursor, pool.currency_b_id, -amount_b)
+                self.LiquidityPools.update_reserves(cursor, pool_id, amount_a, amount_b, shares_to_mint)
+                self.LiquidityProviders.upsert(cursor, pool_id, user_id, shares_to_mint)
+            return shares_to_mint
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error while adding liquidity: {err}")
+
+    def remove_liquidity(self, pool_id: int, shares: int, user_id: int) -> Tuple[int, int]:
+        pool = self.LiquidityPools.get(pool_id)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        provider = self.LiquidityProviders.get_by_pool_and_user(pool_id, user_id)
+        if not provider or provider.shares < shares:
+            raise InsufficientFunds("Insufficient shares.")
+
+        amount_a = int(Decimal(shares) * Decimal(pool.reserve_a) / Decimal(pool.total_shares))
+        amount_b = int(Decimal(shares) * Decimal(pool.reserve_b) / Decimal(pool.total_shares))
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, pool.currency_a_id, amount_a)
+                user._update_balance(cursor, pool.currency_b_id, amount_b)
+                self.LiquidityPools.update_reserves(cursor, pool_id, -amount_a, -amount_b, -shares)
+                self.LiquidityProviders.upsert(cursor, pool_id, user_id, -shares)
+            return amount_a, amount_b
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error while removing liquidity: {err}")
+
+    def get_swap_rate(self, pool_id: int, from_currency_id: int, amount: int) -> int:
+        pool = self.LiquidityPools.get(pool_id)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        if from_currency_id == pool.currency_a_id:
+            reserve_in = pool.reserve_a
+            reserve_out = pool.reserve_b
+        elif from_currency_id == pool.currency_b_id:
+            reserve_in = pool.reserve_b
+            reserve_out = pool.reserve_a
+        else:
+            raise ValueError("Invalid currency for this pool.")
+
+        amount_in_with_fee = Decimal(amount) * (Decimal(1) - self.Config.Swap.fee)
+        return int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+
+    def swap(self, pool_id: int, from_currency_id: int, amount: int, user_id: int) -> Tuple[int, int]:
+        amount_out = self.get_swap_rate(pool_id, from_currency_id, amount)
+        pool = self.LiquidityPools.get(pool_id)
+
+        if from_currency_id == pool.currency_a_id:
+            to_currency_id = pool.currency_b_id
+            reserve_a_change = amount
+            reserve_b_change = -amount_out
+        else:
+            to_currency_id = pool.currency_a_id
+            reserve_a_change = -amount_out
+            reserve_b_change = amount
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                source_balance = user.get_balance(from_currency_id)
+                if source_balance.amount < amount:
+                    raise InsufficientFunds("Insufficient funds for swap.")
+                user._update_balance(cursor, from_currency_id, -amount)
+                user._update_balance(cursor, to_currency_id, amount_out)
+                self.LiquidityPools.update_reserves(cursor, pool_id, reserve_a_change, reserve_b_change, 0)
+            return amount_out, to_currency_id
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during swap: {err}")

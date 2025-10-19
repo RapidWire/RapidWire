@@ -65,3 +65,17 @@ class TransactionContext(BaseModel):
 class ChainContext(BaseModel):
     total_cost: int
     budget: int
+
+class LiquidityPool(BaseModel):
+    pool_id: int
+    currency_a_id: int
+    currency_b_id: int
+    reserve_a: int
+    reserve_b: int
+    total_shares: int
+
+class LiquidityProvider(BaseModel):
+    provider_id: int
+    pool_id: int
+    user_id: int
+    shares: int

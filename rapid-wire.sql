@@ -107,6 +107,35 @@ CREATE TABLE `transaction` (
   `timestamp` bigint NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `liquidity_pool`
+--
+
+CREATE TABLE `liquidity_pool` (
+  `pool_id` int UNSIGNED NOT NULL,
+  `currency_a_id` bigint UNSIGNED NOT NULL,
+  `currency_b_id` bigint UNSIGNED NOT NULL,
+  `reserve_a` bigint UNSIGNED NOT NULL,
+  `reserve_b` bigint UNSIGNED NOT NULL,
+  `total_shares` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `liquidity_provider`
+--
+
+CREATE TABLE `liquidity_provider` (
+  `provider_id` int UNSIGNED NOT NULL,
+  `pool_id` int UNSIGNED NOT NULL,
+  `user_id` bigint UNSIGNED NOT NULL,
+  `shares` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 --
 -- Indexes for dumped tables
 --
@@ -163,6 +192,20 @@ ALTER TABLE `transaction`
   ADD KEY `currency_id` (`currency_id`);
 
 --
+-- Indexes for table `liquidity_pool`
+--
+ALTER TABLE `liquidity_pool`
+  ADD PRIMARY KEY (`pool_id`),
+  ADD UNIQUE KEY `currency_pair` (`currency_a_id`,`currency_b_id`);
+
+--
+-- Indexes for table `liquidity_provider`
+--
+ALTER TABLE `liquidity_provider`
+  ADD PRIMARY KEY (`provider_id`),
+  ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -177,5 +220,17 @@ ALTER TABLE `claims`
 --
 ALTER TABLE `transaction`
   MODIFY `transaction_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `liquidity_pool`
+--
+ALTER TABLE `liquidity_pool`
+  MODIFY `pool_id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `liquidity_provider`
+--
+ALTER TABLE `liquidity_provider`
+  MODIFY `provider_id` int UNSIGNED NOT NULL AUTO_INCREMENT;
 
 COMMIT;
