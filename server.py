@@ -160,6 +160,42 @@ async def cancel_claim(claim_id: int, user_id: int = Depends(get_current_user_id
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error during cancellation: {e}")
 
+@app.get("/transactions/search", response_model=List[structs.Transaction], tags=["Transactions"])
+async def search_transactions(
+    source_id: Optional[int] = None,
+    dest_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    currency_symbol: Optional[str] = None,
+    start_timestamp: Optional[int] = None,
+    end_timestamp: Optional[int] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    input_data: Optional[str] = None,
+    page: int = 1,
+    limit: int = 10
+):
+    search_params = {
+        "source_id": source_id,
+        "dest_id": dest_id,
+        "user_id": user_id,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp,
+        "input_data": input_data,
+        "page": page,
+        "limit": limit
+    }
+
+    if currency_symbol:
+        currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
+        search_params["currency_id"] = currency.currency_id if currency else -1
+
+    if min_amount is not None:
+        search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**config.decimal_places))
+    if max_amount is not None:
+        search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
+
+    return Rapid.Transactions.search(**search_params)
+
 if __name__ == "__main__":
     uvicorn.run(
         "server:app",
