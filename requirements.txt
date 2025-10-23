@@ -1,4 +1,6 @@
-discord
+discord.py
 mysql-connector-python
 asteval
 pydantic
+uvicorn
+fastapi
