@@ -456,7 +456,7 @@ class RapidWire:
 
                 initial_shares = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
                 pool = self.LiquidityPools.create(currency_a_id, currency_b_id, amount_a, amount_b, initial_shares)
-                self.LiquidityProviders.upsert(cursor, pool.pool_id, user_id, initial_shares)
+                self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, initial_shares)
             return pool
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during liquidity pool creation: {err}")
@@ -481,7 +481,7 @@ class RapidWire:
                 user._update_balance(cursor, pool.currency_a_id, -amount_a)
                 user._update_balance(cursor, pool.currency_b_id, -amount_b)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)
-                self.LiquidityProviders.upsert(cursor, pool.pool_id, user_id, shares_to_mint)
+                self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, shares_to_mint)
             return shares_to_mint
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
@@ -504,7 +504,12 @@ class RapidWire:
                 user._update_balance(cursor, pool.currency_a_id, amount_a)
                 user._update_balance(cursor, pool.currency_b_id, amount_b)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, -amount_a, -amount_b, -shares)
-                self.LiquidityProviders.upsert(cursor, pool_id, user_id, -shares)
+
+                new_shares = provider.shares - shares
+                if new_shares > 0:
+                    self.LiquidityProviders.update_shares(cursor, pool.pool_id, user_id, new_shares)
+                else:
+                    self.LiquidityProviders.delete(cursor, pool.pool_id, user_id)
             return amount_a, amount_b
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")

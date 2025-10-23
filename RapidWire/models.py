@@ -387,7 +387,7 @@ class LiquidityProviderModel:
             result = cursor.fetchone()
             return LiquidityProvider(**result) if result else None
 
-    def upsert(self, cursor, pool_id: int, user_id: int, shares_change: int):
+    def add_shares(self, cursor, pool_id: int, user_id: int, shares_change: int):
         cursor.execute(
             """
             INSERT INTO liquidity_provider (pool_id, user_id, shares)
@@ -395,4 +395,16 @@ class LiquidityProviderModel:
             ON DUPLICATE KEY UPDATE shares = shares + %s
             """,
             (pool_id, user_id, shares_change, shares_change)
+        )
+
+    def update_shares(self, cursor, pool_id: int, user_id: int, new_shares: int):
+        cursor.execute(
+            "UPDATE liquidity_provider SET shares = %s WHERE pool_id = %s AND user_id = %s",
+            (new_shares, pool_id, user_id)
+        )
+
+    def delete(self, cursor, pool_id: int, user_id: int):
+        cursor.execute(
+            "DELETE FROM liquidity_provider WHERE pool_id = %s AND user_id = %s",
+            (pool_id, user_id)
         )
