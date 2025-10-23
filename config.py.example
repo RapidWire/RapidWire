@@ -26,4 +26,7 @@ class APIServer:
 class Contract:
     max_cost: int = 100
 
+class Swap:
+    fee: float = 0.003 # 0.3%
+
 decimal_places = 3

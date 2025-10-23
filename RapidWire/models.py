@@ -340,6 +340,22 @@ class LiquidityPoolModel:
             result = cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
+    def get_by_symbols(self, symbol_a: str, symbol_b: str) -> Optional[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_a,)
+            )
+            res_a = cursor.fetchone()
+            cursor.execute(
+                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_b,)
+            )
+            res_b = cursor.fetchone()
+
+            if not res_a or not res_b:
+                return None
+
+            return self.get_by_currency_pair(res_a["currency_id"], res_b["currency_id"])
+
     def create(self, currency_a_id: int, currency_b_id: int, reserve_a: int, reserve_b: int, total_shares: int) -> LiquidityPool:
         with self.db as cursor:
             cursor.execute(
