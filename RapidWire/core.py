@@ -525,7 +525,8 @@ class RapidWire:
         else:
             raise ValueError("Invalid currency for this pool.")
 
-        amount_in_with_fee = Decimal(amount) * (Decimal(1) - self.Config.Swap.fee)
+        fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
+        amount_in_with_fee = Decimal(amount) * (Decimal(1) - fee_rate)
         return int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
 
     def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
