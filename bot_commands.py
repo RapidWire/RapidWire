@@ -15,13 +15,13 @@ Rapid.Config.Contract.max_cost = config.Contract.max_cost
 SYSTEM_USER_ID = 0
 
 class SwapConfirmationView(discord.ui.View):
-    def __init__(self, original_author: User, from_symbol: str, to_symbol: str, amount_in: int, amount_out: int):
+    def __init__(self, original_author: User, from_symbol: str, to_symbol: str, amount_in: int, amount_out_est: int):
         super().__init__(timeout=30)
         self.original_author = original_author
         self.from_symbol = from_symbol
         self.to_symbol = to_symbol
         self.amount_in = amount_in
-        self.amount_out = amount_out
+        self.amount_out_est = amount_out_est
         self.swap_executed = False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -33,9 +33,9 @@ class SwapConfirmationView(discord.ui.View):
     @discord.ui.button(label="確定", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            _, _ = Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
+            amount_out, _ = Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
             self.swap_executed = True
-            desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(self.amount_out)} {self.to_symbol}` にスワップしました。"
+            desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(amount_out)} {self.to_symbol}` にスワップしました。"
             await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了"), view=None)
         except Exception as e:
             await interaction.response.edit_message(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"), view=None)
@@ -699,17 +699,17 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
 
-        amount_out = Rapid.get_swap_rate(from_symbol_upper, to_symbol_upper, int_amount)
-        if amount_out <= 0:
+        amount_out_est = Rapid.get_swap_rate(from_symbol_upper, to_symbol_upper, int_amount)
+        if amount_out_est <= 0:
             await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
             return
 
         embed = Embed(title="スワップ確認", color=Color.blue())
         embed.add_field(name="スワップ元", value=f"`{format_amount(int_amount)} {from_currency.symbol}`", inline=False)
-        embed.add_field(name="スワップ先 (推定)", value=f"`{format_amount(amount_out)} {to_currency.symbol}`", inline=False)
+        embed.add_field(name="スワップ先 (推定)", value=f"`{format_amount(amount_out_est)} {to_currency.symbol}`", inline=False)
         embed.set_footer(text="このレートは30秒間有効です。")
 
-        view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out)
+        view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out_est)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         await view.wait()
