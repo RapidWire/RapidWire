@@ -482,6 +482,16 @@ class RapidWire:
                 user._update_balance(cursor, pool.currency_b_id, -amount_b)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)
                 self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, shares_to_mint)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
+                     user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b, "lp:add", current_time)
+                )
             return shares_to_mint
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
@@ -510,6 +520,16 @@ class RapidWire:
                     self.LiquidityProviders.update_shares(cursor, pool.pool_id, user_id, new_shares)
                 else:
                     self.LiquidityProviders.delete(cursor, pool.pool_id, user_id)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
+                     SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b, "lp:remove", current_time)
+                )
             return amount_a, amount_b
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
@@ -558,6 +578,16 @@ class RapidWire:
                 user._update_balance(cursor, from_currency.currency_id, -amount)
                 user._update_balance(cursor, to_currency_id, amount_out)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
+                     SYSTEM_USER_ID, user_id, to_currency_id, amount_out, "swap", current_time)
+                )
             return amount_out, to_currency_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during swap: {err}")
