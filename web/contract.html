@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Code - Pigeonium Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Contract Code</h1>
+        <h2 id="contract-address"></h2>
+        <pre><code id="contract-code">Loading contract code...</code></pre>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    async function fetchContractCode(address) {
+        document.getElementById('contract-address').textContent = address;
+        const codeElement = document.getElementById('contract-code');
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/script/${address}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch contract script.');
+            }
+            const data = await response.json();
+            if (data.script) {
+                codeElement.textContent = data.script;
+            } else {
+                codeElement.textContent = 'No script found for this contract.';
+            }
+        } catch (error) {
+            codeElement.innerHTML = `<span class="error-message">Error: ${error.message}</span>`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const address = new URLSearchParams(window.location.search).get('addr');
+        if (address) {
+            fetchContractCode(address);
+        } else {
+            document.getElementById('contract-address').innerHTML = '<p class="error-message">No address provided.</p>';
+            document.getElementById('contract-code').textContent = '';
+        }
+    });
+</script>
+</body>
+</html>

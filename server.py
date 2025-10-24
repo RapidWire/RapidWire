@@ -1,5 +1,6 @@
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Security, status
+from fastapi.staticfiles import StaticFiles
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -197,6 +198,7 @@ async def search_transactions(
     return Rapid.Transactions.search(**search_params)
 
 if __name__ == "__main__":
+    app.mount("/", StaticFiles(directory="web", html=True), name="web")
     uvicorn.run(
         app,
         host=config.APIServer.host,
