@@ -49,8 +49,8 @@
     const nextButton = document.getElementById('nextButton');
     const pageInfo = document.getElementById('pageInfo');
 
-    async function getCurrency(symbol) {
-        return await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
+    async function getCurrency(currencyId) {
+        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
     }
 
     async function displayTransactions(transactions) {
@@ -60,7 +60,7 @@
             return;
         }
 
-        const currencyPromises = transactions.map(tx => getCurrency(tx.currency_symbol));
+        const currencyPromises = transactions.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
         transactions.forEach((tx, index) => {
@@ -73,11 +73,11 @@
 
             const row = `
                 <tr>
-                    <td><a href="transaction.html?id=${tx.tx_id}">${tx.tx_id}</a></td>
+                    <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>
                     <td>${timestamp}</td>
                     <td>${sourceLink}</td>
                     <td>${destLink}</td>
-                    <td>${formatAmount(tx.amount, currency.decimal_places)} ${tx.currency_symbol}</td>
+                    <td>${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}</td>
                     <td>${tx.input_data || ''}</td>
                 </tr>
             `;

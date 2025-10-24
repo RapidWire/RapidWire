@@ -17,8 +17,8 @@
 
 <script src="univ.js"></script>
 <script>
-    async function getCurrency(symbol) {
-        return await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
+    async function getCurrency(currencyId) {
+        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
     }
 
     async function displayTransactions(transactionsData, userId) {
@@ -28,7 +28,7 @@
             return;
         }
 
-        const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_symbol));
+        const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
         let tableHTML = `<table><thead><tr><th>ID</th><th>Timestamp</th><th>Source</th><th>Destination</th><th>Amount</th><th>Input Data</th></tr></thead><tbody>`;
@@ -43,11 +43,11 @@
                 dest_txt = `<td>${tx.dest_id}</td>`;
             }
             tableHTML += `<tr>
-                <td><a href="transaction.html?id=${tx.tx_id}">${tx.tx_id}</a></td>
+                <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>
                 <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
                 ${source_txt}
                 ${dest_txt}
-                <td>${formatAmount(tx.amount, currency.decimal_places)} ${tx.currency_symbol}</td>
+                <td>${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}</td>
                 <td>${tx.input_data || ''}</td>
             </tr>`
         });
