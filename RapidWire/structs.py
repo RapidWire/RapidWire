@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, Literal
 from decimal import Decimal
 
@@ -14,6 +14,10 @@ class Currency(BaseModel):
     new_daily_interest_rate: Optional[Decimal] = None
     rate_change_requested_at: Optional[int] = None
 
+    @field_serializer('supply')
+    def serialize_supply(self, supply: int, _info):
+        return str(supply)
+
 class Balance(BaseModel):
     user_id: int
     currency_id: int
@@ -27,6 +31,10 @@ class Transaction(BaseModel):
     amount: int
     input_data: Optional[str] = Field(None, alias="inputData")
     timestamp: int
+
+    @field_serializer('amount')
+    def serialize_amount(self, amount: int, _info):
+        return str(amount)
 
 class APIKey(BaseModel):
     user_id: int
