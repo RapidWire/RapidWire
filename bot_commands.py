@@ -5,6 +5,7 @@ import io
 import re
 from decimal import Decimal
 from time import time
+from datetime import datetime
 
 import config
 from RapidWire import RapidWire, exceptions, structs
@@ -12,6 +13,38 @@ from RapidWire import RapidWire, exceptions, structs
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
 Rapid.Config.Contract.max_cost = config.Contract.max_cost
 SYSTEM_USER_ID = 0
+
+class SwapConfirmationView(discord.ui.View):
+    def __init__(self, original_author: User, from_symbol: str, to_symbol: str, amount_in: int, amount_out_est: int):
+        super().__init__(timeout=30)
+        self.original_author = original_author
+        self.from_symbol = from_symbol
+        self.to_symbol = to_symbol
+        self.amount_in = amount_in
+        self.amount_out_est = amount_out_est
+        self.swap_executed = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.original_author.id:
+            await interaction.response.send_message("この操作はコマンドを実行した本人しか行えません。", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="確定", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            amount_out, _ = Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
+            self.swap_executed = True
+            desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(amount_out)} {self.to_symbol}` にスワップしました。"
+            await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了"), view=None)
+        except Exception as e:
+            await interaction.response.edit_message(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"), view=None)
+        self.stop()
+
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.grey)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(embed=create_error_embed("スワップはキャンセルされました。"), view=None)
+        self.stop()
 
 def create_error_embed(description: str) -> Embed:
     return Embed(title="エラー", description=description, color=Color.red())
@@ -99,8 +132,33 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
 
 @app_commands.command(name="history", description="取引履歴を表示します。")
-@app_commands.describe(transaction_id="詳細を表示する取引ID (任意)", user="履歴を表示するユーザー (任意)", page="ページ番号")
-async def history(interaction: discord.Interaction, transaction_id: Optional[int] = None, user: Optional[User] = None, page: int = 1):
+@app_commands.describe(
+    transaction_id="詳細を表示する取引ID (任意)",
+    user="対象ユーザー",
+    source="送金元ユーザー",
+    destination="送金先ユーザー",
+    currency_symbol="通貨シンボル",
+    start_date="開始日 (YYYY-MM-DD)",
+    end_date="終了日 (YYYY-MM-DD)",
+    min_amount="最小金額",
+    max_amount="最大金額",
+    input_data="Input Data",
+    page="ページ番号"
+)
+async def history(
+    interaction: discord.Interaction,
+    transaction_id: Optional[int] = None,
+    user: Optional[User] = None,
+    source: Optional[User] = None,
+    destination: Optional[User] = None,
+    currency_symbol: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    input_data: Optional[str] = None,
+    page: int = 1
+):
     await interaction.response.defer(thinking=True)
     try:
         if transaction_id:
@@ -110,13 +168,13 @@ async def history(interaction: discord.Interaction, transaction_id: Optional[int
                 return
 
             currency = Rapid.Currencies.get(tx.currency_id)
-            source_user = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
             
             embed = Embed(title=f"取引詳細: ID {tx.transaction_id}", color=Color.blue())
             embed.add_field(name="日時", value=f"<t:{tx.timestamp}:F>", inline=False)
-            embed.add_field(name="From", value=source_user, inline=True)
-            embed.add_field(name="To", value=dest_user, inline=True)
+            embed.add_field(name="From", value=source_user_mention, inline=True)
+            embed.add_field(name="To", value=dest_user_mention, inline=True)
             embed.add_field(name="金額", value=f"`{format_amount(tx.amount)} {currency.symbol if currency else '???'}`", inline=False)
             if tx.input_data:
                 embed.add_field(name="メモ (Input Data)", value=f"```{tx.input_data}```", inline=False)
@@ -124,28 +182,66 @@ async def history(interaction: discord.Interaction, transaction_id: Optional[int
             await interaction.followup.send(embed=embed)
             return
 
-        target_user = user or interaction.user
-        transactions = Rapid.Transactions.get_user_history(target_user.id, page=page)
+        search_params = {
+            "source_id": source.id if source else None,
+            "dest_id": destination.id if destination else None,
+            "input_data": input_data,
+            "page": page
+        }
+
+        target_user = user or source or destination
+        if not target_user:
+            search_params["user_id"] = interaction.user.id
+            target_user = interaction.user
+        elif user:
+            search_params["user_id"] = user.id
+
+        if currency_symbol:
+            currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
+            search_params["currency_id"] = currency.currency_id if currency else -1
+
+        def parse_date(date_str: str) -> Optional[int]:
+            try:
+                return int(datetime.strptime(date_str, "%Y-%m-%d").timestamp())
+            except ValueError:
+                return None
+
+        if start_date:
+            search_params["start_timestamp"] = parse_date(start_date)
+        if end_date:
+            search_params["end_timestamp"] = parse_date(end_date)
+
+        if min_amount is not None:
+            search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**config.decimal_places))
+        if max_amount is not None:
+            search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
+
+        transactions = Rapid.Transactions.search(**search_params)
+
+        target_user = user or source or destination or interaction.user
+
         if not transactions:
-            await interaction.followup.send(embed=create_success_embed(f"{target_user.display_name}の取引履歴はありません。", "取引履歴"))
+            await interaction.followup.send(embed=create_success_embed(f"指定された条件の取引履歴はありません。", "取引履歴"))
             return
 
-        embed = Embed(title=f"{target_user.display_name}の取引履歴 (ページ {page})", color=Color.blue())
+        embed = Embed(title=f"取引履歴 (ページ {page})", color=Color.blue())
         for tx in transactions:
             currency = Rapid.Currencies.get(tx.currency_id)
             if not currency: continue
 
-            source_user = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
             
             direction_emoji = "↔️"
-            direction_text = ""
-            if tx.source_id == target_user.id:
-                direction_emoji = "📤"
-                direction_text = f"to {dest_user}"
-            elif tx.destination_id == target_user.id:
-                direction_emoji = "📥"
-                direction_text = f"from {source_user}"
+            direction_text = f"from {source_user_mention} to {dest_user_mention}"
+
+            if target_user:
+                if tx.source_id == target_user.id:
+                    direction_emoji = "📤"
+                    direction_text = f"to {dest_user_mention}"
+                elif tx.destination_id == target_user.id:
+                    direction_emoji = "📥"
+                    direction_text = f"from {source_user_mention}"
 
             field_name = f"{direction_emoji} | ID: {tx.transaction_id} | <t:{tx.timestamp}:R>"
             field_value = f"`{format_amount(tx.amount)} {currency.symbol}` {direction_text}"
@@ -307,24 +403,42 @@ async def currency_delete(interaction: discord.Interaction):
                 "通貨削除完了"
             ))
 
-@currency_group.command(name="set-interest", description="[管理者] ステーキングの日利を変更します。")
+@currency_group.command(name="request-interest-change", description="[管理者] ステーキングの日利変更を予約します。")
 @app_commands.describe(rate="新しい日利 (%)")
 @app_commands.checks.has_permissions(administrator=True)
-async def currency_set_interest(interaction: discord.Interaction, rate: float):
+async def currency_request_interest_change(interaction: discord.Interaction, rate: float):
+    await interaction.response.defer(thinking=True)
+    if not interaction.guild: return
+    
+    try:
+        new_rate_decimal = Decimal(str(rate)) / Decimal(100)
+        currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_decimal, interaction.user.id)
+
+        timelock_seconds = Rapid.Config.Staking.rate_change_timelock
+        apply_time = int(time()) + timelock_seconds
+
+        desc = (f"ステーキングの日利を`{rate:.4f}%`に変更するリクエストを受け付けました。\n"
+                f"この変更は <t:{apply_time}:F> (<t:{apply_time}:R>) 以降に適用可能になります。")
+        await interaction.followup.send(embed=create_success_embed(desc, "利率変更予約完了"))
+    except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
+
+@currency_group.command(name="apply-interest-change", description="[管理者] 予約されている利率変更を適用します。")
+@app_commands.checks.has_permissions(administrator=True)
+async def currency_apply_interest_change(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
 
-    currency = Rapid.Currencies.get(interaction.guild.id)
-    if not currency:
-        await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
-        return
-    if currency.minting_renounced:
-        await interaction.followup.send(embed=create_error_embed("この通貨の利率変更機能は放棄されています。"))
-        return
-    
-    new_rate_decimal = Decimal(str(rate)) / Decimal(100)
-    Rapid.update_daily_interest_rate(currency.currency_id, new_rate_decimal)
-    await interaction.followup.send(embed=create_success_embed(f"ステーキングの日利を`{rate:.4f}%`に変更しました。\n既存のステークは自動的に更新されます。", "利率変更完了"))
+    try:
+        currency = Rapid.apply_interest_rate_change(interaction.guild.id)
+        desc = f"ステーキングの日利が `{currency.daily_interest_rate * 100:.4f}%` に正常に更新されました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
+    except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
 
 stake_group = app_commands.Group(name="stake", description="ステーキングに関連するコマンド")
 
@@ -340,50 +454,56 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
         stake = Rapid.stake_deposit(interaction.user.id, currency.currency_id, int_amount)
-        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキングを開始しました。\n**ステークID:** `{stake.stake_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, "ステーキング開始"))
+        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキング（または追加預け入れ）が完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
+        await interaction.followup.send(embed=create_success_embed(desc, "ステーキング完了"))
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("ステーキングするための残高が不足しています。"))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
-@stake_group.command(name="withdraw", description="指定したステークを引き出します。")
-@app_commands.describe(stake_id="引き出すステークのID")
-async def stake_withdraw(interaction: discord.Interaction, stake_id: int):
+@stake_group.command(name="withdraw", description="ステーキングした通貨の一部または全部を引き出します。")
+@app_commands.describe(amount="引き出す量", symbol="引き出す通貨のシンボル (任意)")
+async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
-        reward, tx = Rapid.stake_withdraw(stake_id, interaction.user.id)
-        currency = Rapid.Currencies.get(tx.currency_id)
-        desc = f"ステークID `{stake_id}` を引き出しました。\n"
-        desc += f"元本: `{format_amount(tx.amount - reward)} {currency.symbol}`\n"
-        desc += f"報酬: `{format_amount(reward)} {currency.symbol}`\n"
-        desc += f"合計: `{format_amount(tx.amount)} {currency.symbol}`"
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        tx = Rapid.stake_withdraw(interaction.user.id, currency.currency_id, int_amount)
+
+        stake = Rapid.Stakes.get(interaction.user.id, currency.currency_id)
+        remaining_amount = stake.amount if stake else 0
+
+        desc = f"`{format_amount(tx.amount)} {currency.symbol}` を引き出しました。\n"
+        desc += f"残りのステーク額: `{format_amount(remaining_amount)} {currency.symbol}`"
         await interaction.followup.send(embed=create_success_embed(desc, "引き出し完了"))
-    except (ValueError, PermissionError) as e:
+    except (ValueError, PermissionError, exceptions.InsufficientFunds) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
 @stake_group.command(name="info", description="あなたのステーキング状況を表示します。")
-@app_commands.describe(symbol="表示する通貨のシンボル (任意)")
-async def stake_info(interaction: discord.Interaction, symbol: Optional[str] = None):
+async def stake_info(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     
-    currency = await _get_currency(interaction, symbol)
-    if not currency:
-        await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
-        return
-    
-    stakes = Rapid.Stakes.get_for_user(interaction.user.id, currency.currency_id)
+    stakes = Rapid.Stakes.get_for_user(interaction.user.id)
     if not stakes:
-        await interaction.followup.send(embed=create_success_embed(f"`{currency.symbol}`のステークはありません。", "ステーク情報"))
+        await interaction.followup.send(embed=create_success_embed("現在、アクティブなステークはありません。", "ステーク情報"))
         return
         
-    embed = Embed(title=f"{interaction.user.display_name}のステーク情報 ({currency.symbol})", color=Color.purple())
+    embed = Embed(title=f"{interaction.user.display_name}のステーク情報", color=Color.purple())
     
     for stake in stakes:
-        field_name = f"ID: {stake.stake_id} | `{format_amount(stake.amount)} {currency.symbol}`"
-        field_value = f"開始日時: <t:{stake.staked_at}:F>\n日利: `{stake.daily_interest_rate * 100:.4f}%`"
+        currency = Rapid.Currencies.get(stake.currency_id)
+        if not currency: continue
+
+        field_name = f"通貨: **{currency.name} ({currency.symbol})**"
+        field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
+                       f"現在の日利: `{currency.daily_interest_rate * 100:.4f}%`\n"
+                       f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
         
     await interaction.followup.send(embed=embed)
@@ -491,6 +611,117 @@ async def claim_cancel(interaction: discord.Interaction, claim_id: int):
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"キャンセル処理中にエラーが発生しました: {e}"))
 
+async def _get_pool_info_embed(pool: structs.LiquidityPool) -> Embed:
+    currency_a = Rapid.Currencies.get(pool.currency_a_id)
+    currency_b = Rapid.Currencies.get(pool.currency_b_id)
+    embed = Embed(title=f"流動性プール情報: {currency_a.symbol}-{currency_b.symbol}", color=Color.purple())
+    embed.add_field(name="プールID", value=f"`{pool.pool_id}`", inline=False)
+    embed.add_field(name=f"{currency_a.symbol} リザーブ", value=f"`{format_amount(pool.reserve_a)}`", inline=True)
+    embed.add_field(name=f"{currency_b.symbol} リザーブ", value=f"`{format_amount(pool.reserve_b)}`", inline=True)
+    embed.add_field(name="合計シェア", value=f"`{format_amount(pool.total_shares)}`", inline=False)
+    return embed
+
+lp_group = app_commands.Group(name="lp", description="流動性プールに関連するコマンド")
+
+@lp_group.command(name="create", description="新しい流動性プールを作成します。")
+@app_commands.describe(symbol_a="通貨Aのシンボル", amount_a="通貨Aの量", symbol_b="通貨Bのシンボル", amount_b="通貨Bの量")
+async def lp_create(interaction: discord.Interaction, symbol_a: str, amount_a: float, symbol_b: str, amount_b: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        currency_a = Rapid.Currencies.get_by_symbol(symbol_a.upper())
+        currency_b = Rapid.Currencies.get_by_symbol(symbol_b.upper())
+        if not currency_a or not currency_b:
+            await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
+            return
+
+        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+
+        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, int_amount_a, int_amount_b, interaction.user.id)
+        embed = await _get_pool_info_embed(pool)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"プールの作成中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="add", description="流動性プールに流動性を追加します。")
+@app_commands.describe(symbol_a="通貨Aのシンボル", amount_a="通貨Aの量", symbol_b="通貨Bのシンボル", amount_b="通貨Bの量")
+async def lp_add(interaction: discord.Interaction, symbol_a: str, amount_a: float, symbol_b: str, amount_b: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+
+        shares = Rapid.add_liquidity(symbol_a.upper(), symbol_b.upper(), int_amount_a, int_amount_b, interaction.user.id)
+        desc = f"`{format_amount(shares)}` シェアを受け取りました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "流動性追加完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"流動性の追加中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="remove", description="流動性プールから流動性を削除します。")
+@app_commands.describe(symbol_a="通貨Aのシンボル", symbol_b="通貨Bのシンボル", shares="削除するシェアの量")
+async def lp_remove(interaction: discord.Interaction, symbol_a: str, symbol_b: str, shares: float):
+    await interaction.response.defer(thinking=True)
+    try:
+        int_shares = int(Decimal(str(shares)) * (10**config.decimal_places))
+        amount_a, amount_b = Rapid.remove_liquidity(symbol_a.upper(), symbol_b.upper(), int_shares, interaction.user.id)
+
+        currency_a = Rapid.Currencies.get_by_symbol(symbol_a.upper())
+        currency_b = Rapid.Currencies.get_by_symbol(symbol_b.upper())
+
+        desc = f"`{format_amount(amount_a)} {currency_a.symbol}` と `{format_amount(amount_b)} {currency_b.symbol}` を受け取りました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "流動性削除完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"流動性の削除中にエラーが発生しました: {e}"))
+
+@lp_group.command(name="info", description="流動性プールの情報を表示します。")
+@app_commands.describe(symbol_a="通貨Aのシンボル", symbol_b="通貨Bのシンボル")
+async def lp_info(interaction: discord.Interaction, symbol_a: str, symbol_b: str):
+    await interaction.response.defer(thinking=True)
+    pool = Rapid.LiquidityPools.get_by_symbols(symbol_a.upper(), symbol_b.upper())
+    if not pool:
+        await interaction.followup.send(embed=create_error_embed("指定された通貨ペアのプールは見つかりませんでした。"))
+        return
+    embed = await _get_pool_info_embed(pool)
+    await interaction.followup.send(embed=embed)
+
+@app_commands.command(name="swap", description="通貨をスワップします。")
+@app_commands.describe(from_symbol="スワップ元の通貨シンボル", to_symbol="スワップ先の通貨シンボル", amount="スワップする量")
+async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: str, amount: float):
+    try:
+        from_symbol_upper = from_symbol.upper()
+        to_symbol_upper = to_symbol.upper()
+
+        from_currency = Rapid.Currencies.get_by_symbol(from_symbol_upper)
+        to_currency = Rapid.Currencies.get_by_symbol(to_symbol_upper)
+        if not from_currency or not to_currency:
+            await interaction.response.send_message(embed=create_error_embed("指定された通貨が見つかりませんでした。"), ephemeral=True)
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+
+        amount_out_est = Rapid.get_swap_rate(from_symbol_upper, to_symbol_upper, int_amount)
+        if amount_out_est <= 0:
+            await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
+            return
+
+        embed = Embed(title="スワップ確認", color=Color.blue())
+        embed.add_field(name="スワップ元", value=f"`{format_amount(int_amount)} {from_currency.symbol}`", inline=False)
+        embed.add_field(name="スワップ先 (推定)", value=f"`{format_amount(amount_out_est)} {to_currency.symbol}`", inline=False)
+        embed.set_footer(text="このレートは30秒間有効です。")
+
+        view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out_est)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+        await view.wait()
+
+        if not view.swap_executed:
+            if not interaction.is_expired():
+                await interaction.edit_original_response(embed=create_error_embed("スワップがタイムアウトしました。"), view=None)
+
+    except Exception as e:
+        if not interaction.is_expired():
+            await interaction.followup.send(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"))
+
 def setup(tree: app_commands.CommandTree):
     tree.add_command(balance)
     tree.add_command(transfer)
@@ -499,3 +730,5 @@ def setup(tree: app_commands.CommandTree):
     tree.add_command(stake_group)
     tree.add_command(contract_group)
     tree.add_command(claim_group)
+    tree.add_command(lp_group)
+    tree.add_command(swap)

@@ -6,7 +6,7 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake
+from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -93,6 +93,24 @@ class CurrencyModel:
          with self.db as cursor:
             cursor.execute("DELETE FROM currency WHERE currency_id = %s", (currency_id,))
 
+    def request_rate_change(self, currency_id: int, new_rate: Decimal) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute(
+                "UPDATE currency SET new_daily_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",
+                (new_rate, int(time()), currency_id)
+            )
+            if cursor.rowcount == 0: return None
+        return self.get(currency_id)
+
+    def apply_rate_change(self, currency: Currency) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute(
+                "UPDATE currency SET daily_interest_rate = %s, new_daily_interest_rate = NULL, rate_change_requested_at = NULL WHERE currency_id = %s",
+                (currency.new_daily_interest_rate, currency.currency_id)
+            )
+            if cursor.rowcount == 0: return None
+        return self.get(currency.currency_id)
+
 class TransactionModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
@@ -113,7 +131,20 @@ class TransactionModel:
             results = cursor.fetchall()
             return [Transaction(**row) for row in results]
 
-    def search(self, source_id: Optional[int] = None, dest_id: Optional[int] = None, currency_id: Optional[int] = None, page: int = 1, limit: int = 10) -> List[Transaction]:
+    def search(
+        self,
+        source_id: Optional[int] = None,
+        dest_id: Optional[int] = None,
+        currency_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        start_timestamp: Optional[int] = None,
+        end_timestamp: Optional[int] = None,
+        min_amount: Optional[int] = None,
+        max_amount: Optional[int] = None,
+        input_data: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10
+    ) -> List[Transaction]:
         offset = (page - 1) * limit
         conditions = []
         params = []
@@ -127,12 +158,33 @@ class TransactionModel:
         if currency_id is not None:
             conditions.append("currency_id = %s")
             params.append(currency_id)
+        if user_id is not None:
+            conditions.append("(source = %s OR dest = %s)")
+            params.extend([user_id, user_id])
+        if start_timestamp is not None:
+            conditions.append("timestamp >= %s")
+            params.append(start_timestamp)
+        if end_timestamp is not None:
+            conditions.append("timestamp <= %s")
+            params.append(end_timestamp)
+        if min_amount is not None:
+            conditions.append("amount >= %s")
+            params.append(min_amount)
+        if max_amount is not None:
+            conditions.append("amount <= %s")
+            params.append(max_amount)
+        if input_data is not None:
+            conditions.append("inputData = %s")
+            params.append(input_data)
 
         if not conditions:
-            return []
-
-        query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
+            # Add a condition that's always true to prevent an empty WHERE clause
+            # and still allow for pagination, etc.
+            query = "SELECT * FROM transaction ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+        else:
+            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
 
         with self.db as cursor:
             cursor.execute(query, tuple(params))
@@ -237,33 +289,122 @@ class StakeModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    def create(self, user_id: int, currency_id: int, amount: int, rate: Decimal) -> Stake:
+    def get(self, user_id: int, currency_id: int) -> Optional[Stake]:
         with self.db as cursor:
-            cursor.execute(
-                "INSERT INTO staking (user_id, currency_id, amount, staked_at, daily_interest_rate) VALUES (%s, %s, %s, %s, %s)",
-                (user_id, currency_id, amount, int(time()), rate)
-            )
-            stake_id = cursor.lastrowid
-        return self.get(stake_id)
-
-    def get(self, stake_id: int) -> Optional[Stake]:
-        with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE stake_id = %s", (stake_id,))
+            cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
             result = cursor.fetchone()
             return Stake(**result) if result else None
 
-    def get_for_user(self, user_id: int, currency_id: int) -> List[Stake]:
+    def get_for_user(self, user_id: int) -> List[Stake]:
         with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+            cursor.execute("SELECT * FROM staking WHERE user_id = %s", (user_id,))
             results = cursor.fetchall()
             return [Stake(**row) for row in results]
 
-    def get_all_for_currency(self, currency_id: int) -> List[Stake]:
-        with self.db as cursor:
-            cursor.execute("SELECT * FROM staking WHERE currency_id = %s", (currency_id,))
-            results = cursor.fetchall()
-            return [Stake(**row) for row in results]
+    def upsert(self, cursor, user_id: int, currency_id: int, amount_change: int, last_updated_at: int):
+        cursor.execute(
+            """
+            INSERT INTO staking (user_id, currency_id, amount, last_updated_at)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE amount = amount + %s, last_updated_at = %s
+            """,
+            (user_id, currency_id, amount_change, last_updated_at, amount_change, last_updated_at)
+        )
 
-    def delete(self, stake_id: int):
+    def update_amount(self, cursor, user_id: int, currency_id: int, new_amount: int, last_updated_at: int):
+        cursor.execute(
+            "UPDATE staking SET amount = %s, last_updated_at = %s WHERE user_id = %s AND currency_id = %s",
+            (new_amount, last_updated_at, user_id, currency_id)
+        )
+
+    def delete(self, cursor, user_id: int, currency_id: int):
+        cursor.execute("DELETE FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+
+
+class LiquidityPoolModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, pool_id: int) -> Optional[LiquidityPool]:
         with self.db as cursor:
-            cursor.execute("DELETE FROM staking WHERE stake_id = %s", (stake_id,))
+            cursor.execute("SELECT * FROM liquidity_pool WHERE pool_id = %s", (pool_id,))
+            result = cursor.fetchone()
+            return LiquidityPool(**result) if result else None
+
+    def get_by_currency_pair(self, currency_a_id: int, currency_b_id: int) -> Optional[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT * FROM liquidity_pool WHERE (currency_a_id = %s AND currency_b_id = %s) OR (currency_a_id = %s AND currency_b_id = %s)",
+                (currency_a_id, currency_b_id, currency_b_id, currency_a_id)
+            )
+            result = cursor.fetchone()
+            return LiquidityPool(**result) if result else None
+
+    def get_by_symbols(self, symbol_a: str, symbol_b: str) -> Optional[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_a,)
+            )
+            res_a = cursor.fetchone()
+            cursor.execute(
+                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_b,)
+            )
+            res_b = cursor.fetchone()
+
+            if not res_a or not res_b:
+                return None
+
+            return self.get_by_currency_pair(res_a["currency_id"], res_b["currency_id"])
+
+    def create(self, currency_a_id: int, currency_b_id: int, reserve_a: int, reserve_b: int, total_shares: int) -> LiquidityPool:
+        with self.db as cursor:
+            cursor.execute(
+                "INSERT INTO liquidity_pool (currency_a_id, currency_b_id, reserve_a, reserve_b, total_shares) VALUES (%s, %s, %s, %s, %s)",
+                (currency_a_id, currency_b_id, reserve_a, reserve_b, total_shares)
+            )
+            pool_id = cursor.lastrowid
+        return self.get(pool_id)
+
+    def update_reserves(self, cursor, pool_id: int, reserve_a_change: int, reserve_b_change: int, shares_change: int):
+        cursor.execute(
+            "UPDATE liquidity_pool SET reserve_a = reserve_a + %s, reserve_b = reserve_b + %s, total_shares = total_shares + %s WHERE pool_id = %s",
+            (reserve_a_change, reserve_b_change, shares_change, pool_id)
+        )
+
+class LiquidityProviderModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, provider_id: int) -> Optional[LiquidityProvider]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_provider WHERE provider_id = %s", (provider_id,))
+            result = cursor.fetchone()
+            return LiquidityProvider(**result) if result else None
+
+    def get_by_pool_and_user(self, pool_id: int, user_id: int) -> Optional[LiquidityProvider]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_provider WHERE pool_id = %s AND user_id = %s", (pool_id, user_id))
+            result = cursor.fetchone()
+            return LiquidityProvider(**result) if result else None
+
+    def add_shares(self, cursor, pool_id: int, user_id: int, shares_change: int):
+        cursor.execute(
+            """
+            INSERT INTO liquidity_provider (pool_id, user_id, shares)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE shares = shares + %s
+            """,
+            (pool_id, user_id, shares_change, shares_change)
+        )
+
+    def update_shares(self, cursor, pool_id: int, user_id: int, new_shares: int):
+        cursor.execute(
+            "UPDATE liquidity_provider SET shares = %s WHERE pool_id = %s AND user_id = %s",
+            (new_shares, pool_id, user_id)
+        )
+
+    def delete(self, cursor, pool_id: int, user_id: int):
+        cursor.execute(
+            "DELETE FROM liquidity_provider WHERE pool_id = %s AND user_id = %s",
+            (pool_id, user_id)
+        )

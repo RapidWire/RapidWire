@@ -1,6 +1,6 @@
 config.py
 !/RapidWire/config.py
-.env
+.env*
 .vscode
 
 __pycache__/

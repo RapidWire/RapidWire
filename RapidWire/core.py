@@ -8,8 +8,8 @@ from decimal import Decimal
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel
-from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext
+from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel
+from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
 from .exceptions import (
     UserNotFound,
     CurrencyNotFound,
@@ -108,10 +108,46 @@ class RapidWire:
         self.APIKeys = APIKeyModel(self.db)
         self.Claims = ClaimModel(self.db)
         self.Stakes = StakeModel(self.db)
+        self.LiquidityPools = LiquidityPoolModel(self.db)
+        self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
         return UserModel(user_id, self.db)
+
+    def _compound_interest(self, cursor, user_id: int, currency_id: int) -> Stake:
+        stake = self.Stakes.get(user_id, currency_id)
+        if not stake:
+            return None
+
+        currency = self.Currencies.get(currency_id)
+        if not currency or currency.daily_interest_rate <= 0:
+            return stake
+
+        current_time = int(time())
+        elapsed_seconds = current_time - stake.last_updated_at
+        if elapsed_seconds <= SECONDS_IN_A_DAY:
+            return stake
+
+        days_passed = elapsed_seconds // SECONDS_IN_A_DAY
+        reward = int(Decimal(stake.amount) * (Decimal(1) + currency.daily_interest_rate)**Decimal(days_passed) - Decimal(stake.amount))
+
+        if reward > 0:
+            new_amount = stake.amount + reward
+            self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
+            # We need to create a transaction for the reward
+            cursor.execute(
+                """
+                INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
+            )
+            # Update the supply
+            self.Currencies.update_supply(cursor, currency_id, reward)
+            return self.Stakes.get(user_id, currency_id)
+
+        return stake
 
     def _calculate_contract_cost(self, script: str) -> int:
         try:
@@ -311,41 +347,247 @@ class RapidWire:
         return self.Claims.update_status(claim_id, 'canceled')
 
     def stake_deposit(self, user_id: int, currency_id: int, amount: int) -> Stake:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive.")
+
         currency = self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency for staking not found.")
-        
-        self.transfer(user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit")
-        stake = self.Stakes.create(user_id, currency_id, amount, currency.daily_interest_rate)
-        return stake
 
-    def stake_withdraw(self, stake_id: int, user_id: int) -> Tuple[int, Transaction]:
-        stake = self.Stakes.get(stake_id)
-        if not stake:
-            raise ValueError("Stake not found.")
-        if stake.user_id != user_id:
-            raise PermissionError("You do not own this stake.")
-            
-        days_staked = (int(time()) - stake.staked_at) // SECONDS_IN_A_DAY
-        reward = 0
-        if days_staked > 0:
-            reward = int(Decimal(stake.amount) * Decimal(days_staked) * stake.daily_interest_rate)
-        
-        total_payout = stake.amount + reward
-        
-        tx, _ = self.transfer(SYSTEM_USER_ID, user_id, stake.currency_id, total_payout, f"stake:withdraw:{stake_id}")
-        self.Stakes.delete(stake_id)
-        return reward, tx
-
-    def update_daily_interest_rate(self, currency_id: int, new_rate: Decimal):
         try:
             with self.db as cursor:
-                cursor.callproc('sp_update_interest_rate', (currency_id, new_rate))
+                # First, compound any existing interest
+                self._compound_interest(cursor, user_id, currency_id)
+
+                # Then, perform the transfer from user to system
+                source_balance = self.get_user(user_id).get_balance(currency_id)
+                if source_balance.amount < amount:
+                    raise InsufficientFunds("User has insufficient funds.")
+
+                self.get_user(user_id)._update_balance(cursor, currency_id, -amount)
+
+                # Upsert the stake
+                self.Stakes.upsert(cursor, user_id, currency_id, amount, int(time()))
+
+                # Create a transaction for the deposit
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
+                )
+            return self.Stakes.get(user_id, currency_id)
         except mysql.connector.Error as err:
-            raise TransactionError(f"Failed to update interest rate via stored procedure: {err}")
+            raise TransactionError(f"Database error during stake deposit: {err}")
+
+    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transaction:
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be positive.")
+
+        try:
+            with self.db as cursor:
+                stake = self._compound_interest(cursor, user_id, currency_id)
+                if not stake or stake.amount < amount:
+                    raise InsufficientFunds("Withdrawal amount exceeds staked balance.")
+
+                # Reduce the stake amount
+                new_stake_amount = stake.amount - amount
+                if new_stake_amount > 0:
+                    self.Stakes.update_amount(cursor, user_id, currency_id, new_stake_amount, int(time()))
+                else:
+                    self.Stakes.delete(cursor, user_id, currency_id)
+
+                # Transfer funds back to the user
+                self.get_user(user_id)._update_balance(cursor, currency_id, amount)
+
+                # Create a transaction for the withdrawal
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
+                )
+                tx_id = cursor.lastrowid
+            return self.Transactions.get(tx_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during stake withdrawal: {err}")
+
+    def request_interest_rate_change(self, currency_id: int, new_rate: Decimal, user_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the currency issuer can change the interest rate.")
+        if currency.rate_change_requested_at is not None:
+            raise ValueError("An interest rate change is already pending.")
+
+        return self.Currencies.request_rate_change(currency_id, new_rate)
+
+    def apply_interest_rate_change(self, currency_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+        if currency.rate_change_requested_at is None or currency.new_daily_interest_rate is None:
+            raise ValueError("No interest rate change is pending.")
+
+        # Check if the timelock period has passed (e.g., 7 days)
+        if time() - currency.rate_change_requested_at < self.Config.Staking.rate_change_timelock:
+            raise PermissionError("The timelock period for the interest rate change has not passed yet.")
+
+        return self.Currencies.apply_rate_change(currency)
 
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
         if max_cost is None:
             max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
         return self.Contracts.set(user_id, script, cost, max_cost)
+
+    def create_liquidity_pool(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int, user_id: int) -> LiquidityPool:
+        if self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id):
+            raise ValueError("Liquidity pool already exists for this currency pair.")
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, currency_a_id, -amount_a)
+                user._update_balance(cursor, currency_b_id, -amount_b)
+
+                initial_shares = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
+                pool = self.LiquidityPools.create(currency_a_id, currency_b_id, amount_a, amount_b, initial_shares)
+                self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, initial_shares)
+            return pool
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during liquidity pool creation: {err}")
+
+    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a: int, amount_b: int, user_id: int) -> Tuple[int, int]:
+        pool = self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        if pool.reserve_a == 0 or pool.reserve_b == 0:
+            shares_a = amount_a
+            shares_b = amount_b
+        else:
+            shares_a = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
+            shares_b = int(Decimal(amount_b) * Decimal(pool.total_shares) / Decimal(pool.reserve_b))
+
+        shares_to_mint = min(shares_a, shares_b)
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, pool.currency_a_id, -amount_a)
+                user._update_balance(cursor, pool.currency_b_id, -amount_b)
+                self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)
+                self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, shares_to_mint)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
+                     user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b, "lp:add", current_time)
+                )
+            return shares_to_mint
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error while adding liquidity: {err}")
+
+    def remove_liquidity(self, symbol_a: str, symbol_b: str, shares: int, user_id: int) -> Tuple[int, int]:
+        pool = self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        provider = self.LiquidityProviders.get_by_pool_and_user(pool.pool_id, user_id)
+        if not provider or provider.shares < shares:
+            raise InsufficientFunds("Insufficient shares.")
+
+        amount_a = int(Decimal(shares) * Decimal(pool.reserve_a) / Decimal(pool.total_shares))
+        amount_b = int(Decimal(shares) * Decimal(pool.reserve_b) / Decimal(pool.total_shares))
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                user._update_balance(cursor, pool.currency_a_id, amount_a)
+                user._update_balance(cursor, pool.currency_b_id, amount_b)
+                self.LiquidityPools.update_reserves(cursor, pool.pool_id, -amount_a, -amount_b, -shares)
+
+                new_shares = provider.shares - shares
+                if new_shares > 0:
+                    self.LiquidityProviders.update_shares(cursor, pool.pool_id, user_id, new_shares)
+                else:
+                    self.LiquidityProviders.delete(cursor, pool.pool_id, user_id)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
+                     SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b, "lp:remove", current_time)
+                )
+            return amount_a, amount_b
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error while removing liquidity: {err}")
+
+    def get_swap_rate(self, from_symbol: str, to_symbol: str, amount: int) -> int:
+        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
+        if not pool:
+            raise ValueError("Liquidity pool not found.")
+
+        from_currency = self.Currencies.get_by_symbol(from_symbol)
+
+        if from_currency.currency_id == pool.currency_a_id:
+            reserve_in = pool.reserve_a
+            reserve_out = pool.reserve_b
+        elif from_currency.currency_id == pool.currency_b_id:
+            reserve_in = pool.reserve_b
+            reserve_out = pool.reserve_a
+        else:
+            raise ValueError("Invalid currency for this pool.")
+
+        fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
+        amount_in_with_fee = Decimal(amount) * (Decimal(1) - fee_rate)
+        return int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+
+    def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
+        amount_out = self.get_swap_rate(from_symbol, to_symbol, amount)
+        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
+
+        from_currency = self.Currencies.get_by_symbol(from_symbol)
+
+        if from_currency.currency_id == pool.currency_a_id:
+            to_currency_id = pool.currency_b_id
+            reserve_a_change = amount
+            reserve_b_change = -amount_out
+        else:
+            to_currency_id = pool.currency_a_id
+            reserve_a_change = -amount_out
+            reserve_b_change = amount
+
+        try:
+            with self.db as cursor:
+                user = self.get_user(user_id)
+                source_balance = user.get_balance(from_currency.currency_id)
+                if source_balance.amount < amount:
+                    raise InsufficientFunds("Insufficient funds for swap.")
+                user._update_balance(cursor, from_currency.currency_id, -amount)
+                user._update_balance(cursor, to_currency_id, amount_out)
+                self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+
+                current_time = int(time())
+                cursor.execute(
+                    """
+                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
+                     SYSTEM_USER_ID, user_id, to_currency_id, amount_out, "swap", current_time)
+                )
+            return amount_out, to_currency_id
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during swap: {err}")
