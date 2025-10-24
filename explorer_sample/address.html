@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Details - Pigeonium Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Address Details</h1>
+        <h2 id="address-header"></h2>
+        <h3>Balances</h3>
+        <div id="balances-container"><p>Loading balances...</p></div>
+        <h3>Transaction History (Last 100)</h3>
+        <div id="tx-history-container"><p>Loading transaction history...</p></div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    let currencyCache = {};
+
+    async function fetchAndCacheCurrenciesByIds(currencyIds) {
+        const unknownCurrencyIds = [...new Set(currencyIds)].filter(id => !currencyCache[id]);
+        if (unknownCurrencyIds.length === 0) return;
+
+        await Promise.all(unknownCurrencyIds.map(async (id) => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/currency/${id}`);
+                currencyCache[id] = response.ok ? await response.json() : { symbol: 'N/A' };
+            } catch (e) { currencyCache[id] = { symbol: 'ERR' }; }
+        }));
+    }
+
+    function displayBalances(balancesData) {
+        const container = document.getElementById('balances-container');
+        const balances = Object.entries(balancesData);
+
+        if (balances.length === 0) {
+            container.innerHTML = '<p>No balances found for this address.</p>';
+            return;
+        }
+       let tableHTML = `<table><thead><tr><th>Currency</th><th>Amount</th></tr></thead><tbody>`;
+        for (const [currencyId, amount] of balances) {
+            const currency = currencyCache[currencyId] || { symbol: '???' };
+            const currencyLink = `<a href="currency.html?id=${currencyId}">${currency.symbol}</a>`;
+            tableHTML += `<tr>
+                <td><strong>${currencyLink}</strong></td>
+                <td>${formatAmount(amount)}</td>
+            </tr>`;
+        }
+        container.innerHTML = tableHTML + '</tbody></table>';
+    }
+
+    function displayTransactions(transactionsData, address) {
+        const container = document.getElementById('tx-history-container');
+        if (transactionsData.length === 0) {
+            container.innerHTML = '<p>No transaction history found for this address.</p>';
+            return;
+        }
+        let tableHTML = `<table><thead><tr><th>Index</th><th>Timestamp</th><th>Source</th><th>Destination</th><th>Amount</th></tr></thead><tbody>`;
+        transactionsData.forEach(tx => {
+            const currency = currencyCache[tx.currencyId] || { symbol: '???' };
+            const currencyLink = `<a href="currency.html?id=${tx.currencyId}">${currency.symbol}</a>`;
+            let source_txt = `<td class="monospace"><a href="address.html?addr=${tx.source}">${shortenHex(tx.source)}</a></td>`;
+            let dest_txt = `<td class="monospace"><a href="address.html?addr=${tx.dest}">${shortenHex(tx.dest)}</a></td>`;
+            if (tx.source == address) {
+                source_txt = `<td class="monospace">${shortenHex(tx.source)}</td>`;
+            } else if (tx.dest == address) {
+                dest_txt = `<td class="monospace">${shortenHex(tx.dest)}</td>`;
+            }
+            tableHTML += `<tr>
+                <td><a href="transaction.html?id=${tx.indexId}">${tx.indexId}</a></td>
+                <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
+                ${source_txt}
+                ${dest_txt}
+                <td>${formatAmount(tx.amount)} ${currencyLink}</td>
+            </tr>`
+        });
+        container.innerHTML = tableHTML + '</tbody></table>';
+    }
+
+    async function fetchAddressDetails(address) {
+    document.getElementById('address-header').textContent = address;
+
+    try {
+        const netResponse = await fetch(API_BASE_URL);
+        if (!netResponse.ok) throw new Error('Could not fetch network info.');
+        const netData = await netResponse.json();
+        networkDecimals = netData.decimals;
+        currencyCache[netData.baseCurrency.currencyId] = netData.baseCurrency;
+
+        const [balancesResponse, txsResponse, isContractResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/balances/${address}`),
+            fetch(`${API_BASE_URL}/transactions?address=${address}&sort_by=indexId&sort_order=DESC&limit=100`),
+            fetch(`${API_BASE_URL}/is_contract/${address}`)
+        ]);
+
+        if (isContractResponse.ok) {
+            const isContractData = await isContractResponse.json();
+            if (isContractData.isContract) {
+                const contractSection = document.createElement('div');
+                contractSection.innerHTML = `
+                    <h3>Contract</h3>
+                    <p>This address is a contract. <a href="contract.html?addr=${address}">View Code</a></p>
+                `;
+                document.getElementById('address-header').after(contractSection);
+            }
+        }
+
+        if (!balancesResponse.ok) throw new Error('Failed to fetch balances.');
+        const balancesData = await balancesResponse.json();
+        await fetchAndCacheCurrenciesByIds(Object.keys(balancesData));
+        displayBalances(balancesData);
+
+        if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+        const txsData = await txsResponse.json();
+        await fetchAndCacheCurrenciesByIds(txsData.map(tx => tx.currencyId));
+        displayTransactions(txsData, address);
+
+    } catch (error) {
+        document.getElementById('balances-container').innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        document.getElementById('tx-history-container').innerHTML = '';
+    }
+}
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const address = new URLSearchParams(window.location.search).get('addr');
+        if (address) {
+            fetchAddressDetails(address);
+        } else {
+            document.getElementById('address-header').innerHTML = '<p class="error-message">No address provided.</p>';
+        }
+    });
+</script>
+</body>
+</html>

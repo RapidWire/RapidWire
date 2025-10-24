@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Details - Pigeonium Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Transaction Details</h1>
+        <div id="tx-details-container"><p>Loading...</p></div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    async function fetchTransactionDetails(txId) {
+        const container = document.getElementById('tx-details-container');
+        try {
+            const netResponse = await fetch(API_BASE_URL);
+            if (!netResponse.ok) throw new Error('Could not fetch network info.');
+            const netData = await netResponse.json();
+            networkDecimals = netData.decimals;
+
+            const txResponse = await fetch(`${API_BASE_URL}/transaction/${txId}`);
+            if (!txResponse.ok) throw new Error('Transaction not found');
+            const tx = await txResponse.json();
+
+            // 通貨情報を取得
+            let currency = { name: 'Unknown', symbol: '???' };
+            try {
+                const currencyResponse = await fetch(`${API_BASE_URL}/currency/${tx.currencyId}`);
+                if (currencyResponse.ok) {
+                    currency = await currencyResponse.json();
+                }
+            } catch (e) { /* ignore, use default */ }
+            
+            const currencyInfoLink = `<a href="currency.html?id=${tx.currencyId}">${currency.name} (${currency.symbol})</a>`;
+            const sourceLink = `<a href="address.html?addr=${tx.source}">${tx.source}</a>`;
+            const destLink = `<a href="address.html?addr=${tx.dest}">${tx.dest}</a>`;
+
+            container.innerHTML = `
+                <dl class="detail-list">
+                    <dt>Index ID</dt><dd>${tx.indexId}</dd>
+                    <dt>Timestamp</dt><dd>${new Date(tx.timestamp * 1000).toLocaleString()} (${tx.timestamp})</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Source Address</dt><dd>${sourceLink}</dd>
+                    <dt>Destination Address</dt><dd>${destLink}</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Amount</dt><dd>${formatAmount(tx.amount)} ${currency.symbol}</dd>
+                    <dt>Fee Amount</dt><dd>${formatAmount(tx.feeAmount)}</dd>
+                    <dt>Currency</dt><dd>${currencyInfoLink}<br>${tx.currencyId}</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Input Data</dt><dd>${tx.inputData || '(none)'}</dd>
+                    <dt>Public Key</dt><dd>${tx.publicKey}</dd>
+                    <dt>Signature</dt><dd>${tx.signature}</dd>
+                    <dt>Admin Signature</dt><dd>${tx.adminSignature}</dd>
+                </dl>
+            `;
+        } catch (error) {
+            container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const txId = new URLSearchParams(window.location.search).get('id');
+        if (txId) {
+            fetchTransactionDetails(txId);
+        } else {
+            document.getElementById('tx-details-container').innerHTML = '<p class="error-message">No Transaction ID provided.</p>';
+        }
+    });
+</script>
+</body>
+</html>

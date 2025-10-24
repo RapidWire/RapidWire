@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pigeonium Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Pigeonium Explorer</h1>
+        <div id="network-info">Connecting...</div>
+
+        <div class="search-area">
+            <input type="text" id="searchInput" placeholder="Search by Index ID or Address">
+            <button id="searchButton">Search</button>
+            <button id="resetButton">Reset</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Index</th>
+                    <th>Timestamp</th>
+                    <th>Source</th>
+                    <th>Destination</th>
+                    <th>Amount</th>
+                    <th>Fee</th>
+                </tr>
+            </thead>
+            <tbody id="tx-table-body"></tbody>
+        </table>
+
+        <div class="navigation">
+            <button id="prevButton" disabled>Previous</button>
+            <button id="nextButton">Next</button>
+            <span id="pageInfo">Page: 1</span>
+        </div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    const LIMIT = 20;
+    let currentPage = 1;
+    let currentSearchQuery = null;
+    let currencyCache = {};
+
+    const searchInput = document.getElementById('searchInput');
+    const tableBody = document.getElementById('tx-table-body');
+    const networkInfoElem = document.getElementById('network-info');
+    const prevButton = document.getElementById('prevButton');
+    const nextButton = document.getElementById('nextButton');
+    const pageInfo = document.getElementById('pageInfo');
+
+    async function fetchAndCacheCurrencies(transactions) {
+        const unknownCurrencyIds = [...new Set(transactions.map(tx => tx.currencyId))].filter(id => !currencyCache[id]);
+        if (unknownCurrencyIds.length === 0) return;
+
+        await Promise.all(unknownCurrencyIds.map(async (id) => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/currency/${id}`);
+                if (response.ok) {
+                    currencyCache[id] = await response.json();
+                } else {
+                    currencyCache[id] = { symbol: 'N/A' };
+                }
+            } catch (e) {
+                currencyCache[id] = { symbol: 'ERR' };
+            }
+        }));
+    }
+
+    function displayTransactions(transactions) {
+        tableBody.innerHTML = '';
+        if (transactions.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No transactions found.</td></tr>`;
+            return;
+        }
+
+        transactions.forEach(tx => {
+            const timestamp = new Date(tx.timestamp * 1000).toLocaleString();
+            const sourceLink = `<a href="address.html?addr=${tx.source}">${shortenHex(tx.source)}</a>`;
+            const destLink = `<a href="address.html?addr=${tx.dest}">${shortenHex(tx.dest)}</a>`;
+            const currency = currencyCache[tx.currencyId] || { symbol: '???' };
+            const currencyLink = `<a href="currency.html?id=${tx.currencyId}">${currency.symbol}</a>`;
+
+            const row = `
+                <tr>
+                    <td><a href="transaction.html?id=${tx.indexId}">${tx.indexId}</a></td>
+                    <td>${timestamp}</td>
+                    <td class="monospace">${sourceLink}</td>
+                    <td class="monospace">${destLink}</td>
+                    <td>${formatAmount(tx.amount)} ${currencyLink}</td>
+                    <td>${formatAmount(tx.feeAmount)}</td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    }
+
+    async function fetchAndDisplay(page = 1) {
+        currentPage = page;
+        pageInfo.textContent = `Page: ${currentPage}`;
+        prevButton.disabled = (currentPage === 1);
+
+        const offset = (currentPage - 1) * LIMIT;
+        let url = `${API_BASE_URL}/transactions?sort_by=indexId&sort_order=DESC&limit=${LIMIT}&offset=${offset}`;
+
+        if (currentSearchQuery) {
+            url = /^\d+$/.test(currentSearchQuery)
+                ? `${API_BASE_URL}/transaction/${currentSearchQuery}`
+                : `${API_BASE_URL}/transactions?address=${currentSearchQuery}&sort_by=indexId&sort_order=DESC&limit=${LIMIT}&offset=${offset}`;
+        }
+        
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Request failed: ${response.status}`);
+            }
+            const data = await response.json();
+            const transactions = Array.isArray(data) ? data : (data.indexId !== undefined ? [data] : []);
+
+            if (transactions.length > 0) {
+                await fetchAndCacheCurrencies(transactions);
+            }
+
+            displayTransactions(transactions);
+            nextButton.disabled = (transactions.length < LIMIT || !Array.isArray(data));
+        } catch (error) {
+            tableBody.innerHTML = `<tr><td colspan="6"><div class="error-message">Failed to fetch transactions: ${error.message}</div></td></tr>`;
+            nextButton.disabled = true;
+        }
+    }
+
+    async function fetchNetworkInfo() {
+        try {
+            const response = await fetch(API_BASE_URL);
+            if (!response.ok) throw new Error('Network response was not ok.');
+            const data = await response.json();
+            networkDecimals = data.decimals;
+            currencyCache[data.baseCurrency.currencyId] = data.baseCurrency; // Cache base currency
+            networkInfoElem.textContent = `Network: ${data.networkName} (ID: ${data.networkId}) | Decimals: ${data.decimals}`;
+        } catch (error) {
+            networkInfoElem.innerHTML = `<span style="color:red;">Could not connect to Pigeonium server at ${API_BASE_URL}.</span>`;
+            tableBody.innerHTML = `<tr><td colspan="6"><div class="error-message">Could not connect to the server.</div></td></tr>`;
+        }
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchNetworkInfo().then(() => fetchAndDisplay(1));
+        
+        prevButton.addEventListener('click', () => { if (currentPage > 1) fetchAndDisplay(currentPage - 1); });
+        nextButton.addEventListener('click', () => fetchAndDisplay(currentPage + 1));
+        document.getElementById('searchButton').addEventListener('click', () => {
+            currentSearchQuery = searchInput.value.trim();
+            if (currentSearchQuery) fetchAndDisplay(1);
+        });
+        searchInput.addEventListener('keyup', (event) => { if (event.key === 'Enter') document.getElementById('searchButton').click(); });
+        document.getElementById('resetButton').addEventListener('click', () => {
+            currentSearchQuery = null;
+            searchInput.value = '';
+            fetchAndDisplay(1);
+        });
+    });
+</script>
+</body>
+</html>
