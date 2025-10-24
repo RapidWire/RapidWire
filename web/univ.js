@@ -27,10 +27,25 @@ async function getConfig() {
 
 function formatAmount(amount, decimals = networkDecimals) {
     try {
-        if (Array.isArray(amount)) {
-            amount = amount.join('');
+        let valueToProcess = amount;
+
+        // If it's a string, try to parse it as JSON.
+        if (typeof valueToProcess === 'string') {
+            try {
+                valueToProcess = JSON.parse(valueToProcess);
+            } catch (e) {
+                // Not a JSON string, do nothing and proceed with the original string.
+            }
         }
-        const val = BigInt(String(amount));
+
+        // If the result is an array, join it into a single string.
+        if (Array.isArray(valueToProcess)) {
+            valueToProcess = valueToProcess.join('');
+        }
+
+        // No matter what, convert the final value to a string before BigInt
+        const val = BigInt(String(valueToProcess));
+
         const divisor = BigInt(10 ** decimals);
         const integerPart = (val / divisor).toString();
         const fractionalPart = (val % divisor).toString().padStart(decimals, '0').replace(/0+$/, '');
