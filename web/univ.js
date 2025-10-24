@@ -27,7 +27,10 @@ async function getConfig() {
 
 function formatAmount(amount, decimals = networkDecimals) {
     try {
-        const val = BigInt(amount);
+        if (Array.isArray(amount)) {
+            amount = amount.join('');
+        }
+        const val = BigInt(String(amount));
         const divisor = BigInt(10 ** decimals);
         const integerPart = (val / divisor).toString();
         const fractionalPart = (val % divisor).toString().padStart(decimals, '0').replace(/0+$/, '');
