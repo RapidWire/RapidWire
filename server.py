@@ -77,7 +77,7 @@ async def get_my_balance(user_id: int = Depends(get_current_user_id)):
             response.append(
                 BalanceResponse(
                     currency=currency,
-                    amount=f"{Decimal(bal.amount) / Decimal(10**config.decimal_places):.{config.decimal_places}f}"
+                    amount=str(bal.amount)
                 )
             )
     return response
