@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from decimal import Decimal
@@ -88,6 +89,13 @@ async def get_my_history(user_id: int = Depends(get_current_user_id), page: int 
 @app.get("/currency/{symbol}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info(symbol: str):
     currency = Rapid.Currencies.get_by_symbol(symbol.upper())
+    if not currency:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
+    return currency
+
+@app.get("/currency/id/{currency_id}", response_model=structs.Currency, tags=["Currency"])
+async def get_currency_info_by_id(currency_id: int):
+    currency = Rapid.Currencies.get(currency_id)
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     return currency
@@ -197,6 +205,7 @@ async def search_transactions(
     return Rapid.Transactions.search(**search_params)
 
 if __name__ == "__main__":
+    app.mount("/", StaticFiles(directory="web", html=True), name="web")
     uvicorn.run(
         app,
         host=config.APIServer.host,
