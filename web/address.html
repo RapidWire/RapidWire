@@ -11,6 +11,8 @@
         <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
         <h1>Address Details</h1>
         <h2 id="address-header"></h2>
+        <h3>Balances</h3>
+        <div id="balances-container"><p>Loading balances...</p></div>
         <h3>Transaction History</h3>
         <div id="tx-history-container"><p>Loading transaction history...</p></div>
     </div>
@@ -54,11 +56,38 @@
         container.innerHTML = tableHTML + '</tbody></table>';
     }
 
+    async function displayBalances(userId) {
+        const container = document.getElementById('balances-container');
+        try {
+            const response = await fetch(`${API_BASE_URL}/balance/${userId}`);
+            if (!response.ok) throw new Error('Failed to fetch balances.');
+            const balances = await response.json();
+
+            if (balances.length === 0) {
+                container.innerHTML = '<p>No balances found for this address.</p>';
+                return;
+            }
+
+            let tableHTML = `<table><thead><tr><th>Currency</th><th>Amount</th></tr></thead><tbody>`;
+            balances.forEach(bal => {
+                tableHTML += `<tr>
+                    <td><a href="currency.html?symbol=${bal.currency.symbol}">${bal.currency.name} (${bal.currency.symbol})</a></td>
+                    <td>${formatAmount(bal.amount, bal.currency.decimal_places)}</td>
+                </tr>`;
+            });
+            container.innerHTML = tableHTML + '</tbody></table>';
+        } catch (error) {
+            container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        }
+    }
+
     async function fetchAddressDetails(userId) {
         document.getElementById('address-header').textContent = `User ID: ${userId}`;
 
         try {
             await getConfig();
+
+            displayBalances(userId);
 
             const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=100`);
 
