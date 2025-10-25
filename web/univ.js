@@ -1,18 +1,18 @@
 const API_BASE_URL = "";
 let networkDecimals = 3;
 
-let currencyCache = {};
-
 async function fetchWithCache(url) {
-    if (currencyCache[url]) {
-        return currencyCache[url];
+    const cached = sessionStorage.getItem(url);
+    if (cached) {
+        return JSON.parse(cached);
     }
+
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Failed to fetch: ${url}`);
     }
     const data = await response.json();
-    currencyCache[url] = data;
+    sessionStorage.setItem(url, JSON.stringify(data));
     return data;
 }
 
