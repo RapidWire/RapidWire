@@ -63,7 +63,7 @@ class CurrencyModel:
             results = cursor.fetchall()
             return [Balance(**row) for row in results]
 
-    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: Decimal) -> Currency:
+    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Currency:
         try:
             with self.db as cursor:
                 cursor.execute(
@@ -93,7 +93,7 @@ class CurrencyModel:
          with self.db as cursor:
             cursor.execute("DELETE FROM currency WHERE currency_id = %s", (currency_id,))
 
-    def request_rate_change(self, currency_id: int, new_rate: Decimal) -> Optional[Currency]:
+    def request_rate_change(self, currency_id: int, new_rate: int) -> Optional[Currency]:
         with self.db as cursor:
             cursor.execute(
                 "UPDATE currency SET new_daily_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",

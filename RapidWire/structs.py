@@ -10,8 +10,8 @@ class Currency(BaseModel):
     supply: int
     minting_renounced: bool
     delete_requested_at: Optional[int] = None
-    daily_interest_rate: Decimal
-    new_daily_interest_rate: Optional[Decimal] = None
+    daily_interest_rate: int
+    new_daily_interest_rate: Optional[int] = None
     rate_change_requested_at: Optional[int] = None
 
     @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')

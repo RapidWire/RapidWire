@@ -130,7 +130,8 @@ class RapidWire:
             return stake
 
         days_passed = elapsed_seconds // SECONDS_IN_A_DAY
-        reward = int(Decimal(stake.amount) * (Decimal(1) + currency.daily_interest_rate)**Decimal(days_passed) - Decimal(stake.amount))
+        daily_rate = Decimal(currency.daily_interest_rate) / Decimal(10000)
+        reward = int(Decimal(stake.amount) * (Decimal(1) + daily_rate)**Decimal(days_passed) - Decimal(stake.amount))
 
         if reward > 0:
             new_amount = stake.amount + reward
@@ -281,7 +282,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: Decimal) -> Tuple[Currency, Optional[Transaction]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transaction]]:
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
         
         initial_tx = None
@@ -414,7 +415,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake withdrawal: {err}")
 
-    def request_interest_rate_change(self, currency_id: int, new_rate: Decimal, user_id: int) -> Currency:
+    def request_interest_rate_change(self, currency_id: int, new_rate: int, user_id: int) -> Currency:
         currency = self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency not found.")

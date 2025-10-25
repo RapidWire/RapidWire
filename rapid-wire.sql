@@ -73,8 +73,8 @@ CREATE TABLE `currency` (
   `supply` bigint UNSIGNED NOT NULL,
   `minting_renounced` tinyint(1) NOT NULL DEFAULT '0',
   `delete_requested_at` bigint UNSIGNED DEFAULT NULL,
-  `daily_interest_rate` decimal(10,9) NOT NULL DEFAULT '0.000000000',
-  `new_daily_interest_rate` decimal(10,9) DEFAULT NULL,
+  `daily_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
+  `new_daily_interest_rate` int UNSIGNED DEFAULT NULL,
   `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
