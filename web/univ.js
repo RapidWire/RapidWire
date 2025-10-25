@@ -29,7 +29,6 @@ function formatAmount(amount, decimals = networkDecimals) {
     try {
         let valueToProcess = amount;
 
-        // If it's a string, try to parse it as JSON.
         if (typeof valueToProcess === 'string') {
             try {
                 valueToProcess = JSON.parse(valueToProcess);
@@ -38,12 +37,10 @@ function formatAmount(amount, decimals = networkDecimals) {
             }
         }
 
-        // If the result is an array, join it into a single string.
         if (Array.isArray(valueToProcess)) {
             valueToProcess = valueToProcess.join('');
         }
 
-        // No matter what, convert the final value to a string before BigInt
         const val = BigInt(String(valueToProcess));
 
         const divisor = BigInt(10 ** decimals);
