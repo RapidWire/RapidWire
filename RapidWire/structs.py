@@ -14,9 +14,9 @@ class Currency(BaseModel):
     new_daily_interest_rate: Optional[Decimal] = None
     rate_change_requested_at: Optional[int] = None
 
-    @field_serializer('supply')
-    def serialize_supply(self, supply: int, _info):
-        return str(supply)
+    @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class Balance(BaseModel):
     user_id: int
@@ -32,9 +32,9 @@ class Transaction(BaseModel):
     input_data: Optional[str] = Field(None, alias="inputData")
     timestamp: int
 
-    @field_serializer('amount')
-    def serialize_amount(self, amount: int, _info):
-        return str(amount)
+    @field_serializer('transaction_id', 'source_id', 'destination_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class APIKey(BaseModel):
     user_id: int
@@ -55,6 +55,10 @@ class Claim(BaseModel):
     status: Literal['pending', 'paid', 'canceled']
     created_at: int
     description: Optional[str] = None
+
+    @field_serializer('claim_id', 'claimant_id', 'payer_id', 'currency_id', 'amount', 'created_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class Stake(BaseModel):
     user_id: int
