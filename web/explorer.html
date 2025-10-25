@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RapidWire Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <h1>RapidWire Explorer</h1>
+
+        <div class="search-area">
+            <input type="text" id="searchInput" placeholder="Search by User ID">
+            <button id="searchButton">Search</button>
+            <button id="resetButton">Reset</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Timestamp</th>
+                    <th>Source</th>
+                    <th>Destination</th>
+                    <th>Amount</th>
+                    <th>Input Data</th>
+                </tr>
+            </thead>
+            <tbody id="tx-table-body"></tbody>
+        </table>
+
+        <div class="navigation">
+            <button id="prevButton" disabled>Previous</button>
+            <button id="nextButton">Next</button>
+            <span id="pageInfo">Page: 1</span>
+        </div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    const LIMIT = 20;
+    let currentPage = 1;
+    let currentSearchQuery = null;
+
+    const searchInput = document.getElementById('searchInput');
+    const tableBody = document.getElementById('tx-table-body');
+    const prevButton = document.getElementById('prevButton');
+    const nextButton = document.getElementById('nextButton');
+    const pageInfo = document.getElementById('pageInfo');
+
+    async function getCurrency(currencyId) {
+        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+    }
+
+    async function displayTransactions(transactions) {
+        tableBody.innerHTML = '';
+        if (transactions.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No transactions found.</td></tr>`;
+            return;
+        }
+
+        const currencyPromises = transactions.map(tx => getCurrency(tx.currency_id));
+        const currencies = await Promise.all(currencyPromises);
+
+        transactions.forEach((tx, index) => {
+            const timestamp = new Date(tx.timestamp * 1000).toLocaleString();
+
+            const currency = currencies[index];
+
+            const sourceLink = `<a href="address.html?user_id=${tx.source}">${tx.source}</a>`;
+            const destLink = `<a href="address.html?user_id=${tx.dest}">${tx.dest}</a>`;
+
+            const row = `
+                <tr>
+                    <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>
+                    <td>${timestamp}</td>
+                    <td>${sourceLink}</td>
+                    <td>${destLink}</td>
+                    <td>${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}</td>
+                    <td>${tx.input_data || ''}</td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    }
+
+    async function fetchAndDisplay(page = 1) {
+        currentPage = page;
+        pageInfo.textContent = `Page: ${currentPage}`;
+        prevButton.disabled = (currentPage === 1);
+
+        let url = `${API_BASE_URL}/transactions/search?page=${currentPage}&limit=${LIMIT}`;
+
+        if (currentSearchQuery) {
+            url += `&user_id=${currentSearchQuery}`;
+        }
+
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `Request failed: ${response.status}`);
+            }
+            const transactions = await response.json();
+
+            await displayTransactions(transactions);
+            nextButton.disabled = (transactions.length < LIMIT);
+        } catch (error) {
+            tableBody.innerHTML = `<tr><td colspan="6"><div class="error-message">Failed to fetch transactions: ${error.message}</div></td></tr>`;
+            nextButton.disabled = true;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        getConfig().then(() => fetchAndDisplay(1));
+
+        prevButton.addEventListener('click', () => { if (currentPage > 1) fetchAndDisplay(currentPage - 1); });
+        nextButton.addEventListener('click', () => fetchAndDisplay(currentPage + 1));
+        document.getElementById('searchButton').addEventListener('click', () => {
+            currentSearchQuery = searchInput.value.trim();
+            fetchAndDisplay(1);
+        });
+        searchInput.addEventListener('keyup', (event) => { if (event.key === 'Enter') document.getElementById('searchButton').click(); });
+        document.getElementById('resetButton').addEventListener('click', () => {
+            currentSearchQuery = null;
+            searchInput.value = '';
+            fetchAndDisplay(1);
+        });
+    });
+</script>
+</body>
+</html>

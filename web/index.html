@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RapidWire Project</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+        .header {
+            background-color: #fff;
+            padding: 20px 40px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #007bff;
+        }
+        .container {
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-top: 0;
+            color: #333;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        .feature-list strong {
+            color: #007bff;
+        }
+        .button-container {
+            text-align: center;
+            margin-top: 40px;
+        }
+        .button {
+            display: inline-block;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>RapidWire</h1>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <h2>RapidWireへようこそ</h2>
+            <p>
+                RapidWireは、カスタマイズ可能な通貨と高度なスマートコントラクト機能を備えた、多機能なDiscordエコノミーボットです。<br>
+                サーバーごとに独自の経済圏を簡単に構築し、活発なコミュニティ活動を促進します。
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>主な特徴</h2>
+            <ul class="feature-list">
+                <li><strong>カスタム通貨:</strong> サーバーごとに独自の通貨を作成し、供給量や発行者を管理できます。</li>
+                <li><strong>スマートコントラクト:</strong> Pythonで記述されたスクリプトを使用して、トランザクション受信時にカスタムロジックを自動実行します。</li>
+                <li><strong>請求システム:</strong> ユーザー間で支払いを要求し、追跡するための請求を作成できます。</li>
+                <li><strong>ステーキング:</strong> ユーザーは通貨をステーキングして、利息を得ることができます。</li>
+                <li><strong>セキュアなAPI:</strong> APIキーを使用して、外部アプリケーションからRapidWireの機能と安全に対話できます。</li>
+            </ul>
+        </div>
+
+        <div class="card button-container">
+            <h2>ブロックチェーンを探索する</h2>
+            <p>Webエクスプローラーを使用して、<br>リアルタイムのトランザクション、アドレス情報、コントラクトのコードなどを確認できます。</p>
+            <a href="explorer.html" class="button">Webエクスプローラーへ</a>
+        </div>
+        <div class="card button-container">
+            <h2>各種リンク</h2>
+            <a href="https://discord.gg/tBtMQYEYTb" target="_blank" class="button">Discordサーバー</a> &emsp;
+            <a href="https://github.com/rapidwire/" target="_blank" class="button">GitHub</a>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p></p>
+    </footer>
+
+</body>
+</html>

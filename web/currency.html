@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Currency Details - RapidWire Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Currency Details</h1>
+        <div id="currency-details-container"><p>Loading...</p></div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    async function fetchCurrencyDetails(symbol) {
+        const container = document.getElementById('currency-details-container');
+        try {
+            const currency = await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
+
+            container.innerHTML = `
+                <dl class="detail-list">
+                    <dt>Name</dt><dd>${currency.name}</dd>
+                    <dt>Symbol</dt><dd>${currency.symbol}</dd>
+                    <dt>Creator ID</dt><dd>${currency.creator_id}</dd>
+                    <dt>Contract ID</dt><dd>${currency.contract_id}</dd>
+                    <dt>Decimal Places</dt><dd>${currency.decimal_places}</dd>
+                </dl>
+            `;
+        } catch (error) {
+            container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const symbol = new URLSearchParams(window.location.search).get('symbol');
+        if (symbol) {
+            fetchCurrencyDetails(symbol);
+        } else {
+            document.getElementById('currency-details-container').innerHTML = '<p class="error-message">No currency symbol provided.</p>';
+        }
+    });
+</script>
+</body>
+</html>

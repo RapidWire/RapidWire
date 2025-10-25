@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Details - RapidWire Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Transaction Details</h1>
+        <div id="tx-details-container"><p>Loading...</p></div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    async function getTransactionById(txId) {
+        const response = await fetch(`${API_BASE_URL}/transactions/search?tx_id=${txId}`);
+        if (!response.ok) {
+            throw new Error('Transaction not found');
+        }
+        const transactions = await response.json();
+        if (transactions.length === 0) {
+            throw new Error('Transaction not found');
+        }
+        return transactions[0];
+    }
+
+    async function fetchTransactionDetails(txId) {
+        const container = document.getElementById('tx-details-container');
+        try {
+            await getConfig();
+            const tx = await getTransactionById(txId);
+
+            const currency = await fetchWithCache(`${API_BASE_URL}/currency/${tx.currency_symbol}`);
+
+            const sourceLink = `<a href="address.html?user_id=${tx.source}">${tx.source}</a>`;
+            const destLink = `<a href="address.html?user_id=${tx.dest}">${tx.dest}</a>`;
+
+            container.innerHTML = `
+                <dl class="detail-list">
+                    <dt>Transaction ID</dt><dd>${tx.tx_id}</dd>
+                    <dt>Timestamp</dt><dd>${new Date(tx.timestamp * 1000).toLocaleString()} (${tx.timestamp})</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Source ID</dt><dd>${sourceLink}</dd>
+                    <dt>Destination ID</dt><dd>${destLink}</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Amount</dt><dd>${formatAmount(tx.amount, currency.decimal_places)} ${tx.currency_symbol}</dd>
+                    <dt>Currency</dt><dd>${currency.name} (${currency.symbol})</dd>
+                    <hr style="grid-column: 1 / -1; border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
+                    <dt>Input Data</dt><dd>${tx.input_data || '(none)'}</dd>
+                </dl>
+            `;
+        } catch (error) {
+            container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const txId = new URLSearchParams(window.location.search).get('id');
+        if (txId) {
+            fetchTransactionDetails(txId);
+        } else {
+            document.getElementById('tx-details-container').innerHTML = '<p class="error-message">No Transaction ID provided.</p>';
+        }
+    });
+</script>
+</body>
+</html>

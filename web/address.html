@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Details - RapidWire Explorer</title>
+    <link rel="stylesheet" href="univ.css">
+</head>
+<body>
+    <div class="container">
+        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
+        <h1>Address Details</h1>
+        <h2 id="address-header"></h2>
+        <h3>Transaction History</h3>
+        <div id="tx-history-container"><p>Loading transaction history...</p></div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    async function getCurrency(currencyId) {
+        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+    }
+
+    async function displayTransactions(transactionsData, userId) {
+        const container = document.getElementById('tx-history-container');
+        if (transactionsData.length === 0) {
+            container.innerHTML = '<p>No transaction history found for this address.</p>';
+            return;
+        }
+
+        const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
+        const currencies = await Promise.all(currencyPromises);
+
+        let tableHTML = `<table><thead><tr><th>ID</th><th>Timestamp</th><th>Source</th><th>Destination</th><th>Amount</th><th>Input Data</th></tr></thead><tbody>`;
+        transactionsData.forEach((tx, index) => {
+            const currency = currencies[index];
+
+            let source_txt = `<td><a href="address.html?user_id=${tx.source}">${tx.source}</a></td>`;
+            let dest_txt = `<td><a href="address.html?user_id=${tx.dest}">${tx.dest}</a></td>`;
+            if (tx.source == userId) {
+                source_txt = `<td>${tx.source}</td>`;
+            } else if (tx.dest == userId) {
+                dest_txt = `<td>${tx.dest}</td>`;
+            }
+            tableHTML += `<tr>
+                <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>
+                <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
+                ${source_txt}
+                ${dest_txt}
+                <td>${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}</td>
+                <td>${tx.input_data || ''}</td>
+            </tr>`
+        });
+        container.innerHTML = tableHTML + '</tbody></table>';
+    }
+
+    async function fetchAddressDetails(userId) {
+        document.getElementById('address-header').textContent = `User ID: ${userId}`;
+
+        try {
+            await getConfig();
+
+            const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=100`);
+
+            if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+            const txsData = await txsResponse.json();
+            await displayTransactions(txsData, userId);
+
+        } catch (error) {
+            document.getElementById('tx-history-container').innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const userId = new URLSearchParams(window.location.search).get('user_id');
+        if (userId) {
+            fetchAddressDetails(userId);
+        } else {
+            document.getElementById('address-header').innerHTML = '<p class="error-message">No User ID provided.</p>';
+        }
+    });
+</script>
+</body>
+</html>
