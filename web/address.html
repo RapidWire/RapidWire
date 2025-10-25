@@ -35,12 +35,12 @@
         transactionsData.forEach((tx, index) => {
             const currency = currencies[index];
 
-            let source_txt = `<td><a href="address.html?user_id=${tx.source_id}">${tx.source_id}</a></td>`;
-            let dest_txt = `<td><a href="address.html?user_id=${tx.dest_id}">${tx.dest_id}</a></td>`;
-            if (tx.source_id == userId) {
-                source_txt = `<td>${tx.source_id}</td>`;
-            } else if (tx.dest_id == userId) {
-                dest_txt = `<td>${tx.dest_id}</td>`;
+            let source_txt = `<td><a href="address.html?user_id=${tx.source}">${tx.source}</a></td>`;
+            let dest_txt = `<td><a href="address.html?user_id=${tx.dest}">${tx.dest}</a></td>`;
+            if (tx.source == userId) {
+                source_txt = `<td>${tx.source}</td>`;
+            } else if (tx.dest == userId) {
+                dest_txt = `<td>${tx.dest}</td>`;
             }
             tableHTML += `<tr>
                 <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>

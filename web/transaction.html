@@ -35,8 +35,8 @@
 
             const currency = await fetchWithCache(`${API_BASE_URL}/currency/${tx.currency_symbol}`);
 
-            const sourceLink = `<a href="address.html?user_id=${tx.source_id}">${tx.source_id}</a>`;
-            const destLink = `<a href="address.html?user_id=${tx.dest_id}">${tx.dest_id}</a>`;
+            const sourceLink = `<a href="address.html?user_id=${tx.source}">${tx.source}</a>`;
+            const destLink = `<a href="address.html?user_id=${tx.dest}">${tx.dest}</a>`;
 
             container.innerHTML = `
                 <dl class="detail-list">
