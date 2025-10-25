@@ -268,7 +268,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
             return
 
         int_supply = int(Decimal(str(supply)) * (10**config.decimal_places))
-        rate_bps = int(daily_interest_rate * 100)
+        rate_bps = int(Decimal(str(daily_interest_rate)) * 100)
         
         new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_bps)
         
@@ -411,7 +411,7 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
     if not interaction.guild: return
     
     try:
-        new_rate_bps = int(rate * 100)
+        new_rate_bps = int(Decimal(str(rate)) * 100)
         currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_bps, interaction.user.id)
 
         timelock_seconds = Rapid.Config.Staking.rate_change_timelock
