@@ -66,8 +66,8 @@ async def get_version():
 async def get_config():
     return ConfigResponse(decimal_places=config.decimal_places)
 
-@app.get("/account/balance", response_model=List[BalanceResponse], tags=["Account"])
-async def get_my_balance(user_id: int = Depends(get_current_user_id)):
+@app.get("/balance/{user_id}", response_model=List[BalanceResponse], tags=["Account"])
+async def get_my_balance(user_id: int):
     user = Rapid.get_user(user_id)
     balances = user.get_all_balances()
     response = []
