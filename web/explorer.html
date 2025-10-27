@@ -22,6 +22,15 @@
         <div class="bg-white p-4 rounded-lg shadow-md border border-slate-200 mb-8">
             <div class="flex flex-col md:flex-row gap-4">
                 <input type="text" id="searchInput" placeholder="Search by User ID (Address), Tx ID..." class="flex-grow p-3 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono">
+                <select id="sort_by" class="p-3 border border-slate-300 rounded-md">
+                    <option value="transaction_id">Transaction ID</option>
+                    <option value="timestamp">Timestamp</option>
+                    <option value="amount">Amount</option>
+                </select>
+                <select id="sort_order" class="p-3 border border-slate-300 rounded-md">
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                </select>
                 <button id="searchButton" class="bg-blue-600 text-white font-semibold px-6 py-3 rounded-md hover:bg-blue-700 transition-colors">
                     Search
                 </button>
@@ -131,7 +140,10 @@
         pageInfo.textContent = `Page: ${currentPage}`;
         prevButton.disabled = (currentPage === 1);
 
-        let url = `${API_BASE_URL}/transactions/search?page=${currentPage}&limit=${LIMIT}`;
+        const sortBy = document.getElementById('sort_by').value;
+        const sortOrder = document.getElementById('sort_order').value;
+
+        let url = `${API_BASE_URL}/transactions/search?page=${currentPage}&limit=${LIMIT}&sort_by=${sortBy}&sort_order=${sortOrder}`;
 
         if (currentSearchQuery) {
             url += `&user_id=${currentSearchQuery}`;

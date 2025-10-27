@@ -188,7 +188,9 @@ async def search_transactions(
     max_amount: Optional[float] = None,
     input_data: Optional[str] = None,
     page: int = 1,
-    limit: int = 10
+    limit: int = 10,
+    sort_by: Optional[str] = "transaction_id",
+    sort_order: Optional[str] = "desc"
 ):
     search_params = {
         "source_id": source_id,
@@ -198,7 +200,9 @@ async def search_transactions(
         "end_timestamp": end_timestamp,
         "input_data": input_data,
         "page": page,
-        "limit": limit
+        "limit": limit,
+        "sort_by": sort_by,
+        "sort_order": sort_order
     }
 
     if limit >= 20 or limit <= 0: limit = 20

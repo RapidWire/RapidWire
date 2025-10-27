@@ -143,7 +143,9 @@ class TransactionModel:
         max_amount: Optional[int] = None,
         input_data: Optional[str] = None,
         page: int = 1,
-        limit: int = 10
+        limit: int = 10,
+        sort_by: str = "transaction_id",
+        sort_order: str = "desc"
     ) -> List[Transaction]:
         offset = (page - 1) * limit
         conditions = []
@@ -177,13 +179,22 @@ class TransactionModel:
             conditions.append("input_data = %s")
             params.append(input_data)
 
+        # Securely build the ORDER BY clause
+        allowed_sort_by = ["transaction_id", "timestamp", "amount"]
+        if sort_by not in allowed_sort_by:
+            sort_by = "transaction_id"
+
+        sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+        order_by_clause = f"ORDER BY {sort_by} {sort_order}"
+
+
         if not conditions:
             # Add a condition that's always true to prevent an empty WHERE clause
             # and still allow for pagination, etc.
-            query = "SELECT * FROM transaction ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query = f"SELECT * FROM transaction {order_by_clause} LIMIT %s OFFSET %s"
             params.extend([limit, offset])
         else:
-            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} {order_by_clause} LIMIT %s OFFSET %s"
             params.extend([limit, offset])
 
         with self.db as cursor:
