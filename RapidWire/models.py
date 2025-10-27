@@ -125,7 +125,7 @@ class TransactionModel:
         offset = (page - 1) * limit
         with self.db as cursor:
             cursor.execute(
-                "SELECT * FROM transaction WHERE source = %s OR dest = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s",
+                "SELECT * FROM transaction WHERE source_id = %s OR dest_id = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s",
                 (user_id, user_id, limit, offset)
             )
             results = cursor.fetchall()
@@ -150,16 +150,16 @@ class TransactionModel:
         params = []
 
         if source_id is not None:
-            conditions.append("source = %s")
+            conditions.append("source_id = %s")
             params.append(source_id)
         if dest_id is not None:
-            conditions.append("dest = %s")
+            conditions.append("dest_id = %s")
             params.append(dest_id)
         if currency_id is not None:
             conditions.append("currency_id = %s")
             params.append(currency_id)
         if user_id is not None:
-            conditions.append("(source = %s OR dest = %s)")
+            conditions.append("(source_id = %s OR dest_id = %s)")
             params.extend([user_id, user_id])
         if start_timestamp is not None:
             conditions.append("timestamp >= %s")

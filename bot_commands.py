@@ -169,7 +169,7 @@ async def history(
 
             currency = Rapid.Currencies.get(tx.currency_id)
             source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.dest_id}>" if tx.dest_id != SYSTEM_USER_ID else "システム"
             
             embed = Embed(title=f"取引詳細: ID {tx.transaction_id}", color=Color.blue())
             embed.add_field(name="日時", value=f"<t:{tx.timestamp}:F>", inline=False)
@@ -230,7 +230,7 @@ async def history(
             if not currency: continue
 
             source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.dest_id}>" if tx.dest_id != SYSTEM_USER_ID else "システム"
             
             direction_emoji = "↔️"
             direction_text = f"from {source_user_mention} to {dest_user_mention}"
@@ -239,7 +239,7 @@ async def history(
                 if tx.source_id == target_user.id:
                     direction_emoji = "📤"
                     direction_text = f"to {dest_user_mention}"
-                elif tx.destination_id == target_user.id:
+                elif tx.dest_id == target_user.id:
                     direction_emoji = "📥"
                     direction_text = f"from {source_user_mention}"
 

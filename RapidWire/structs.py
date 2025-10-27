@@ -26,13 +26,13 @@ class Balance(BaseModel):
 class Transaction(BaseModel):
     transaction_id: int
     source_id: int
-    destination_id: int
+    dest_id: int
     currency_id: int
     amount: int
     input_data: Optional[str]
     timestamp: int
 
-    @field_serializer('transaction_id', 'source_id', 'destination_id', 'currency_id', 'amount', 'timestamp')
+    @field_serializer('transaction_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
     def serialize_integers(self, value: int, _info):
         return str(value)
 
