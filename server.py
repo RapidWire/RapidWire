@@ -168,6 +168,14 @@ async def cancel_claim(claim_id: int, user_id: int = Depends(get_current_user_id
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error during cancellation: {e}")
 
+@app.get("/transaction/{transaction_id}", response_model=structs.Transaction, tags=["Transactions"])
+async def search_transactions(transaction_id: int):
+    if transaction_id <= 0: transaction_id = 0
+    tx = Rapid.Transactions.get(transaction_id)
+    if not tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    return tx
+
 @app.get("/transactions/search", response_model=List[structs.Transaction], tags=["Transactions"])
 async def search_transactions(
     source_id: Optional[int] = None,
@@ -192,6 +200,8 @@ async def search_transactions(
         "page": page,
         "limit": limit
     }
+
+    if limit >= 20 or limit <= 0: limit = 20
 
     if currency_symbol:
         currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
