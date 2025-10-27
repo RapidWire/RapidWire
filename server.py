@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 from decimal import Decimal
 
 import config
@@ -189,8 +189,8 @@ async def search_transactions(
     input_data: Optional[str] = None,
     page: int = 1,
     limit: int = 10,
-    sort_by: Optional[str] = "transaction_id",
-    sort_order: Optional[str] = "desc"
+    sort_by: Literal["transaction_id", "timestamp", "amount"] = "transaction_id",
+    sort_order: Literal["ASC", "DESC", "asc", "desc"] = "desc"
 ):
     search_params = {
         "source_id": source_id,
