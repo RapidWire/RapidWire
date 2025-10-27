@@ -4,17 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Address Details - RapidWire Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="univ.css">
 </head>
-<body>
-    <div class="container">
-        <a href="explorer.html" class="back-link">&laquo; Back to Explorer</a>
-        <h1>Address Details</h1>
-        <h2 id="address-header"></h2>
-        <h3>Balances</h3>
-        <div id="balances-container"><p>Loading balances...</p></div>
-        <h3>Transaction History</h3>
-        <div id="tx-history-container"><p>Loading transaction history...</p></div>
+<body class="bg-slate-50">
+    <div class="container max-w-6xl mx-auto p-4 md:p-8">
+        
+        <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+            <h1 class="text-2xl font-bold text-blue-600">RapidWire Explorer</h1>
+            <a href="explorer.html" class="text-sm font-medium text-blue-600 hover:underline">
+                &larr; Back to Explorer
+            </a>
+        </header>
+
+        <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-8">
+            <h2 class="text-lg font-semibold text-slate-600 mb-3">Address Details</h2>
+            <div class="flex items-center bg-slate-100 p-4 rounded-md">
+                <span class="text-2xl mr-4">👤</span>
+                <code id="address-header" class="text-xl font-mono text-slate-900 break-all">
+                    Loading...
+                </code>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-xl font-semibold mb-4">Balances</h3>
+            <div id="balances-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <p class="text-slate-500 italic">Loading balances...</p>
+            </div>
+        </div>
+
+        <div class="mt-12">
+            <h3 class="text-xl font-semibold mb-4">Transaction History</h3>
+            <div id="tx-history-container" class="bg-white rounded-lg shadow-md border border-slate-200 overflow-hidden">
+                <p class="text-slate-500 italic p-6">Loading transaction history...</p>
+            </div>
+        </div>
     </div>
 
 <script src="univ.js"></script>
@@ -26,32 +51,58 @@
     async function displayTransactions(transactionsData, userId) {
         const container = document.getElementById('tx-history-container');
         if (transactionsData.length === 0) {
-            container.innerHTML = '<p>No transaction history found for this address.</p>';
+            container.innerHTML = '<p class="text-slate-500 italic p-6">No transaction history found for this address.</p>';
             return;
         }
 
         const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
-        let tableHTML = `<table><thead><tr><th>ID</th><th>Timestamp</th><th>Source</th><th>Destination</th><th>Amount</th><th>Input Data</th></tr></thead><tbody>`;
+        let tableHTML = `
+            <table class="w-full">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tx ID</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Timestamp</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Direction</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">From / To</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Data</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+        `;
+        
         transactionsData.forEach((tx, index) => {
             const currency = currencies[index];
+            const isOut = tx.source_id == userId;
+            const direction = isOut ? '📤 OUT' : '📥 IN';
+            const otherParty = isOut ? tx.dest_id : tx.source_id;
+            const otherPartyLink = `<a href="address.html?user_id=${otherParty}" class="font-mono text-sm text-blue-600 hover:underline break-all">${otherParty}</a>`;
+            const directionClass = isOut ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
+            const amountClass = isOut ? 'text-red-600' : 'text-green-600';
+            const amountSign = isOut ? '-' : '+';
 
-            let source_txt = `<td><a href="address.html?user_id=${tx.source_id}">${tx.source_id}</a></td>`;
-            let dest_txt = `<td><a href="address.html?user_id=${tx.dest_id}">${tx.dest_id}</a></td>`;
-            if (tx.source_id == userId) {
-                source_txt = `<td>${tx.source_id}</td>`;
-            } else if (tx.dest_id == userId) {
-                dest_txt = `<td>${tx.dest_id}</td>`;
-            }
-            tableHTML += `<tr>
-                <td><a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a></td>
-                <td>${new Date(tx.timestamp * 1000).toLocaleString()}</td>
-                ${source_txt}
-                ${dest_txt}
-                <td>${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}</td>
-                <td>${tx.input_data || ''}</td>
-            </tr>`
+            tableHTML += `
+                <tr>
+                    <td class="p-4 font-mono text-sm text-blue-600 hover:underline">
+                        <a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a>
+                    </td>
+                    <td class="p-4 text-sm text-slate-600 whitespace-nowrap">${new Date(tx.timestamp * 1000).toLocaleString()}</td>
+                    <td class="p-4 text-sm">
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold ${directionClass}">
+                            ${direction}
+                        </span>
+                    </td>
+                    <td class="p-4">${otherPartyLink}</td>
+                    <td class="p-4 font-mono text-sm font-semibold ${amountClass}">
+                        ${amountSign} ${formatAmount(tx.amount, currency.decimal_places)} <span class="text-slate-500 font-normal">${currency.symbol}</span>
+                    </td>
+                    <td class="p-4 font-mono text-sm text-slate-500">
+                        ${tx.input_data || '—'}
+                    </td>
+                </tr>
+            `;
         });
         container.innerHTML = tableHTML + '</tbody></table>';
     }
@@ -64,39 +115,49 @@
             const balances = await response.json();
 
             if (balances.length === 0) {
-                container.innerHTML = '<p>No balances found for this address.</p>';
+                container.innerHTML = '<p class="text-slate-500 italic col-span-full">No balances found for this address.</p>';
                 return;
             }
 
-            let tableHTML = `<table><thead><tr><th>Currency</th><th>Amount</th></tr></thead><tbody>`;
+            let cardHTML = '';
             balances.forEach(bal => {
-                tableHTML += `<tr>
-                    <td><a href="currency.html?symbol=${bal.currency.symbol}">${bal.currency.name} (${bal.currency.symbol})</a></td>
-                    <td>${formatAmount(bal.amount, bal.currency.decimal_places)}</td>
-                </tr>`;
+                cardHTML += `
+                <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200">
+                    <div class="flex items-center mb-4">
+                        <span class="text-3xl mr-3">💰</span>
+                        <div>
+                            <div class="font-semibold text-lg text-slate-900">${bal.currency.name}</div>
+                            <a href="currency.html?symbol=${bal.currency.symbol}" class="text-sm text-blue-600 hover:underline font-mono">${bal.currency.symbol}</a>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-bold font-mono text-slate-900">${formatAmount(bal.amount, bal.currency.decimal_places)}</div>
+                        <div class="text-sm text-slate-500">Total Balance</div>
+                    </div>
+                </div>
+                `;
             });
-            container.innerHTML = tableHTML + '</tbody></table>';
+            container.innerHTML = cardHTML;
         } catch (error) {
-            container.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+            container.innerHTML = `<p class="text-red-600 col-span-full">Error: ${error.message}</p>`;
         }
     }
 
     async function fetchAddressDetails(userId) {
-        document.getElementById('address-header').textContent = `User ID: ${userId}`;
+        document.getElementById('address-header').textContent = `${userId}`;
 
         try {
             await getConfig();
-
             displayBalances(userId);
 
             const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=100`);
-
             if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+            
             const txsData = await txsResponse.json();
             await displayTransactions(txsData, userId);
 
         } catch (error) {
-            document.getElementById('tx-history-container').innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+            document.getElementById('tx-history-container').innerHTML = `<p class="text-red-600 p-6">Error: ${error.message}</p>`;
         }
     }
 
@@ -105,7 +166,7 @@
         if (userId) {
             fetchAddressDetails(userId);
         } else {
-            document.getElementById('address-header').innerHTML = '<p class="error-message">No User ID provided.</p>';
+            document.getElementById('address-header').innerHTML = '<span class="text-red-600">No User ID provided.</span>';
         }
     });
 </script>
