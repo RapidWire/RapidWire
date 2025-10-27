@@ -25,11 +25,11 @@ class Balance(BaseModel):
 
 class Transaction(BaseModel):
     transaction_id: int
-    source_id: int = Field(alias="source")
-    destination_id: int = Field(alias="dest")
+    source_id: int
+    destination_id: int
     currency_id: int
     amount: int
-    input_data: Optional[str] = Field(None, alias="inputData")
+    input_data: Optional[str]
     timestamp: int
 
     @field_serializer('transaction_id', 'source_id', 'destination_id', 'currency_id', 'amount', 'timestamp')

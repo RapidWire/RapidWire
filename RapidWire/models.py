@@ -174,7 +174,7 @@ class TransactionModel:
             conditions.append("amount <= %s")
             params.append(max_amount)
         if input_data is not None:
-            conditions.append("inputData = %s")
+            conditions.append("input_data = %s")
             params.append(input_data)
 
         if not conditions:

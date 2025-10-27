@@ -139,7 +139,7 @@ class RapidWire:
             # We need to create a transaction for the reward
             cursor.execute(
                 """
-                INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
@@ -204,7 +204,7 @@ class RapidWire:
 
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (source_id, destination_id, currency_id, amount, input_data, int(time()))
@@ -373,7 +373,7 @@ class RapidWire:
                 # Create a transaction for the deposit
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
@@ -405,7 +405,7 @@ class RapidWire:
                 # Create a transaction for the withdrawal
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
@@ -487,7 +487,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
@@ -525,7 +525,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
@@ -583,7 +583,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source, dest, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,

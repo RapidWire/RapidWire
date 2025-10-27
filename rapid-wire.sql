@@ -99,11 +99,11 @@ CREATE TABLE `staking` (
 
 CREATE TABLE `transaction` (
   `transaction_id` bigint UNSIGNED NOT NULL,
-  `source` bigint UNSIGNED NOT NULL,
-  `dest` bigint UNSIGNED NOT NULL,
+  `source_id` bigint UNSIGNED NOT NULL,
+  `dest_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
   `amount` bigint UNSIGNED NOT NULL,
-  `inputData` varchar(16) DEFAULT NULL,
+  `input_data` varchar(16) DEFAULT NULL,
   `timestamp` bigint NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -187,8 +187,8 @@ ALTER TABLE `staking`
 --
 ALTER TABLE `transaction`
   ADD PRIMARY KEY (`transaction_id`),
-  ADD KEY `source` (`source`),
-  ADD KEY `dest` (`dest`),
+  ADD KEY `source_id` (`source_id`),
+  ADD KEY `dest_id` (`dest_id`),
   ADD KEY `currency_id` (`currency_id`);
 
 --
