@@ -205,7 +205,8 @@ async def search_transactions(
         "sort_order": sort_order
     }
 
-    if limit >= 20 or limit <= 0: limit = 20
+    if limit >= 20: limit = 20
+    if limit <= 0: limit = 10
 
     if currency_symbol:
         currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
