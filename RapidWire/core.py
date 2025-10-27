@@ -583,7 +583,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source_id, dest_, currency_id, amount, input_data, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
