@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Security, status
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import List, Optional, Literal
 from decimal import Decimal
 import httpx
@@ -25,7 +25,6 @@ API_KEY_HEADER = APIKeyHeader(name="API-Key", auto_error=False)
 class DiscordUserCache:
     def __init__(self, capacity=100, ttl_seconds=86400):
         self.cache:dict[int, tuple[str, int]] = {}
-        """dict[ user_id, tuple[username, last_update] ]"""
         self.id_order:list[int] = []
         self.capacity = capacity
         self.ttl = ttl_seconds
@@ -110,6 +109,19 @@ class ContractScriptResponse(BaseModel):
     cost: Optional[int] = None
     max_cost: Optional[int] = None
 
+class UserStatsResponse(BaseModel):
+    total_transactions: int
+    first_transaction_timestamp: Optional[int] = None
+    last_transaction_timestamp: Optional[int] = None
+
+    @field_serializer('total_transactions', 'first_transaction_timestamp', 'last_transaction_timestamp')
+    def serialize_integers(self, value: int, _info):
+        return str(value) if value is not None else None
+
+class StakeResponse(BaseModel):
+    currency: structs.Currency
+    stake: structs.Stake
+
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
@@ -139,6 +151,11 @@ async def get_user_name(user_id: int):
     else:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found on Discord.")
 
+@app.get("/user/{user_id}/stats", response_model=UserStatsResponse, tags=["User"])
+async def get_user_stats(user_id: int):
+    stats = Rapid.Transactions.get_user_stats(user_id)
+    return UserStatsResponse(**stats)
+
 @app.get("/balance/{user_id}", response_model=List[BalanceResponse], tags=["Account"])
 async def get_my_balance(user_id: int):
     user = Rapid.get_user(user_id)
@@ -151,6 +168,21 @@ async def get_my_balance(user_id: int):
                 BalanceResponse(
                     currency=currency,
                     amount=str(bal.amount)
+                )
+            )
+    return response
+
+@app.get("/stakes/{user_id}", response_model=List[StakeResponse], tags=["Staking"])
+async def get_user_stakes(user_id: int):
+    stakes = Rapid.Stakes.get_for_user(user_id)
+    response = []
+    for stake in stakes:
+        currency = Rapid.Currencies.get(currency_id=stake.currency_id)
+        if currency:
+            response.append(
+                StakeResponse(
+                    currency=currency,
+                    stake=stake
                 )
             )
     return response

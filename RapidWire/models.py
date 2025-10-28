@@ -201,6 +201,23 @@ class TransactionModel:
             results = cursor.fetchall()
             return [Transaction(**row) for row in results]
 
+    def get_user_stats(self, user_id: int) -> dict:
+        query = """
+            SELECT 
+                COUNT(*) as total_transactions,
+                MIN(timestamp) as first_transaction_timestamp,
+                MAX(timestamp) as last_transaction_timestamp
+            FROM transaction 
+            WHERE source_id = %s OR dest_id = %s
+        """
+        params = (user_id, user_id)
+        with self.db as cursor:
+            cursor.execute(query, params)
+            result = cursor.fetchone()
+            if not result or result['total_transactions'] == 0:
+                return {"total_transactions": 0, "first_transaction_timestamp": None, "last_transaction_timestamp": None}
+            return result
+
 class ContractModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
