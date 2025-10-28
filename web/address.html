@@ -13,11 +13,11 @@
             font-weight: 600;
         }
         .tab-panel-scroll {
-            max-height: 500px; /* スクロールを開始する最大の高さ */
-            overflow-y: auto; /* 項目が多い場合は垂直スクロールバーを表示 */
+            max-height: 500px; 
+            overflow-y: auto; 
         }
 
-        /* モバイル用のレスポンシブテーブル */
+        
         @media (max-width: 767px) {
             #tx-history-container {
                 background-color: #ffffff00;
@@ -25,52 +25,52 @@
                 box-shadow: none;
             }
             #tx-history-container table thead {
-                /* モバイルではテーブルヘッダーを非表示 */
+                
                 display: none;
             }
             #tx-history-container table tbody tr {
-                /* 各行をカードのように見せる */
+                
                 display: block;
                 margin-bottom: 0.5rem;
-                border: 1px solid #e2e8f0; /* slate-200 */
-                border-radius: 0.5rem; /* rounded-lg */
+                border: 1px solid #e2e8f0; 
+                border-radius: 0.5rem; 
                 overflow: hidden;
-                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* shadow */
+                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); 
                 background-color: #f8fafc;
             }
             #tx-history-container table tbody td {
-                /* セルをブロック要素にし、レイアウトはJS側で制御 */
+                
                 display: block;
-                padding: 0.5rem 1rem; /* デフォルトパディング */
-                text-align: left; /* 左寄せ */
+                padding: 0.5rem 1rem; 
+                text-align: left; 
             }
             #tx-history-container table tbody td::before {
-                display: none; /* data-labelは非表示 (JSでレイアウト構築) */
+                display: none; 
             }
 
-            /* 1行目: Tx ID と Timestamp */
+            
             #tx-history-container table tbody td[data-label="Tx ID"] {
                 padding-top: 0.75rem;
                 padding-bottom: 0.5rem;
                 font-weight: 600;
-                border-bottom: 1px solid #e2e8f0; /* slate-200 */
+                border-bottom: 1px solid #e2e8f0; 
             }
             
-            /* 2行目: From/To と Amount */
+            
             #tx-history-container table tbody td[data-label="From / To"] {
                 padding-top: 0.75rem;
                 padding-bottom: 0.75rem;
             }
 
-            /* 3行目: Data */
+            
             #tx-history-container table tbody td[data-label="Data"] {
                 padding-top: 0.75rem;
                 padding-bottom: 0.75rem;
-                background-color: #e2e8f0; /* bg-slate-50 */
-                border-top: 1px solid #e2e8f0; /* slate-200 */
+                background-color: #e2e8f0; 
+                border-top: 1px solid #e2e8f0; 
             }
             #tx-history-container table tbody td[data-label="Data"]::before {
-                /* Dataのラベルだけ表示 */
+                
                 content: 'Data:';
                 font-weight: 600;
                 color: #64748b;
@@ -97,7 +97,7 @@
             </a>
         </header>
 
-        <!-- Address Header -->
+        
         <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-8">
             <h2 class="text-lg font-semibold text-slate-500 mb-3">Account</h2>
             <div id="address-header-container" class="flex items-center">
@@ -107,10 +107,10 @@
             </div>
         </div>
 
-        <!-- Main Grid Layout (Overview, Balances, Stakes) -->
+        
         <div class="lg:grid lg:grid-cols-3 lg:gap-8">
             
-            <!-- Left Column (Overview) -->
+            
             <div class="lg:col-span-1 space-y-8">
                 <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200">
                     <h3 class="text-xl font-semibold mb-6 border-b pb-3">Overview</h3>
@@ -120,39 +120,42 @@
                 </div>
             </div>
 
-            <!-- Right Column (Tabs: Balances, Stakes) -->
+            
             <div class="lg:col-span-2 mt-8 lg:mt-0">
-                <!-- Tab Headers -->
-                <div class="flex border-b border-slate-300 mb-6 bg-white rounded-t-lg shadow-md border border-slate-200">
-                    <button id="tab-balances-btn" class="tab-button active py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('balances')">
-                        Balances
-                    </button>
-                    <button id="tab-stakes-btn" class="tab-button py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('stakes')">
-                        Staked
-                    </button>
-                </div>
-
-                <!-- Tab Content -->
-                <div id="tab-content" class="bg-white rounded-b-lg shadow-md border border-t-0 border-slate-200">
-                    <!-- Balances Tab -->
-                    <div id="tab-balances" class="tab-panel tab-panel-scroll">
-                        <div id="balances-container" class="divide-y divide-slate-200">
-                            <p class="text-slate-500 italic col-span-full p-6">Loading balances...</p>
-                        </div>
+                
+                <div class="bg-white rounded-lg shadow-md border border-slate-200">
+                    
+                    <div class="flex border-b border-slate-300">
+                        <button id="tab-balances-btn" class="tab-button active py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('balances')">
+                            Balances
+                        </button>
+                        <button id="tab-stakes-btn" class="tab-button py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('stakes')">
+                            Staked
+                        </button>
                     </div>
 
-                    <!-- Stakes Tab -->
-                    <div id="tab-stakes" class="tab-panel tab-panel-scroll hidden">
-                        <div id="stakes-container" class="divide-y divide-slate-200">
-                            <p class="text-slate-500 italic col-span-full p-6">Loading stakes...</p>
+                    
+                    <div id="tab-content">
+                        
+                        <div id="tab-balances" class="tab-panel tab-panel-scroll">
+                            <div id="balances-container" class="divide-y divide-slate-200">
+                                <p class="text-slate-500 italic col-span-full p-6">Loading balances...</p>
+                            </div>
+                        </div>
+
+                        
+                        <div id="tab-stakes" class="tab-panel tab-panel-scroll hidden">
+                            <div id="stakes-container" class="divide-y divide-slate-200">
+                                <p class="text-slate-500 italic col-span-full p-6">Loading stakes...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-        </div> <!-- End Main Grid Layout -->
+        </div> 
 
-        <!-- Transaction History (Full Width) -->
+        
         <div class="mt-12">
             <h3 class="text-2xl font-semibold mb-4 text-slate-800">Transaction History</h3>
             <div id="tx-history-container" class="bg-white rounded-lg shadow-md border border-slate-200 overflow-x-auto md:overflow-x-visible">
@@ -225,7 +228,7 @@
                     <tr>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tx ID</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Timestamp</th>
-                        <!-- Direction 削除 -->
+                        
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">From / To</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Data</th>
@@ -246,41 +249,41 @@
 
             tableHTML += `
                 <tr class="md:table-row">
-                    <!-- Tx ID (モバイル時はTimestampも含む) -->
+                    
                     <td data-label="Tx ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
-                        <!-- モバイル用 (1行目) -->
+                        
                         <div class="md:hidden flex justify-between items-center w-full">
                             <a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a>
                             <span class="text-sm text-slate-600 whitespace-nowrap font-sans">${timestampStr}</span>
                         </div>
-                        <!-- デスクトップ用 -->
+                        
                         <a href="transaction.html?id=${tx.transaction_id}" class="hidden md:inline">${tx.transaction_id}</a>
                     </td>
                     
-                    <!-- Timestamp (モバイル時は非表示) -->
+                    
                     <td data-label="Timestamp" class="p-4 text-sm text-slate-600 whitespace-nowrap hidden md:table-cell">${timestampStr}</td>
                     
-                    <!-- Direction 削除 -->
+                    
 
-                    <!-- From / To (モバイル時はAmountも含む) -->
+                    
                     <td data-label="From / To" class="p-4 md:table-cell">
-                        <!-- モバイル用 (2行目) -->
+                        
                         <div class="md:hidden flex justify-between items-center w-full">
                             <div><span class="text-sm text-slate-500">${fromToText}:</span> ${otherPartyLink}</div>
                             <div class="font-mono text-lg font-semibold ${amountClass} ml-4">
                                 ${amountHTML}
                             </div>
                         </div>
-                        <!-- デスクトップ用 -->
+                        
                         <span class="hidden md:inline">${otherPartyLink}</span>
                     </td>
                     
-                    <!-- Amount (モバイル時は非表示) -->
+                    
                     <td data-label="Amount" class="p-4 font-mono text-sm font-semibold ${amountClass} hidden md:table-cell">
                         ${amountHTML}
                     </td>
                     
-                    <!-- Data -->
+                    
                     <td data-label="Data" class="p-4 font-mono text-sm text-slate-500 md:table-cell">
                         ${tx.input_data || '—'}
                     </td>
@@ -311,8 +314,9 @@
                             <a href="currency.html?symbol=${bal.currency.symbol}" class="font-semibold text-lg text-blue-600 hover:underline">${bal.currency.name}</a>
                         </div>
                     </div>
-                    <div class="text-right text-2xl font-bold font-mono text-slate-700">
-                            ${formatAmount(bal.amount, networkDecimals)} <div class="text-lg font-bold font-mono text-slate-500">${bal.currency.symbol}</div>
+                    <div class_content="text-right text-2xl font-bold font-mono text-slate-700">
+                        ${formatAmount(bal.amount, networkDecimals)} 
+                        <span class="text-lg font-bold font-mono text-slate-500 ml-1">${bal.currency.symbol}</span>
                     </div>
                 </div>
                 `;
@@ -346,7 +350,10 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="text-2xl font-bold font-mono text-slate-900">${formatAmount(s.stake.amount, networkDecimals)}</div>
+                        <div class="text-2xl font-bold font-mono text-slate-900">
+                            ${formatAmount(s.stake.amount, networkDecimals)}
+                            <span class="text-lg font-bold font-mono text-slate-500 ml-1">${s.currency.symbol}</span>
+                        </div>
                         <div class="text-xs text-slate-500 mt-1">
                             Rate: ${(s.currency.daily_interest_rate / 10000).toFixed(4)}% daily
                         </div>
