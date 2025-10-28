@@ -5,6 +5,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from decimal import Decimal
+import httpx
+from collections import OrderedDict
+from datetime import datetime, timedelta
 
 import config
 from RapidWire import RapidWire, exceptions, structs
@@ -19,6 +22,33 @@ app = FastAPI(
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
 API_KEY_HEADER = APIKeyHeader(name="API-Key", auto_error=False)
+
+class DiscordUserCache:
+    def __init__(self, capacity=100, ttl_seconds=86400):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+        self.ttl = timedelta(seconds=ttl_seconds)
+
+    def get(self, user_id: int) -> Optional[str]:
+        if user_id not in self.cache:
+            return None
+
+        username, timestamp = self.cache[user_id]
+
+        if datetime.now() - timestamp > self.ttl:
+            del self.cache[user_id]
+            return None
+
+        self.cache.move_to_end(user_id)
+        return username
+
+    def set(self, user_id: int, username: str):
+        if len(self.cache) >= self.capacity and user_id not in self.cache:
+            self.cache.popitem(last=False)
+
+        self.cache[user_id] = (username, datetime.now())
+
+discord_user_cache = DiscordUserCache()
 
 async def get_current_user_id(api_key: str = Security(API_KEY_HEADER)) -> int:
     if not api_key:
@@ -62,9 +92,35 @@ class SuccessResponse(BaseModel):
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
 
+async def get_discord_user_name(user_id: int) -> Optional[str]:
+    headers = {
+        "Authorization": f"Bot {config.Discord.token}"
+    }
+    url = f"https://discord.com/api/v10/users/{user_id}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        if response.status_code == 200:
+            user_data = response.json()
+            return user_data.get("username")
+        return None
+
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
     return ConfigResponse(decimal_places=config.decimal_places)
+
+@app.get("/user/{user_id}/name", response_model=SuccessResponse, tags=["User"])
+async def get_user_name(user_id: int):
+    username = discord_user_cache.get(user_id)
+    if username:
+        return SuccessResponse(message="Username retrieved from cache.", details={"username": username})
+
+    username = await get_discord_user_name(user_id)
+    if not username:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found on Discord.")
+
+    discord_user_cache.set(user_id, username)
+    return SuccessResponse(message="Username retrieved from Discord.", details={"username": username})
 
 @app.get("/balance/{user_id}", response_model=List[BalanceResponse], tags=["Account"])
 async def get_my_balance(user_id: int):
