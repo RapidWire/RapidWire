@@ -9,7 +9,7 @@ async function fetchWithCache(url) {
 
     const response = await fetch(url);
     if (!response.ok) {
-        throw new Error(`Failed to fetch: ${url}`);
+        throw new Error(`Failed to fetch: ${url} (Status: ${response.status})`);
     }
     const data = await response.json();
     sessionStorage.setItem(url, JSON.stringify(data));
@@ -25,6 +25,29 @@ async function getConfig() {
     }
 }
 
+async function getUserName(userId) {
+    if (userId == 0) return "System Address";
+    try {
+        const data = await fetchWithCache(`${API_BASE_URL}/user/${userId}/name`);
+        return data.username;
+    } catch (error) {
+        return null;
+    }
+}
+
+async function formatUserLink(userId) {
+    const username = await getUserName(userId);
+    const displayName = username ? `👤 ${username}` : userId;
+    const fallbackName = username ? `(${userId})` : '';
+    
+    return `
+        <a href="address.html?user_id=${userId}" class="inline-block group">
+            <span class="font-mono text-blue-600 group-hover:underline">${displayName}</span>
+            ${fallbackName ? `<span class="font-mono text-xs text-slate-500 ml-1">${fallbackName}</span>` : ''}
+        </a>
+    `;
+}
+
 function formatAmount(amount, decimals = networkDecimals) {
     try {
         let valueToProcess = amount;
@@ -33,7 +56,6 @@ function formatAmount(amount, decimals = networkDecimals) {
             try {
                 valueToProcess = JSON.parse(valueToProcess);
             } catch (e) {
-                // Not a JSON string, do nothing and proceed with the original string.
             }
         }
 

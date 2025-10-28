@@ -83,12 +83,18 @@
         const currencyPromises = transactions.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
+        const sourceLinkPromises = transactions.map(tx => formatUserLink(tx.source_id));
+        const destLinkPromises = transactions.map(tx => formatUserLink(tx.dest_id));
+        
+        const sourceLinks = await Promise.all(sourceLinkPromises);
+        const destLinks = await Promise.all(destLinkPromises);
+
         transactions.forEach((tx, index) => {
             const currency = currencies[index];
             const timestamp = new Date(tx.timestamp * 1000).toLocaleString();
             
-            const sourceLink = `<a href="address.html?user_id=${tx.source_id}" class="font-mono text-sm text-blue-600 hover:underline">${tx.source_id}</a>`;
-            const destLink = `<a href="address.html?user_id=${tx.dest_id}" class="font-mono text-sm text-blue-600 hover:underline">${tx.dest_id}</a>`;
+            const sourceLink = sourceLinks[index];
+            const destLink = destLinks[index];
 
             const cardHTML = `
             <div class="bg-white rounded-lg shadow-md border border-slate-200 hover:shadow-lg transition-shadow">
@@ -117,7 +123,7 @@
 
                         <div class="mt-4 md:mt-0 md:text-right">
                             <div class="text-xl font-bold font-mono text-slate-800">
-                                ${formatAmount(tx.amount, currency.decimal_places)}
+                                ${formatAmount(tx.amount, networkDecimals)}
                             </div>
                             <div class="text-sm font-semibold text-slate-500">
                                 ${currency.symbol}

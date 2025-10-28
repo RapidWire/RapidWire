@@ -30,6 +30,8 @@
         try {
             await getConfig();
             const currency = await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
+            
+            const issuerLink = await formatUserLink(currency.issuer_id);
 
             container.innerHTML = `
                 <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
@@ -42,8 +44,8 @@
                     <dt class="text-sm font-medium text-slate-500">Currency ID</dt>
                     <dd class="md:col-span-2 font-mono text-slate-900">${currency.currency_id}</dd>
 
-                    <dt class="text-sm font-medium text-slate-500">Issuer ID</dt>
-                    <dd class="md:col-span-2"><a href="address.html?user_id=${currency.issuer_id}" class="font-mono text-blue-600 hover:underline">${currency.issuer_id}</a></dd>
+                    <dt class="text-sm font-medium text-slate-500">Issuer</dt>
+                    <dd class="md:col-span-2">${issuerLink}</dd>
 
                     <hr class="md:col-span-3 my-2 border-slate-200" />
 
@@ -51,7 +53,7 @@
                     <dd class="md:col-span-2 font-mono text-slate-900">${formatAmount(currency.supply, networkDecimals)} ${currency.symbol}</dd>
 
                     <dt class="text-sm font-medium text-slate-500">Staking Rate (Daily)</dt>
-                    <dd class="md:col-span-2 font-mono text-slate-900">${(currency.daily_interest_rate / 100).toFixed(4)} %</dd>
+                    <dd class="md:col-span-2 font-mono text-slate-900">${(currency.daily_interest_rate / 10000).toFixed(4)} %</dd>
 
                     <dt class="text-sm font-medium text-slate-500">Minting Renounced</dt>
                     <dd class="md:col-span-2 text-slate-900">${currency.minting_renounced ? 

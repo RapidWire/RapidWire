@@ -22,7 +22,7 @@
         
         <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-6">
             <h3 class="text-lg font-semibold text-slate-600 mb-3">Contract for Address:</h3>
-            <a href="#" id="contract-address-link" class="font-mono text-xl text-blue-600 hover:underline break-all">Loading...</a>
+            <div id="contract-address-link" class="font-mono text-xl text-blue-600 break-all">Loading...</div>
         </div>
         
         <pre class="rounded-lg border border-slate-200 shadow-md"><code id="contract-code" class="language-python bg-white p-6 block overflow-x-auto">
@@ -33,8 +33,9 @@ Loading contract code...
 <script src="univ.js"></script>
 <script>
     async function fetchContractCode(address) {
-        document.getElementById('contract-address-link').textContent = address;
-        document.getElementById('contract-address-link').href = `address.html?user_id=${address}`;
+        const addressLink = document.getElementById('contract-address-link');
+        addressLink.innerHTML = await formatUserLink(address);
+        
         const codeElement = document.getElementById('contract-code');
 
         try {
@@ -62,7 +63,7 @@ Loading contract code...
     document.addEventListener('DOMContentLoaded', () => {
         const address = new URLSearchParams(window.location.search).get('addr');
         if (address) {
-            fetchContractCode(address);
+            getConfig().then(() => fetchContractCode(address));
         } else {
             document.getElementById('contract-address-link').innerHTML = '<span class="text-red-600">No address provided.</span>';
             document.getElementById('contract-code').textContent = '';

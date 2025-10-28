@@ -40,6 +40,8 @@ class UserModel:
             """,
             (self.user_id, currency_id, max(0, amount_change), amount_change)
         )
+        
+        cursor.execute("DELETE FROM balance WHERE user_id = %s AND currency_id = %s AND amount = 0", (self.user_id, currency_id))
 
 class CurrencyModel:
     def __init__(self, db_connection: DatabaseConnection):
@@ -179,7 +181,6 @@ class TransactionModel:
             conditions.append("input_data = %s")
             params.append(input_data)
 
-        # Securely build the ORDER BY clause
         allowed_sort_by = ["transaction_id", "timestamp", "amount"]
         if sort_by not in allowed_sort_by:
             sort_by = "transaction_id"
@@ -189,8 +190,6 @@ class TransactionModel:
 
 
         if not conditions:
-            # Add a condition that's always true to prevent an empty WHERE clause
-            # and still allow for pagination, etc.
             query = f"SELECT * FROM transaction {order_by_clause} LIMIT %s OFFSET %s"
             params.extend([limit, offset])
         else:

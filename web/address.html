@@ -19,8 +19,7 @@
 
         <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-8">
             <h2 class="text-lg font-semibold text-slate-600 mb-3">Address Details</h2>
-            <div class="flex items-center bg-slate-100 p-4 rounded-md">
-                <span class="text-2xl mr-4">👤</span>
+            <div id="address-header-container" class="bg-slate-100 p-4 rounded-md">
                 <code id="address-header" class="text-xl font-mono text-slate-900 break-all">
                     Loading...
                 </code>
@@ -58,6 +57,11 @@
         const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
+        const otherPartyLinks = await Promise.all(transactionsData.map(tx => {
+            const otherPartyId = tx.source_id == userId ? tx.dest_id : tx.source_id;
+            return formatUserLink(otherPartyId);
+        }));
+
         let tableHTML = `
             <table class="w-full">
                 <thead class="bg-slate-50">
@@ -77,8 +81,7 @@
             const currency = currencies[index];
             const isOut = tx.source_id == userId;
             const direction = isOut ? '📤 OUT' : '📥 IN';
-            const otherParty = isOut ? tx.dest_id : tx.source_id;
-            const otherPartyLink = `<a href="address.html?user_id=${otherParty}" class="font-mono text-sm text-blue-600 hover:underline break-all">${otherParty}</a>`;
+            const otherPartyLink = otherPartyLinks[index];
             const directionClass = isOut ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
             const amountClass = isOut ? 'text-red-600' : 'text-green-600';
             const amountSign = isOut ? '-' : '+';
@@ -96,7 +99,7 @@
                     </td>
                     <td class="p-4">${otherPartyLink}</td>
                     <td class="p-4 font-mono text-sm font-semibold ${amountClass}">
-                        ${amountSign} ${formatAmount(tx.amount, currency.decimal_places)} <span class="text-slate-500 font-normal">${currency.symbol}</span>
+                        ${amountSign} ${formatAmount(tx.amount, networkDecimals)} <span class="text-slate-500 font-normal">${currency.symbol}</span>
                     </td>
                     <td class="p-4 font-mono text-sm text-slate-500">
                         ${tx.input_data || '—'}
@@ -131,7 +134,7 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <div class="text-3xl font-bold font-mono text-slate-900">${formatAmount(bal.amount, bal.currency.decimal_places)}</div>
+                        <div class="text-3xl font-bold font-mono text-slate-900">${formatAmount(bal.amount, networkDecimals)}</div>
                         <div class="text-sm text-slate-500">Total Balance</div>
                     </div>
                 </div>
@@ -144,10 +147,22 @@
     }
 
     async function fetchAddressDetails(userId) {
-        document.getElementById('address-header').textContent = `${userId}`;
-
+        const header = document.getElementById('address-header');
         try {
             await getConfig();
+            
+            const username = await getUserName(userId);
+            if (username) {
+                header.innerHTML = `
+                    <span class="text-2xl mr-4">👤</span>
+                    <div>
+                        <div class="text-xl font-mono text-slate-900">${username}</div>
+                        <div class="text-sm font-mono text-slate-600">${userId}</div>
+                    </div>`;
+            } else {
+                header.textContent = `${userId}`;
+            }
+
             displayBalances(userId);
 
             const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=100`);
@@ -158,6 +173,7 @@
 
         } catch (error) {
             document.getElementById('tx-history-container').innerHTML = `<p class="text-red-600 p-6">Error: ${error.message}</p>`;
+            header.textContent = `Error loading details for ${userId}`;
         }
     }
 

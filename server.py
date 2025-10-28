@@ -37,14 +37,12 @@ class DiscordUserCache:
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=headers)
-            print("Get from discord")
             if response.status_code == 200:
                 user_data = response.json()
                 return user_data.get("username")
             return None 
 
     async def get(self, user_id: int) -> Optional[str]:
-        print(f"{self.id_order=}, {self.cache=}")
         if user_id not in self.id_order:
             return await self.set(user_id)
         else:
@@ -52,7 +50,7 @@ class DiscordUserCache:
             if time.time() - timestamp > self.ttl:
                 new_username = await self.set(user_id)
                 return new_username if new_username else username
-        return username
+            return username
     
     async def set(self, user_id: int) -> Optional[str]:
         if len(self.cache) >= 100: del self.cache[self.id_order.pop(0)]
@@ -107,6 +105,11 @@ class SuccessResponse(BaseModel):
 class UserNameResponse(BaseModel):
     username: str
 
+class ContractScriptResponse(BaseModel):
+    script: Optional[str] = None
+    cost: Optional[int] = None
+    max_cost: Optional[int] = None
+
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
@@ -155,6 +158,13 @@ async def get_my_balance(user_id: int):
 @app.get("/account/history", response_model=List[structs.Transaction], tags=["Account"])
 async def get_my_history(user_id: int = Depends(get_current_user_id), page: int = 1):
     return Rapid.Transactions.get_user_history(user_id, page=page)
+
+@app.get("/script/{user_id}", response_model=ContractScriptResponse, tags=["Contract"])
+async def get_contract_script(user_id: int):
+    contract = Rapid.Contracts.get(user_id)
+    if not contract or not contract.script:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found for this user.")
+    return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost)
 
 @app.get("/currency/{symbol}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info(symbol: str):

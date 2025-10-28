@@ -42,8 +42,10 @@
 
             const currency = await fetchWithCache(`${API_BASE_URL}/currency/id/${tx.currency_id}`);
 
-            const sourceLink = `<a href="address.html?user_id=${tx.source_id}" class="font-mono text-blue-600 hover:underline">${tx.source_id}</a>`;
-            const destLink = `<a href="address.html?user_id=${tx.dest_id}" class="font-mono text-blue-600 hover:underline">${tx.dest_id}</a>`;
+            const [sourceLink, destLink] = await Promise.all([
+                formatUserLink(tx.source_id),
+                formatUserLink(tx.dest_id)
+            ]);
 
             container.innerHTML = `
                 <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
@@ -55,17 +57,17 @@
                     
                     <hr class="md:col-span-3 my-2 border-slate-200" />
                     
-                    <dt class="text-sm font-medium text-slate-500">Source ID</dt>
+                    <dt class="text-sm font-medium text-slate-500">Source</dt>
                     <dd class="md:col-span-2">${sourceLink}</dd>
                     
-                    <dt class="text-sm font-medium text-slate-500">Destination ID</dt>
+                    <dt class="text-sm font-medium text-slate-500">Destination</dt>
                     <dd class="md:col-span-2">${destLink}</dd>
 
                     <hr class="md:col-span-3 my-2 border-slate-200" />
 
                     <dt class="text-sm font-medium text-slate-500">Amount</dt>
                     <dd class="md:col-span-2 font-mono font-semibold text-lg text-slate-900">
-                        ${formatAmount(tx.amount, currency.decimal_places)} ${currency.symbol}
+                        ${formatAmount(tx.amount, networkDecimals)} ${currency.symbol}
                     </dd>
 
                     <dt class="text-sm font-medium text-slate-500">Currency</dt>
