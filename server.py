@@ -28,18 +28,17 @@ class DiscordUserCache:
         self.id_order:list[int] = []
         self.capacity = capacity
         self.ttl = ttl_seconds
+        self.httpx_client = httpx.AsyncClient(headers={"Authorization": f"Bot {config.Discord.token}"})
 
-    @classmethod
-    async def _get_discord_user_name(cls, user_id: int) -> Optional[str]:
+    async def _get_discord_user_name(self, user_id: int) -> Optional[str]:
         url = f"https://discord.com/api/v10/users/{user_id}"
         headers = {"Authorization": f"Bot {config.Discord.token}"}
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
-            if response.status_code == 200:
-                user_data = response.json()
-                return user_data.get("username")
-            return None 
+        response = await self.httpx_client.get(url, headers=headers)
+        if response.status_code == 200:
+            user_data = response.json()
+            return user_data.get("username")
+        return None 
 
     async def get(self, user_id: int) -> Optional[str]:
         if user_id not in self.id_order:
