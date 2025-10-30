@@ -135,6 +135,18 @@ CREATE TABLE `liquidity_provider` (
   `shares` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `contract_variables`
+--
+
+CREATE TABLE `contract_variables` (
+  `user_id` bigint UNSIGNED NOT NULL,
+  `key` varbinary(8) NOT NULL,
+  `value` varbinary(16) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 
 --
 -- Indexes for dumped tables
@@ -204,6 +216,12 @@ ALTER TABLE `liquidity_pool`
 ALTER TABLE `liquidity_provider`
   ADD PRIMARY KEY (`provider_id`),
   ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
+
+--
+-- Indexes for table `contract_variables`
+--
+ALTER TABLE `contract_variables`
+  ADD PRIMARY KEY (`user_id`, `key`);
 
 --
 -- AUTO_INCREMENT for dumped tables

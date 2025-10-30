@@ -91,3 +91,8 @@ class LiquidityProvider(BaseModel):
     pool_id: int
     user_id: int
     shares: int
+
+class ContractVariable(BaseModel):
+    user_id: int
+    key: bytes
+    value: bytes

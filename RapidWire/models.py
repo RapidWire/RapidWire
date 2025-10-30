@@ -6,7 +6,7 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider
+from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider, ContractVariable
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -435,3 +435,33 @@ class LiquidityProviderModel:
             "DELETE FROM liquidity_provider WHERE pool_id = %s AND user_id = %s",
             (pool_id, user_id)
         )
+
+class ContractVariableModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, user_id: int, key: bytes) -> Optional[ContractVariable]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT * FROM contract_variables WHERE user_id = %s AND `key` = %s",
+                (user_id, key)
+            )
+            result = cursor.fetchone()
+            return ContractVariable(**result) if result else None
+
+    def set(self, user_id: int, key: bytes, value: bytes):
+        with self.db as cursor:
+            cursor.execute(
+                """
+                INSERT INTO contract_variables (user_id, `key`, `value`)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
+                """,
+                (user_id, key, value)
+            )
+
+    def get_all_for_user(self, user_id: int) -> List[ContractVariable]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM contract_variables WHERE user_id = %s", (user_id,))
+            results = cursor.fetchall()
+            return [ContractVariable(**row) for row in results]

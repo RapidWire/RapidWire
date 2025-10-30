@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel
+from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel
 from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
 from .exceptions import (
     UserNotFound,
@@ -32,6 +32,8 @@ CONTRACT_METHOD_COSTS = {
     'pay_claim': 5,
     'cancel_claim': 2,
     'execute_contract': 15,
+    'get_variable': 1,
+    'set_variable': 3,
 }
 
 
@@ -97,6 +99,24 @@ class ContractAPI:
         )
         return new_tx.dict(), message
 
+    def get_variable(self, key: bytes) -> Optional[bytes]:
+        variable = self.core.ContractVariables.get(self.tx.dest, key)
+        return variable.value if variable else None
+
+    def set_variable(self, key: bytes, value: bytes):
+        if len(key) > 8:
+            raise ValueError("Key must be 8 bytes or less.")
+        if len(value) > 16:
+            raise ValueError("Value must be 16 bytes or less.")
+
+        user_variables = self.core.ContractVariables.get_all_for_user(self.tx.dest)
+        if len(user_variables) >= 2000:
+             # Check if the key already exists, if so, it's an update, not an insert
+            if not any(v.key == key for v in user_variables):
+                raise ValueError("Maximum of 2000 variables reached for this user.")
+
+        self.core.ContractVariables.set(self.tx.dest, key, value)
+
 
 class RapidWire:
     def __init__(self, db_config: dict):
@@ -110,6 +130,7 @@ class RapidWire:
         self.Stakes = StakeModel(self.db)
         self.LiquidityPools = LiquidityPoolModel(self.db)
         self.LiquidityProviders = LiquidityProviderModel(self.db)
+        self.ContractVariables = ContractVariableModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
