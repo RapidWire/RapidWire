@@ -11,12 +11,12 @@ IDE（例: VSCode, PyCharm）でこのファイルをプロジェクトに含め
 
 ```python
 # contract_script.py
-from contract_api_stubs import tx, api, Cancel, return_message
+from contract_api_stubs import *
 
 # これで、txやapiオブジェクトのメンバーにアクセスする際に
 # IDEがヒントを表示してくれるようになります。
 print(tx["source"])
-api.transfer(tx["dest"], 12345, tx["currency"], 100)
+transfer(tx["dest"], 12345, tx["currency"], 100)
 ```
 
 **注意:**
@@ -54,85 +54,71 @@ tx: TransactionContext = ...
 
 # --- グローバル変数: APIハンドラ ---
 
-class ContractAPI:
+def get_balance(self, user_id: int, currency_id: int) -> int:
+    """ユーザーの残高を取得します。"""
+    ...
+
+def get_transaction(self, tx_id: int) -> Optional[Dict[str, Any]]:
+    """特定のトランザクションを取得します。"""
+    ...
+
+def transfer(self, source: int, dest: int, currency: int, amount: int) -> Dict[str, Any]:
     """
-    RapidWireシステムと対話するためのメソッドを提供するAPIオブジェクト。
+    新しい送金を開始します。
+    注意: `source`はコントラクトの所有者でなければなりません。
+    (例: `api.transfer(source=tx['dest'], ...)` )
     """
-    def get_balance(self, user_id: int, currency_id: int) -> int:
-        """ユーザーの残高を取得します。"""
-        ...
+    ...
 
-    def get_transaction(self, tx_id: int) -> Optional[Dict[str, Any]]:
-        """特定のトランザクションを取得します。"""
-        ...
+def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Dict[str, Any]]:
+    """トランザクションを検索します。"""
+    ...
 
-    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Dict[str, Any]:
-        """
-        新しい送金を開始します。
+def get_currency(self, currency_id: int) -> Optional[Dict[str, Any]]:
+    """通貨の詳細を取得します。"""
+    ...
 
-        注意: `source`はコントラクトの所有者でなければなりません。
-        (例: `api.transfer(source=tx['dest'], ...)` )
-        """
-        ...
+def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Dict[str, Any]:
+    """新しい請求を作成します。"""
+    ...
 
-    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Dict[str, Any]]:
-        """トランザクションを検索します。"""
-        ...
+def get_claim(self, claim_id: int) -> Optional[Dict[str, Any]]:
+    """特定の請求を取得します。"""
+    ...
 
-    def get_currency(self, currency_id: int) -> Optional[Dict[str, Any]]:
-        """通貨の詳細を取得します。"""
-        ...
+def pay_claim(self, claim_id: int, payer_id: int) -> Dict[str, Any]:
+    """請求に対して支払います。"""
+    ...
 
-    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Dict[str, Any]:
-        """新しい請求を作成します。"""
-        ...
+def cancel_claim(self, claim_id: int, user_id: int) -> Dict[str, Any]:
+    """請求をキャンセルします。"""
+    ...
 
-    def get_claim(self, claim_id: int) -> Optional[Dict[str, Any]]:
-        """特定の請求を取得します。"""
-        ...
+def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
+    """
+    別のコントラクトを実行します。
+    このコントラクトのアカウントから`destination_id`へ新しいトランザクションを作成し、
+    相手のコントラクトを実行します。
+    戻り値: (作成されたトランザクションの辞書, 相手のコントラクトからの返信メッセージ)
+    """
+    ...
 
-    def pay_claim(self, claim_id: int, payer_id: int) -> Dict[str, Any]:
-        """請求に対して支払います。"""
-        ...
+def get_variable(self, user_id: int, key: bytes) -> Optional[bytes]:
+    """
+    コントラクトに関連付けられた永続的な変数を取得します。
+    `user_id` は変数が属するユーザーIDです。通常は自分自身 (`tx['dest']`) を指定します。
+    キーと値はバイト文字列として扱われます。
+    """
+    ...
 
-    def cancel_claim(self, claim_id: int, user_id: int) -> Dict[str, Any]:
-        """請求をキャンセルします。"""
-        ...
+def set_variable(self, key: bytes, value: bytes) -> None:
+    """
+    コントラクトに関連付けられた永続的な変数を設定します。
+    このコントラクトの所有者 (`tx['dest']`) に変数を保存します。
+    キーは8バイト以下、値は16バイト以下でなければなりません。
+    """
+    ...
 
-    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
-        """
-        別のコントラクトを実行します。
-
-        このコントラクトのアカウントから`destination_id`へ新しいトランザクションを作成し、
-        相手のコントラクトを実行します。
-
-        戻り値: (作成されたトランザクションの辞書, 相手のコントラクトからの返信メッセージ)
-        """
-        ...
-
-    def get_variable(self, user_id: int, key: bytes) -> Optional[bytes]:
-        """
-        コントラクトに関連付けられた永続的な変数を取得します。
-
-        `user_id` は変数が属するユーザーIDです。通常は自分自身 (`tx['dest']`) を指定します。
-        キーと値はバイト文字列として扱われます。
-        """
-        ...
-
-    def set_variable(self, key: bytes, value: bytes) -> None:
-        """
-        コントラクトに関連付けられた永続的な変数を設定します。
-
-        このコントラクトの所有者 (`tx['dest']`) に変数を保存します。
-        キーは8バイト以下、値は16バイト以下でなければなりません。
-        """
-        ...
-
-api: ContractAPI = ...
-"""
-RapidWireシステムAPI。
-グローバルスコープで利用可能です。
-"""
 
 # --- グローバル変数: その他 ---
 
