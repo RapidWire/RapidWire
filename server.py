@@ -49,15 +49,19 @@ class DiscordUserCache:
                 new_username = await self.set(user_id)
                 return new_username if new_username else username
             return username
-    
+
     async def set(self, user_id: int) -> Optional[str]:
-        if len(self.cache) >= 100: del self.cache[self.id_order.pop(0)]
+        if len(self.cache) >= self.capacity:
+            del self.cache[self.id_order.pop()]
         discord_user = await self._get_discord_user_name(user_id)
-        if discord_user is None: return None
+        if discord_user is None:
+            return None
         self.cache[user_id] = (discord_user, int(time.time()))
-        try: self.id_order.remove(user_id)
-        except: pass
-        self.id_order.append(user_id)
+        try:
+            self.id_order.remove(user_id)
+        except:
+            pass
+        self.id_order.insert(0, user_id)
         return discord_user
 
 discord_user_cache = DiscordUserCache()
@@ -124,19 +128,6 @@ class StakeResponse(BaseModel):
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
-
-async def get_discord_user_name(user_id: int) -> Optional[str]:
-    headers = {
-        "Authorization": f"Bot {config.Discord.token}"
-    }
-    url = f"https://discord.com/api/v10/users/{user_id}"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code == 200:
-            user_data = response.json()
-            return user_data.get("username")
-        return None
 
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
