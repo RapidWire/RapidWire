@@ -99,8 +99,10 @@ class ContractAPI:
         )
         return new_tx.dict(), message
 
-    def get_variable(self, key: bytes) -> Optional[bytes]:
-        variable = self.core.ContractVariables.get(self.tx.dest, key)
+    def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
+        if user_id is None:
+            user_id = self.tx.dest
+        variable = self.core.ContractVariables.get(user_id, key)
         return variable.value if variable else None
 
     def set_variable(self, key: bytes, value: bytes):
