@@ -492,6 +492,8 @@ class RapidWire:
         return self.Currencies.apply_rate_change(currency)
 
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
+        if len(script) > self.Config.Contract.max_script_length:
+            raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
         if max_cost is None:
             max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
