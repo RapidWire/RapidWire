@@ -5,6 +5,7 @@ from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
 import asteval
 from decimal import Decimal
+import hashlib
 
 from .config import Config
 from .database import DatabaseConnection
@@ -267,14 +268,42 @@ class RapidWire:
 
                         network_config = Config
 
-                        user_symbols = {
-                            'api': api_handler,
-                            'tx': transaction_context,
-                            'network_config': network_config,
-                            'Cancel': TransactionCanceledByContract
+                        symtable = {
+                            'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
+                            'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
+                            'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
+                            'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
+                            'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
                         }
 
-                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
+                        user_symbols = {
+                            'get_balance': api_handler.get_balance,
+                            'get_transaction': api_handler.get_transaction,
+                            'transfer': api_handler.transfer,
+                            'search_transactions': api_handler.search_transactions,
+                            'get_currency': api_handler.get_currency,
+                            'create_claim': api_handler.create_claim,
+                            'get_claim': api_handler.get_claim,
+                            'pay_claim': api_handler.pay_claim,
+                            'cancel_claim': api_handler.cancel_claim,
+                            'execute_contract': api_handler.execute_contract,
+                            'get_variable': api_handler.get_variable,
+                            'set_variable': api_handler.set_variable,
+                            'get_transaction': api_handler.get_transaction,
+                            'network_max_cost': network_config.Contract.max_cost,
+
+                            'tx': TransactionContext(
+                                source=source_id,
+                                dest=destination_id,
+                                currency=currency_id,
+                                amount=amount,
+                                input_data=input_data,
+                                transaction_id=transaction_id
+                            ),
+                            'Cancel': TransactionCanceledByContract,
+                        }
+
+                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
 
                         try:
                             aeval.eval(contract.script, show_errors=False)
