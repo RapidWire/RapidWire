@@ -1,19 +1,33 @@
 const API_BASE_URL = "";
 let networkDecimals = 3;
 
+const pendingRequests = new Map();
+
 async function fetchWithCache(url) {
     const cached = sessionStorage.getItem(url);
     if (cached) {
         return JSON.parse(cached);
     }
 
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch: ${url} (Status: ${response.status})`);
+    if (pendingRequests.has(url)) {
+        return await pendingRequests.get(url);
     }
-    const data = await response.json();
-    sessionStorage.setItem(url, JSON.stringify(data));
-    return data;
+
+    const promise = fetch(url).then(async (response) => {
+        if (!response.ok) {
+            throw new Error(`Failed to fetch: ${url} (Status: ${response.status})`);
+        }
+        const data = await response.json();
+        sessionStorage.setItem(url, JSON.stringify(data));
+        pendingRequests.delete(url);
+        return data;
+    }).catch(error => {
+        pendingRequests.delete(url);
+        throw error;
+    });
+
+    pendingRequests.set(url, promise);
+    return await promise;
 }
 
 async function getConfig() {
