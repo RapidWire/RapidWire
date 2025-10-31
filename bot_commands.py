@@ -699,7 +699,13 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
 
-        amount_out_est = Rapid.get_swap_rate(from_symbol_upper, to_symbol_upper, int_amount)
+        try:
+            route = Rapid.find_swap_route(from_symbol_upper, to_symbol_upper)
+        except ValueError:
+            await interaction.response.send_message(embed=create_error_embed("スワップルートが見つかりませんでした。"), ephemeral=True)
+            return
+
+        amount_out_est = Rapid.get_swap_rate(int_amount, route, from_currency.currency_id)
         if amount_out_est <= 0:
             await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
             return

@@ -589,50 +589,103 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
 
-    def get_swap_rate(self, from_symbol: str, to_symbol: str, amount: int) -> int:
-        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
-        if not pool:
-            raise ValueError("Liquidity pool not found.")
-
+    def find_swap_route(self, from_symbol: str, to_symbol: str) -> List[LiquidityPool]:
         from_currency = self.Currencies.get_by_symbol(from_symbol)
+        to_currency = self.Currencies.get_by_symbol(to_symbol)
+        if not from_currency or not to_currency:
+            raise CurrencyNotFound("One of the currencies for the swap was not found.")
 
-        if from_currency.currency_id == pool.currency_a_id:
-            reserve_in = pool.reserve_a
-            reserve_out = pool.reserve_b
-        elif from_currency.currency_id == pool.currency_b_id:
-            reserve_in = pool.reserve_b
-            reserve_out = pool.reserve_a
-        else:
-            raise ValueError("Invalid currency for this pool.")
+        all_pools = self.LiquidityPools.get_all()
 
-        fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
-        amount_in_with_fee = Decimal(amount) * (Decimal(1) - fee_rate)
-        return int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+        # Quick check for a direct pool
+        direct_pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
+        if direct_pool:
+            return [direct_pool]
+
+        # Graph representation: currency_id -> list of (neighbor_currency_id, pool)
+        graph = {}
+        for pool in all_pools:
+            if pool.currency_a_id not in graph:
+                graph[pool.currency_a_id] = []
+            if pool.currency_b_id not in graph:
+                graph[pool.currency_b_id] = []
+            graph[pool.currency_a_id].append((pool.currency_b_id, pool))
+            graph[pool.currency_b_id].append((pool.currency_a_id, pool))
+
+        # BFS to find the shortest path
+        queue = [(from_currency.currency_id, [])]
+        visited = {from_currency.currency_id}
+
+        while queue:
+            current_currency_id, path = queue.pop(0)
+
+            if current_currency_id == to_currency.currency_id:
+                return path
+
+            if current_currency_id in graph:
+                for neighbor_currency_id, pool in graph[current_currency_id]:
+                    if neighbor_currency_id not in visited:
+                        visited.add(neighbor_currency_id)
+                        new_path = path + [pool]
+                        queue.append((neighbor_currency_id, new_path))
+
+        raise ValueError("No swap route found between the specified currencies.")
+
+    def get_swap_rate(self, amount_in: int, route: List[LiquidityPool], from_currency_id: int) -> int:
+        current_amount = amount_in
+        current_currency_id = from_currency_id
+
+        for pool in route:
+            if current_currency_id == pool.currency_a_id:
+                reserve_in = pool.reserve_a
+                reserve_out = pool.reserve_b
+                current_currency_id = pool.currency_b_id
+            elif current_currency_id == pool.currency_b_id:
+                reserve_in = pool.reserve_b
+                reserve_out = pool.reserve_a
+                current_currency_id = pool.currency_a_id
+            else:
+                raise ValueError("Invalid currency for this pool in the route.")
+
+            fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
+            amount_in_with_fee = Decimal(current_amount) * (Decimal(1) - fee_rate)
+            current_amount = int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+
+        return current_amount
 
     def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
-        amount_out = self.get_swap_rate(from_symbol, to_symbol, amount)
-        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
-
+        route = self.find_swap_route(from_symbol, to_symbol)
         from_currency = self.Currencies.get_by_symbol(from_symbol)
 
-        if from_currency.currency_id == pool.currency_a_id:
-            to_currency_id = pool.currency_b_id
-            reserve_a_change = amount
-            reserve_b_change = -amount_out
-        else:
-            to_currency_id = pool.currency_a_id
-            reserve_a_change = -amount_out
-            reserve_b_change = amount
+        amount_out = self.get_swap_rate(amount, route, from_currency.currency_id)
+
+        current_currency_id = from_currency.currency_id
+        amount_in = amount
 
         try:
             with self.db as cursor:
                 user = self.get_user(user_id)
-                source_balance = user.get_balance(from_currency.currency_id)
+                source_balance = user.get_balance(current_currency_id)
                 if source_balance.amount < amount:
                     raise InsufficientFunds("Insufficient funds for swap.")
-                user._update_balance(cursor, from_currency.currency_id, -amount)
-                user._update_balance(cursor, to_currency_id, amount_out)
-                self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+                user._update_balance(cursor, current_currency_id, -amount)
+
+                for i, pool in enumerate(route):
+                    if current_currency_id == pool.currency_a_id:
+                        next_currency_id = pool.currency_b_id
+                        reserve_a_change = amount_in
+                        reserve_b_change = -self.get_swap_rate(amount_in, [pool], current_currency_id)
+                    else:
+                        next_currency_id = pool.currency_a_id
+                        reserve_a_change = -self.get_swap_rate(amount_in, [pool], current_currency_id)
+                        reserve_b_change = amount_in
+
+                    self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+
+                    amount_in = abs(reserve_a_change) if current_currency_id == pool.currency_b_id else abs(reserve_b_change)
+                    current_currency_id = next_currency_id
+
+                user._update_balance(cursor, current_currency_id, amount_out)
 
                 current_time = int(time())
                 cursor.execute(
@@ -641,8 +694,8 @@ class RapidWire:
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
-                     SYSTEM_USER_ID, user_id, to_currency_id, amount_out, "swap", current_time)
+                     SYSTEM_USER_ID, user_id, current_currency_id, amount_out, "swap", current_time)
                 )
-            return amount_out, to_currency_id
+            return amount_out, current_currency_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during swap: {err}")
