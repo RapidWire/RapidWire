@@ -1,5 +1,4 @@
-config.py
-!/RapidWire/config.py
+/config.py
 .env*
 .vscode
 
