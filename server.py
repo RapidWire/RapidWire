@@ -294,6 +294,9 @@ async def search_transactions(
     sort_by: Literal["transaction_id", "timestamp", "amount"] = "transaction_id",
     sort_order: Literal["ASC", "DESC", "asc", "desc"] = "desc"
 ):
+    if limit >= 20: limit = 20
+    if limit <= 0: limit = 10
+
     search_params = {
         "source_id": source_id,
         "dest_id": dest_id,
@@ -306,9 +309,6 @@ async def search_transactions(
         "sort_by": sort_by,
         "sort_order": sort_order
     }
-
-    if limit >= 20: limit = 20
-    if limit <= 0: limit = 10
 
     if currency_symbol:
         currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
