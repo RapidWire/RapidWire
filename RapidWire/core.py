@@ -120,6 +120,9 @@ class ContractAPI:
 
         self.core.ContractVariables.set(self.tx.dest, key, value)
 
+    def cancel(self, reason: str):
+        raise TransactionCanceledByContract(reason)
+
 
 class RapidWire:
     def __init__(self, db_config: dict):
@@ -276,7 +279,7 @@ class RapidWire:
                             'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
                         }
 
-                        user_symbols = {
+                        symtable.update({
                             'get_balance': api_handler.get_balance,
                             'get_transaction': api_handler.get_transaction,
                             'transfer': api_handler.transfer,
@@ -301,9 +304,10 @@ class RapidWire:
                                 transaction_id=transaction_id
                             ),
                             'Cancel': TransactionCanceledByContract,
-                        }
+                            'cancel': api_handler.cancel,
+                        })
 
-                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
+                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=contract_config)
 
                         try:
                             aeval.eval(contract.script, show_errors=False)
