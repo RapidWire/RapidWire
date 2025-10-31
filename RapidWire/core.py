@@ -304,7 +304,6 @@ class RapidWire:
                                 transaction_id=transaction_id
                             ),
                             'Cancel': TransactionCanceledByContract,
-                            'cancel': api_handler.cancel,
                         })
 
                         aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=contract_config)
