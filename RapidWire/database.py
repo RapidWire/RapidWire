@@ -4,16 +4,26 @@ class DatabaseConnection:
     def __init__(self, connection: mysql.connector.MySQLConnection):
         self.connection = connection
         self.cursor = None
+        self.nesting_level = 0
 
     def __enter__(self):
-        self.connection.ping(reconnect=True, attempts=5, delay=3)
-        self.cursor = self.connection.cursor(dictionary=True)
+        if self.nesting_level == 0:
+            self.connection.ping(reconnect=True, attempts=5, delay=3)
+            self.cursor = self.connection.cursor(dictionary=True)
+        self.nesting_level += 1
         return self.cursor
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            self.connection.rollback()
-        else:
-            self.connection.commit()
-        if self.cursor:
-            self.cursor.close()
+        self.nesting_level -= 1
+        if self.nesting_level == 0:
+            try:
+                if exc_type:
+                    self.connection.rollback()
+                else:
+                    self.connection.commit()
+            finally:
+                if self.cursor:
+                    self.cursor.close()
+                    self.cursor = None
+        elif self.nesting_level < 0:
+            self.nesting_level = 0
