@@ -47,41 +47,41 @@ class ContractAPI:
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
 
-    def get_transaction(self, tx_id: int) -> Optional[dict]:
+    def get_transaction(self, tx_id: int) -> Optional[Transaction]:
         tx = self.core.Transactions.get(tx_id)
-        return tx.dict() if tx else None
+        return tx if tx else None
 
-    def transfer(self, source: int, dest: int, currency: int, amount: int) -> dict:
+    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transaction:
         if source != self.tx.dest:
             raise PermissionError("Contract can only initiate transfers from its own account.")
         new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
-        return new_tx.dict()
+        return new_tx
 
-    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[dict]:
+    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transaction]:
         txs = self.core.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
-        return [tx.dict() for tx in txs]
+        return txs
 
-    def get_currency(self, currency_id: int) -> Optional[dict]:
+    def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
-        return curr.dict() if curr else None
+        return curr if curr else None
 
-    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> dict:
+    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Claim:
         claim = self.core.Claims.create(claimant, payer, currency, amount, desc)
-        return claim.dict()
+        return claim
 
-    def get_claim(self, claim_id: int) -> Optional[dict]:
+    def get_claim(self, claim_id: int) -> Optional[Claim]:
         claim = self.core.Claims.get(claim_id)
-        return claim.dict() if claim else None
+        return claim if claim else None
     
-    def pay_claim(self, claim_id: int, payer_id: int) -> dict:
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transaction:
         tx, _ = self.core.pay_claim(claim_id, payer_id)
-        return tx.dict()
+        return tx
 
-    def cancel_claim(self, claim_id: int, user_id: int) -> dict:
+    def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.core.cancel_claim(claim_id, user_id)
-        return claim.dict()
+        return claim
 
-    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[dict, Optional[str]]:
+    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
         source_id = self.tx.dest
 
         callee_contract = self.core.Contracts.get(destination_id)
@@ -98,7 +98,7 @@ class ContractAPI:
             input_data=input_data,
             chain_context=self.chain_context
         )
-        return new_tx.dict(), message
+        return new_tx, message
 
     def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
         if user_id is None:

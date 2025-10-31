@@ -24,26 +24,10 @@ transfer(tx["dest"], 12345, tx["currency"], 100)
 インポートして使用することはできません。RapidWireのサンドボックス環境には、これらのオブジェクトが
 グローバル変数として自動的に提供されます。
 """
-from typing import TypedDict, Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Tuple, Any
+from .structs import Transaction, Currency, Claim, TransactionContext
 
 # --- グローバル変数: トランザクションコンテキスト ---
-
-class TransactionContext(TypedDict):
-    """
-    受信するトランザクションの詳細を含む辞書（オブジェクト）。
-    """
-    source: int
-    """送信者のユーザーID。"""
-    dest: int
-    """受信者（あなた）のユーザーID。"""
-    currency: int
-    """転送される通貨のID。"""
-    amount: int
-    """転送される通貨の量（整数）。"""
-    input_data: Optional[str]
-    """送信者によってトランザクションに添付されたデータ。"""
-    transaction_id: int
-    """このトランザクションの一意なID。"""
 
 tx: TransactionContext = ...
 """
@@ -58,11 +42,11 @@ def get_balance(self, user_id: int, currency_id: int) -> int:
     """ユーザーの残高を取得します。"""
     ...
 
-def get_transaction(self, tx_id: int) -> Optional[Dict[str, Any]]:
+def get_transaction(self, tx_id: int) -> Optional[Transaction]:
     """特定のトランザクションを取得します。"""
     ...
 
-def transfer(self, source: int, dest: int, currency: int, amount: int) -> Dict[str, Any]:
+def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transaction:
     """
     新しい送金を開始します。
     注意: `source`はコントラクトの所有者でなければなりません。
@@ -70,31 +54,31 @@ def transfer(self, source: int, dest: int, currency: int, amount: int) -> Dict[s
     """
     ...
 
-def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Dict[str, Any]]:
+def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transaction]:
     """トランザクションを検索します。"""
     ...
 
-def get_currency(self, currency_id: int) -> Optional[Dict[str, Any]]:
+def get_currency(self, currency_id: int) -> Optional[Currency]:
     """通貨の詳細を取得します。"""
     ...
 
-def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Dict[str, Any]:
+def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Claim:
     """新しい請求を作成します。"""
     ...
 
-def get_claim(self, claim_id: int) -> Optional[Dict[str, Any]]:
+def get_claim(self, claim_id: int) -> Optional[Claim]:
     """特定の請求を取得します。"""
     ...
 
-def pay_claim(self, claim_id: int, payer_id: int) -> Dict[str, Any]:
+def pay_claim(self, claim_id: int, payer_id: int) -> Transaction:
     """請求に対して支払います。"""
     ...
 
-def cancel_claim(self, claim_id: int, user_id: int) -> Dict[str, Any]:
+def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
     """請求をキャンセルします。"""
     ...
 
-def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Dict[str, Any], Optional[str]]:
+def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
     """
     別のコントラクトを実行します。
     このコントラクトのアカウントから`destination_id`へ新しいトランザクションを作成し、
