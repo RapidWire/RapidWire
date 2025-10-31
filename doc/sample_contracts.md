@@ -90,7 +90,7 @@ if tip_amount == 0 and tx.amount > 0:
 
 # 送信するチップがある場合、それを転送します。
 if tip_amount > 0:
-    api.transfer(
+    transfer(
         source=tx.dest,  # sourceは常にコントラクトの所有者です
         dest=FORWARD_TO_USER_ID,
         currency=tx.currency,
@@ -104,7 +104,7 @@ else:
 **説明:**
 - **設定**: `FORWARD_TO_USER_ID`を、資金を送りたい実際のDiscordユーザーIDに設定する必要があります。`TIP_PERCENTAGE`は必要に応じて調整できます。
 - **計算**: スクリプトは、受信した`tx.amount`の`TIP_PERCENTAGE`に基づいて転送する金額を計算します。元の金額がゼロより大きい場合、少なくとも通貨の1単位が送信されることを保証します。
-- **API呼び出し**: `api.transfer()`メソッドを使用して、計算された`tip_amount`を送信します。
+- **API呼び出し**: `transfer()`メソッドを使用して、計算された`tip_amount`を送信します。
     - `source`: これは**必ず**`tx.dest`（コントラクトを所有するアカウントのユーザーID）でなければなりません。コントラクトは自身のアカウントからのみ送金を開始できます。
     - `dest`: 資金を転送する相手のユーザーID。
     - `currency`: 受信トランザクションと同じ通貨。
@@ -115,13 +115,13 @@ else:
 
 ### 4. 状態管理コントラクト（カウンター）
 
-このコントラクトは、`api.set_variable`と`api.get_variable`を使用して、永続的な状態を保存する方法を示します。この例では、コントラクトがトランザクションを受信するたびにカウンターをインクリメントします。
+このコントラクトは、`set_variable`と`get_variable`を使用して、永続的な状態を保存する方法を示します。この例では、コントラクトがトランザクションを受信するたびにカウンターをインクリメントします。
 
 **コード:**
 ```python
 # 'tx_count'というキーで保存されている現在のカウントを取得しようとします。
 # b''はバイト文字列リテラルです。変数のキーと値はバイト文字列として保存する必要があります。
-raw_count = api.get_variable(user_id=tx.dest, key=b'tx_count')
+raw_count = get_variable(user_id=tx.dest, key=b'tx_count')
 
 # 変数がまだ設定されていない場合、カウンターを0に初期化します。
 if raw_count is None:
@@ -134,25 +134,25 @@ else:
 count += 1
 
 # 更新されたカウントをバイトに変換して永続ストレージに保存します。
-api.set_variable(key=b'tx_count', value=count.to_bytes(8, 'big'))
+set_variable(key=b'tx_count', value=count.to_bytes(8, 'big'))
 
 # これまでに受信したトランザクションの総数を送信者に報告します。
 return_message = f"これはあなたの{count}番目のトランザクションです。ありがとうございます！"
 ```
 
 **説明:**
-- **状態の取得**: `api.get_variable(user_id=tx.dest, key=b'tx_count')`を呼び出して、キー`b'tx_count'`に格納されている値を取得します。`user_id`は、変数を所有するユーザーを指定します。この場合はコントラクトの所有者です。
+- **状態の取得**: `get_variable(user_id=tx.dest, key=b'tx_count')`を呼び出して、キー`b'tx_count'`に格納されている値を取得します。`user_id`は、変数を所有するユーザーを指定します。この場合はコントラクトの所有者です。
 - **初期化**: `raw_count`が`None`の場合（つまり、変数がまだ存在しない場合）、カウンターを`0`に設定します。
 - **デコード**: 値が存在する場合、`int.from_bytes()`を使用してバイト文字列を整数に変換します。
 - **状態の更新**: カウンターをインクリメントします。
-- **状態の保存**: `count.to_bytes()`を使用してカウンターをバイト文字列に変換し、`api.set_variable()`で保存します。これにより、次のトランザクションで値を取得できるようになります。
+- **状態の保存**: `count.to_bytes()`を使用してカウンターをバイト文字列に変換し、`set_variable()`で保存します。これにより、次のトランザクションで値を取得できるようになります。
 - **キーと値**: `get_variable`と`set_variable`のキーと値は、バイト文字列（例：`b'my_key'`）である必要があります。
 
 ---
 
 ### 5. コントラクト間通信
 
-この例は、`api.execute_contract`を使用して、あるコントラクトが別のコントラクトを呼び出す方法を示します。ここでは、「ディスパッチャー」コントラクトが受信した資金の一部を「ロガー」コントラクトに転送します。
+この例は、`execute_contract`を使用して、あるコントラクトが別のコントラクトを呼び出す方法を示します。ここでは、「ディスパッチャー」コントラクトが受信した資金の一部を「ロガー」コントラクトに転送します。
 
 #### パートA：ロガーコントラクト
 
@@ -161,13 +161,13 @@ return_message = f"これはあなたの{count}番目のトランザクション
 **`LOGGER_USER_ID` に設定するコード:**
 ```python
 # 'logged_tx_count' というキーで保存されている現在のカウントを取得します。
-raw_count = api.get_variable(user_id=tx.dest, key=b'logged_tx_count')
+raw_count = get_variable(user_id=tx.dest, key=b'logged_tx_count')
 
 count = int.from_bytes(raw_count, 'big') if raw_count else 0
 count += 1
 
 # 更新されたカウントを保存します。
-api.set_variable(key=b'logged_tx_count', value=count.to_bytes(8, 'big'))
+set_variable(key=b'logged_tx_count', value=count.to_bytes(8, 'big'))
 
 # ログに記録されたことを元のディスパッチャーに（間接的に）通知します。
 return_message = f"Logged transaction #{count}. Source: {tx.source}"
@@ -190,7 +190,7 @@ FORWARD_AMOUNT = 10
 if tx.amount > FORWARD_AMOUNT:
     # 別のコントラクトを実行します。
     # これにより、このコントラクト（tx.dest）からLOGGER_USER_IDに新しいトランザクションが作成されます。
-    new_tx, logger_message = api.execute_contract(
+    new_tx, logger_message = execute_contract(
         destination_id=LOGGER_USER_ID,
         currency_id=tx.currency,
         amount=FORWARD_AMOUNT,
@@ -205,6 +205,6 @@ else:
 
 **説明:**
 - **セットアップ**: まず、「ロガー」として機能する2番目のアカウントにパートAのコントラクトを設定する必要があります。次に、そのアカウントのユーザーIDをパートBのコントラクトの `LOGGER_USER_ID` 変数に入力します。
-- **`execute_contract`の呼び出し**: ディスパッチャーコントラクトは `api.execute_contract` を呼び出します。これにより、現在のコントラクトの所有者 (`tx.dest`) から `LOGGER_USER_ID` への新しい内部トランザクションが生成されます。
+- **`execute_contract`の呼び出し**: ディスパッチャーコントラクトは `execute_contract` を呼び出します。これにより、現在のコントラクトの所有者 (`tx.dest`) から `LOGGER_USER_ID` への新しい内部トランザクションが生成されます。
 - **データフロー**: `input_data` は、元の送信者に関する情報をロガーコントラクトに渡すために使用されます。
 - **戻り値**: `execute_contract` は、作成されたトランザクションの辞書と、呼び出されたコントラクトからの `return_message` の2つの値を返します。これにより、呼び出し元のコントラクトは、呼び出されたコントラクトの実行結果に基づいて行動できます。
