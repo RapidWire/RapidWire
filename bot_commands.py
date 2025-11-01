@@ -710,9 +710,24 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
             await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
             return
 
+        route_symbols = [from_symbol_upper]
+        current_currency_id = from_currency.currency_id
+        for pool in route:
+            if pool.currency_a_id == current_currency_id:
+                next_currency_id = pool.currency_b_id
+            else:
+                next_currency_id = pool.currency_a_id
+
+            next_currency = Rapid.Currencies.get(next_currency_id)
+            route_symbols.append(next_currency.symbol)
+            current_currency_id = next_currency_id
+
+        route_str = " -> ".join(route_symbols)
+
         embed = Embed(title="スワップ確認", color=Color.blue())
         embed.add_field(name="スワップ元", value=f"`{format_amount(int_amount)} {from_currency.symbol}`", inline=False)
         embed.add_field(name="スワップ先 (推定)", value=f"`{format_amount(amount_out_est)} {to_currency.symbol}`", inline=False)
+        embed.add_field(name="ルート", value=f"`{route_str}`", inline=False)
         embed.set_footer(text="このレートは30秒間有効です。")
 
         view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out_est)
