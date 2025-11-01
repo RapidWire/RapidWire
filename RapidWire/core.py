@@ -609,7 +609,7 @@ class RapidWire:
             return [direct_pool]
 
         # Graph representation: currency_id -> list of (neighbor_currency_id, pool)
-        graph = {}
+        graph: dict[int, list[tuple[int, LiquidityPool]]] = {}
         for pool in all_pools:
             if pool.currency_a_id not in graph:
                 graph[pool.currency_a_id] = []
