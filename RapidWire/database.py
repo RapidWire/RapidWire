@@ -8,7 +8,7 @@ class DatabaseConnection:
 
     def __enter__(self):
         if self.nesting_level == 0:
-            self.connection.ping(reconnect=True, attempts=5, delay=3)
+            self.connection.ping(reconnect=True, attempts=10, delay=1)
             self.cursor = self.connection.cursor(dictionary=True)
         self.nesting_level += 1
         return self.cursor
