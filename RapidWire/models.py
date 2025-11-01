@@ -358,6 +358,12 @@ class LiquidityPoolModel:
             result = cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
+    def get_all(self) -> List[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_pool")
+            results = cursor.fetchall()
+            return [LiquidityPool(**row) for row in results]
+
     def get_by_currency_pair(self, currency_a_id: int, currency_b_id: int) -> Optional[LiquidityPool]:
         with self.db as cursor:
             cursor.execute(
