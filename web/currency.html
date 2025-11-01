@@ -224,7 +224,7 @@
             const currency = await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
             
             if (page === 1) {
-              const issuerLink = await formatUserLink(currency.issuer_id);
+              const issuerLink = await formatUserLink(currency.issuer);
 
               container.innerHTML = `
                   <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
