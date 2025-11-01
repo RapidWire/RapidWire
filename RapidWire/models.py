@@ -91,6 +91,12 @@ class CurrencyModel:
             if cursor.rowcount == 0: return None
         return self.get(currency_id)
 
+    def cancel_delete_request(self, currency_id: int) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute("UPDATE currency SET delete_requested_at = NULL WHERE currency_id = %s", (currency_id,))
+            if cursor.rowcount == 0: return None
+        return self.get(currency_id)
+
     def delete(self, currency_id: int):
          with self.db as cursor:
             cursor.execute("DELETE FROM currency WHERE currency_id = %s", (currency_id,))

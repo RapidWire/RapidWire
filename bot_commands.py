@@ -390,6 +390,7 @@ async def currency_delete(interaction: discord.Interaction):
                 f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
             ))
         elif time_since_request > ten_days:
+            Rapid.cancel_delete_request(currency.currency_id)
             await interaction.followup.send(embed=create_error_embed(
                 "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
                 "再度削除を要請してください。"
