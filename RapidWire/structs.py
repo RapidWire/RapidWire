@@ -15,7 +15,9 @@ class Currency(BaseModel):
     rate_change_requested_at: Optional[int] = None
 
     @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')
-    def serialize_integers(self, value: int, _info):
+    def serialize_integers(self, value: int|None, _info):
+        if value is None:
+            return value
         return str(value)
 
 class Balance(BaseModel):
