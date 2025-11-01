@@ -371,6 +371,9 @@ class RapidWire:
         self.Currencies.delete(currency_id)
         return transactions
 
+    def cancel_delete_request(self, currency_id: int):
+        self.Currencies.cancel_delete_request(currency_id)
+
     def pay_claim(self, claim_id: int, payer_id: int) -> Tuple[Transaction, Optional[str]]:
         claim = self.Claims.get(claim_id)
         if not claim:
