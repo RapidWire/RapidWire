@@ -325,9 +325,8 @@ async def currency_mint(interaction: discord.Interaction, amount: float):
     Rapid.mint_currency(currency.currency_id, int_amount, interaction.user.id)
     await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を追加発行しました。", "Mint成功"))
 
-@currency_group.command(name="burn", description="[管理者] 保有する通貨を焼却します。")
+@currency_group.command(name="burn", description="保有する通貨を焼却します。")
 @app_commands.describe(amount="焼却する量")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_burn(interaction: discord.Interaction, amount: float):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
