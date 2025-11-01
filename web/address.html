@@ -386,7 +386,7 @@
 
             const [statsResponse, txsResponse] = await Promise.all([
                 fetch(`${API_BASE_URL}/user/${userId}/stats`),
-                fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=100`)
+                fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&limit=20`)
             ]);
 
             if (!statsResponse.ok) throw new Error('Failed to fetch address stats.');

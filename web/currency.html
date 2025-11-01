@@ -186,7 +186,7 @@
 
     async function fetchTransactions(symbol) {
         try {
-            const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?currency_symbol=${symbol}&limit=100`);
+            const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?currency_symbol=${symbol}&limit=20`);
             if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
             const txsData = await txsResponse.json();
             return txsData;
