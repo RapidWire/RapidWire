@@ -125,6 +125,45 @@ class StakeResponse(BaseModel):
     currency: structs.Currency
     stake: structs.Stake
 
+class CreatePoolRequest(BaseModel):
+    symbol_a: str
+    symbol_b: str
+    amount_a: float = Field(..., gt=0)
+    amount_b: float = Field(..., gt=0)
+
+class AddLiquidityRequest(BaseModel):
+    symbol_a: str
+    symbol_b: str
+    amount_a: float = Field(..., gt=0)
+    amount_b: float = Field(..., gt=0)
+
+class RemoveLiquidityRequest(BaseModel):
+    symbol_a: str
+    symbol_b: str
+    shares: float = Field(..., gt=0)
+
+class SwapRequest(BaseModel):
+    symbol_from: str
+    symbol_to: str
+    amount: float = Field(..., gt=0)
+
+class AddLiquidityResponse(BaseModel):
+    shares_minted: str
+
+class RemoveLiquidityResponse(BaseModel):
+    amount_a_received: str
+    amount_b_received: str
+
+class SwapRateResponse(BaseModel):
+    amount_out: str
+
+class SwapResponse(BaseModel):
+    amount_out: str
+    currency_out_symbol: str
+
+class RouteResponse(BaseModel):
+    route: List[structs.LiquidityPool]
+
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
@@ -320,6 +359,92 @@ async def search_transactions(
         search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
 
     return Rapid.Transactions.search(**search_params)
+
+@app.post("/pools/create", response_model=structs.LiquidityPool, tags=["DEX"])
+async def create_liquidity_pool(request: CreatePoolRequest, user_id: int = Depends(get_current_user_id)):
+    currency_a = Rapid.Currencies.get_by_symbol(request.symbol_a.upper())
+    currency_b = Rapid.Currencies.get_by_symbol(request.symbol_b.upper())
+    if not currency_a or not currency_b:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both currencies not found")
+
+    try:
+        amount_a_int = int(Decimal(str(request.amount_a)) * (10**config.decimal_places))
+        amount_b_int = int(Decimal(str(request.amount_b)) * (10**config.decimal_places))
+        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, amount_a_int, amount_b_int, user_id)
+        return pool
+    except (exceptions.InsufficientFunds, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.post("/pools/add_liquidity", response_model=AddLiquidityResponse, tags=["DEX"])
+async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get_current_user_id)):
+    try:
+        amount_a_int = int(Decimal(str(request.amount_a)) * (10**config.decimal_places))
+        amount_b_int = int(Decimal(str(request.amount_b)) * (10**config.decimal_places))
+        shares = Rapid.add_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), amount_a_int, amount_b_int, user_id)
+        return AddLiquidityResponse(shares_minted=str(shares))
+    except (exceptions.InsufficientFunds, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.post("/pools/remove_liquidity", response_model=RemoveLiquidityResponse, tags=["DEX"])
+async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depends(get_current_user_id)):
+    try:
+        shares_int = int(Decimal(str(request.shares)) * (10**config.decimal_places))
+        amount_a, amount_b = Rapid.remove_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), shares_int, user_id)
+        return RemoveLiquidityResponse(amount_a_received=str(amount_a), amount_b_received=str(amount_b))
+    except (exceptions.InsufficientFunds, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.get("/pools", response_model=List[structs.LiquidityPool], tags=["DEX"])
+async def get_all_pools():
+    return Rapid.LiquidityPools.get_all()
+
+@app.get("/pools/{symbol_a}/{symbol_b}", response_model=structs.LiquidityPool, tags=["DEX"])
+async def get_pool(symbol_a: str, symbol_b: str):
+    pool = Rapid.LiquidityPools.get_by_symbols(symbol_a.upper(), symbol_b.upper())
+    if not pool:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Liquidity pool not found")
+    return pool
+
+@app.get("/pools/provider/{user_id}", response_model=List[structs.LiquidityProvider], tags=["DEX"])
+async def get_provider_info(user_id: int):
+    return Rapid.LiquidityProviders.get_for_user(user_id)
+
+@app.post("/swap/rate", response_model=SwapRateResponse, tags=["DEX"])
+async def get_swap_rate(request: SwapRequest):
+    try:
+        route = Rapid.find_swap_route(request.symbol_from.upper(), request.symbol_to.upper())
+        from_currency = Rapid.Currencies.get_by_symbol(request.symbol_from.upper())
+        amount_in_int = int(Decimal(str(request.amount)) * (10**config.decimal_places))
+        amount_out = Rapid.get_swap_rate(amount_in_int, route, from_currency.currency_id)
+        return SwapRateResponse(amount_out=str(amount_out))
+    except (ValueError, exceptions.CurrencyNotFound) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/swap", response_model=SwapResponse, tags=["DEX"])
+async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_user_id)):
+    try:
+        amount_in_int = int(Decimal(str(request.amount)) * (10**config.decimal_places))
+        amount_out, currency_out_id = Rapid.swap(request.symbol_from.upper(), request.symbol_to.upper(), amount_in_int, user_id)
+        currency_out = Rapid.Currencies.get(currency_out_id)
+        return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol)
+    except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.get("/swap/route/{symbol_from}/{symbol_to}", response_model=RouteResponse, tags=["DEX"])
+async def get_swap_route(symbol_from: str, symbol_to: str):
+    try:
+        route = Rapid.find_swap_route(symbol_from.upper(), symbol_to.upper())
+        return RouteResponse(route=route)
+    except (ValueError, exceptions.CurrencyNotFound) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 if __name__ == "__main__":
     app.mount("/", StaticFiles(directory="web", html=True), name="web")
