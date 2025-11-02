@@ -91,13 +91,13 @@ class BalanceResponse(BaseModel):
 class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
     symbol: str = Field(..., description="The symbol of the currency to transfer.")
-    amount: float = Field(..., gt=0, description="The amount of currency to transfer.")
+    amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
     input_data: Optional[str] = Field(None, max_length=16, pattern=r"^[a-zA-Z0-9]*$", description="Alphanumeric data for the contract.")
 
 class ClaimCreateRequest(BaseModel):
     payer_id: int = Field(..., description="The Discord user ID of the person to pay the claim.")
     symbol: str = Field(..., description="The symbol of the currency for the claim.")
-    amount: float = Field(..., gt=0, description="The amount of currency for the claim.")
+    amount: int = Field(..., gt=0, description="The amount of currency for the claim.")
     description: Optional[str] = Field(None, max_length=100, description="Description of the claim.")
 
 class SuccessResponse(BaseModel):
@@ -128,24 +128,24 @@ class StakeResponse(BaseModel):
 class CreatePoolRequest(BaseModel):
     symbol_a: str
     symbol_b: str
-    amount_a: float = Field(..., gt=0)
-    amount_b: float = Field(..., gt=0)
+    amount_a: int = Field(..., gt=0)
+    amount_b: int = Field(..., gt=0)
 
 class AddLiquidityRequest(BaseModel):
     symbol_a: str
     symbol_b: str
-    amount_a: float = Field(..., gt=0)
-    amount_b: float = Field(..., gt=0)
+    amount_a: int = Field(..., gt=0)
+    amount_b: int = Field(..., gt=0)
 
 class RemoveLiquidityRequest(BaseModel):
     symbol_a: str
     symbol_b: str
-    shares: float = Field(..., gt=0)
+    shares: int = Field(..., gt=0)
 
 class SwapRequest(BaseModel):
     symbol_from: str
     symbol_to: str
-    amount: float = Field(..., gt=0)
+    amount: int = Field(..., gt=0)
 
 class AddLiquidityResponse(BaseModel):
     shares_minted: str
@@ -248,12 +248,11 @@ async def transfer_currency(request: TransferRequest, user_id: int = Depends(get
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
 
     try:
-        int_amount = int(Decimal(str(request.amount)) * (10**config.decimal_places))
         tx, _ = Rapid.transfer(
             source_id=user_id,
             destination_id=request.destination_id,
             currency_id=currency.currency_id,
-            amount=int_amount,
+            amount=request.amount,
             input_data=request.input_data
         )
         return tx
@@ -272,8 +271,7 @@ async def create_claim(request: ClaimCreateRequest, user_id: int = Depends(get_c
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     
-    int_amount = int(Decimal(str(request.amount)) * (10**config.decimal_places))
-    claim = Rapid.Claims.create(user_id, request.payer_id, currency.currency_id, int_amount, request.description)
+    claim = Rapid.Claims.create(user_id, request.payer_id, currency.currency_id, request.amount, request.description)
     return claim
 
 @app.get("/claims", response_model=List[structs.Claim], tags=["Claims"])
@@ -325,8 +323,8 @@ async def search_transactions(
     currency_symbol: Optional[str] = None,
     start_timestamp: Optional[int] = None,
     end_timestamp: Optional[int] = None,
-    min_amount: Optional[float] = None,
-    max_amount: Optional[float] = None,
+    min_amount: Optional[int] = None,
+    max_amount: Optional[int] = None,
     input_data: Optional[str] = None,
     page: int = 1,
     limit: int = 10,
@@ -353,10 +351,8 @@ async def search_transactions(
         currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
         search_params["currency_id"] = currency.currency_id if currency else -1
 
-    if min_amount is not None:
-        search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**config.decimal_places))
-    if max_amount is not None:
-        search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
+    search_params["min_amount"] = min_amount
+    search_params["max_amount"] = max_amount
 
     return Rapid.Transactions.search(**search_params)
 
@@ -368,9 +364,7 @@ async def create_liquidity_pool(request: CreatePoolRequest, user_id: int = Depen
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both currencies not found")
 
     try:
-        amount_a_int = int(Decimal(str(request.amount_a)) * (10**config.decimal_places))
-        amount_b_int = int(Decimal(str(request.amount_b)) * (10**config.decimal_places))
-        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, amount_a_int, amount_b_int, user_id)
+        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, request.amount_a, request.amount_b, user_id)
         return pool
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -380,9 +374,7 @@ async def create_liquidity_pool(request: CreatePoolRequest, user_id: int = Depen
 @app.post("/pools/add_liquidity", response_model=AddLiquidityResponse, tags=["DEX"])
 async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        amount_a_int = int(Decimal(str(request.amount_a)) * (10**config.decimal_places))
-        amount_b_int = int(Decimal(str(request.amount_b)) * (10**config.decimal_places))
-        shares = Rapid.add_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), amount_a_int, amount_b_int, user_id)
+        shares = Rapid.add_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.amount_a, request.amount_b, user_id)
         return AddLiquidityResponse(shares_minted=str(shares))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -392,8 +384,7 @@ async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get
 @app.post("/pools/remove_liquidity", response_model=RemoveLiquidityResponse, tags=["DEX"])
 async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        shares_int = int(Decimal(str(request.shares)) * (10**config.decimal_places))
-        amount_a, amount_b = Rapid.remove_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), shares_int, user_id)
+        amount_a, amount_b = Rapid.remove_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.shares, user_id)
         return RemoveLiquidityResponse(amount_a_received=str(amount_a), amount_b_received=str(amount_b))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -420,8 +411,7 @@ async def get_swap_rate(request: SwapRequest):
     try:
         route = Rapid.find_swap_route(request.symbol_from.upper(), request.symbol_to.upper())
         from_currency = Rapid.Currencies.get_by_symbol(request.symbol_from.upper())
-        amount_in_int = int(Decimal(str(request.amount)) * (10**config.decimal_places))
-        amount_out = Rapid.get_swap_rate(amount_in_int, route, from_currency.currency_id)
+        amount_out = Rapid.get_swap_rate(request.amount, route, from_currency.currency_id)
         return SwapRateResponse(amount_out=str(amount_out))
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -429,8 +419,7 @@ async def get_swap_rate(request: SwapRequest):
 @app.post("/swap", response_model=SwapResponse, tags=["DEX"])
 async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        amount_in_int = int(Decimal(str(request.amount)) * (10**config.decimal_places))
-        amount_out, currency_out_id = Rapid.swap(request.symbol_from.upper(), request.symbol_to.upper(), amount_in_int, user_id)
+        amount_out, currency_out_id = Rapid.swap(request.symbol_from.upper(), request.symbol_to.upper(), request.amount, user_id)
         currency_out = Rapid.Currencies.get(currency_out_id)
         return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
