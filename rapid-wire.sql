@@ -73,8 +73,8 @@ CREATE TABLE `currency` (
   `supply` bigint UNSIGNED NOT NULL,
   `minting_renounced` tinyint(1) NOT NULL DEFAULT '0',
   `delete_requested_at` bigint UNSIGNED DEFAULT NULL,
-  `daily_interest_rate` decimal(10,9) NOT NULL DEFAULT '0.000000000',
-  `new_daily_interest_rate` decimal(10,9) DEFAULT NULL,
+  `daily_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
+  `new_daily_interest_rate` int UNSIGNED DEFAULT NULL,
   `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -99,11 +99,11 @@ CREATE TABLE `staking` (
 
 CREATE TABLE `transaction` (
   `transaction_id` bigint UNSIGNED NOT NULL,
-  `source` bigint UNSIGNED NOT NULL,
-  `dest` bigint UNSIGNED NOT NULL,
+  `source_id` bigint UNSIGNED NOT NULL,
+  `dest_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
   `amount` bigint UNSIGNED NOT NULL,
-  `inputData` varchar(16) DEFAULT NULL,
+  `input_data` varchar(16) DEFAULT NULL,
   `timestamp` bigint NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -133,6 +133,18 @@ CREATE TABLE `liquidity_provider` (
   `pool_id` int UNSIGNED NOT NULL,
   `user_id` bigint UNSIGNED NOT NULL,
   `shares` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `contract_variables`
+--
+
+CREATE TABLE `contract_variables` (
+  `user_id` bigint UNSIGNED NOT NULL,
+  `key` varbinary(8) NOT NULL,
+  `value` varbinary(16) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -187,8 +199,8 @@ ALTER TABLE `staking`
 --
 ALTER TABLE `transaction`
   ADD PRIMARY KEY (`transaction_id`),
-  ADD KEY `source` (`source`),
-  ADD KEY `dest` (`dest`),
+  ADD KEY `source_id` (`source_id`),
+  ADD KEY `dest_id` (`dest_id`),
   ADD KEY `currency_id` (`currency_id`);
 
 --
@@ -204,6 +216,12 @@ ALTER TABLE `liquidity_pool`
 ALTER TABLE `liquidity_provider`
   ADD PRIMARY KEY (`provider_id`),
   ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
+
+--
+-- Indexes for table `contract_variables`
+--
+ALTER TABLE `contract_variables`
+  ADD PRIMARY KEY (`user_id`, `key`);
 
 --
 -- AUTO_INCREMENT for dumped tables

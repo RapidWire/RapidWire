@@ -169,7 +169,7 @@ async def history(
 
             currency = Rapid.Currencies.get(tx.currency_id)
             source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.dest_id}>" if tx.dest_id != SYSTEM_USER_ID else "システム"
             
             embed = Embed(title=f"取引詳細: ID {tx.transaction_id}", color=Color.blue())
             embed.add_field(name="日時", value=f"<t:{tx.timestamp}:F>", inline=False)
@@ -230,7 +230,7 @@ async def history(
             if not currency: continue
 
             source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
-            dest_user_mention = f"<@{tx.destination_id}>" if tx.destination_id != SYSTEM_USER_ID else "システム"
+            dest_user_mention = f"<@{tx.dest_id}>" if tx.dest_id != SYSTEM_USER_ID else "システム"
             
             direction_emoji = "↔️"
             direction_text = f"from {source_user_mention} to {dest_user_mention}"
@@ -239,7 +239,7 @@ async def history(
                 if tx.source_id == target_user.id:
                     direction_emoji = "📤"
                     direction_text = f"to {dest_user_mention}"
-                elif tx.destination_id == target_user.id:
+                elif tx.dest_id == target_user.id:
                     direction_emoji = "📥"
                     direction_text = f"from {source_user_mention}"
 
@@ -268,9 +268,9 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
             return
 
         int_supply = int(Decimal(str(supply)) * (10**config.decimal_places))
-        rate_decimal = Decimal(str(daily_interest_rate)) / Decimal(100)
+        rate_bps = int(Decimal(str(daily_interest_rate)) * 100)
         
-        new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_decimal)
+        new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_bps)
         
         desc = f"新しい通貨 **{new_currency.name} ({new_currency.symbol})** が発行されました。\n"
         desc += f"総供給量は `{format_amount(new_currency.supply)}` です。\n"
@@ -299,7 +299,7 @@ async def currency_info(interaction: discord.Interaction, symbol: Optional[str] 
     embed.add_field(name="発行サーバーID (通貨ID)", value=f"`{currency.currency_id}`", inline=False)
     embed.add_field(name="発行者", value=issuer.mention, inline=False)
     embed.add_field(name="総供給量", value=f"`{format_amount(currency.supply)}`", inline=False)
-    embed.add_field(name="ステーキング日利", value=f"`{currency.daily_interest_rate * 100:.4f}%`", inline=False)
+    embed.add_field(name="ステーキング日利", value=f"`{Decimal(currency.daily_interest_rate) / Decimal(100):.4f}%`", inline=False)
     embed.add_field(name="Mint/利率変更 放棄状態", value="はい" if currency.minting_renounced else "いいえ", inline=True)
     if currency.delete_requested_at:
         embed.add_field(name="削除要求日時", value=f"<t:{currency.delete_requested_at}:F>", inline=True)
@@ -325,9 +325,8 @@ async def currency_mint(interaction: discord.Interaction, amount: float):
     Rapid.mint_currency(currency.currency_id, int_amount, interaction.user.id)
     await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を追加発行しました。", "Mint成功"))
 
-@currency_group.command(name="burn", description="[管理者] 保有する通貨を焼却します。")
+@currency_group.command(name="burn", description="保有する通貨を焼却します。")
 @app_commands.describe(amount="焼却する量")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_burn(interaction: discord.Interaction, amount: float):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -391,6 +390,7 @@ async def currency_delete(interaction: discord.Interaction):
                 f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
             ))
         elif time_since_request > ten_days:
+            Rapid.cancel_delete_request(currency.currency_id)
             await interaction.followup.send(embed=create_error_embed(
                 "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
                 "再度削除を要請してください。"
@@ -411,8 +411,8 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
     if not interaction.guild: return
     
     try:
-        new_rate_decimal = Decimal(str(rate)) / Decimal(100)
-        currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_decimal, interaction.user.id)
+        new_rate_bps = int(Decimal(str(rate)) * 100)
+        currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_bps, interaction.user.id)
 
         timelock_seconds = Rapid.Config.Staking.rate_change_timelock
         apply_time = int(time()) + timelock_seconds
@@ -433,7 +433,7 @@ async def currency_apply_interest_change(interaction: discord.Interaction):
 
     try:
         currency = Rapid.apply_interest_rate_change(interaction.guild.id)
-        desc = f"ステーキングの日利が `{currency.daily_interest_rate * 100:.4f}%` に正常に更新されました。"
+        desc = f"ステーキングの日利が `{Decimal(currency.daily_interest_rate) / Decimal(100):.4f}%` に正常に更新されました。"
         await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
@@ -502,7 +502,7 @@ async def stake_info(interaction: discord.Interaction):
 
         field_name = f"通貨: **{currency.name} ({currency.symbol})**"
         field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
-                       f"現在の日利: `{currency.daily_interest_rate * 100:.4f}%`\n"
+                       f"現在の日利: `{Decimal(currency.daily_interest_rate) / Decimal(100):.4f}%`\n"
                        f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
         
@@ -699,14 +699,35 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
 
-        amount_out_est = Rapid.get_swap_rate(from_symbol_upper, to_symbol_upper, int_amount)
+        try:
+            route = Rapid.find_swap_route(from_symbol_upper, to_symbol_upper)
+        except ValueError:
+            await interaction.response.send_message(embed=create_error_embed("スワップルートが見つかりませんでした。"), ephemeral=True)
+            return
+
+        amount_out_est = Rapid.get_swap_rate(int_amount, route, from_currency.currency_id)
         if amount_out_est <= 0:
             await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
             return
 
+        route_symbols = [from_symbol_upper]
+        current_currency_id = from_currency.currency_id
+        for pool in route:
+            if pool.currency_a_id == current_currency_id:
+                next_currency_id = pool.currency_b_id
+            else:
+                next_currency_id = pool.currency_a_id
+
+            next_currency = Rapid.Currencies.get(next_currency_id)
+            route_symbols.append(next_currency.symbol)
+            current_currency_id = next_currency_id
+
+        route_str = " -> ".join(route_symbols)
+
         embed = Embed(title="スワップ確認", color=Color.blue())
         embed.add_field(name="スワップ元", value=f"`{format_amount(int_amount)} {from_currency.symbol}`", inline=False)
         embed.add_field(name="スワップ先 (推定)", value=f"`{format_amount(amount_out_est)} {to_currency.symbol}`", inline=False)
+        embed.add_field(name="ルート", value=f"`{route_str}`", inline=False)
         embed.set_footer(text="このレートは30秒間有効です。")
 
         view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out_est)

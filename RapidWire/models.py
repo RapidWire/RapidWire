@@ -6,7 +6,7 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider
+from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider, ContractVariable
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -40,6 +40,8 @@ class UserModel:
             """,
             (self.user_id, currency_id, max(0, amount_change), amount_change)
         )
+        
+        cursor.execute("DELETE FROM balance WHERE user_id = %s AND currency_id = %s AND amount = 0", (self.user_id, currency_id))
 
 class CurrencyModel:
     def __init__(self, db_connection: DatabaseConnection):
@@ -63,7 +65,7 @@ class CurrencyModel:
             results = cursor.fetchall()
             return [Balance(**row) for row in results]
 
-    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: Decimal) -> Currency:
+    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Currency:
         try:
             with self.db as cursor:
                 cursor.execute(
@@ -89,11 +91,17 @@ class CurrencyModel:
             if cursor.rowcount == 0: return None
         return self.get(currency_id)
 
+    def cancel_delete_request(self, currency_id: int) -> Optional[Currency]:
+        with self.db as cursor:
+            cursor.execute("UPDATE currency SET delete_requested_at = NULL WHERE currency_id = %s", (currency_id,))
+            if cursor.rowcount == 0: return None
+        return self.get(currency_id)
+
     def delete(self, currency_id: int):
          with self.db as cursor:
             cursor.execute("DELETE FROM currency WHERE currency_id = %s", (currency_id,))
 
-    def request_rate_change(self, currency_id: int, new_rate: Decimal) -> Optional[Currency]:
+    def request_rate_change(self, currency_id: int, new_rate: int) -> Optional[Currency]:
         with self.db as cursor:
             cursor.execute(
                 "UPDATE currency SET new_daily_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",
@@ -125,7 +133,7 @@ class TransactionModel:
         offset = (page - 1) * limit
         with self.db as cursor:
             cursor.execute(
-                "SELECT * FROM transaction WHERE source = %s OR dest = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s",
+                "SELECT * FROM transaction WHERE source_id = %s OR dest_id = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s",
                 (user_id, user_id, limit, offset)
             )
             results = cursor.fetchall()
@@ -143,23 +151,25 @@ class TransactionModel:
         max_amount: Optional[int] = None,
         input_data: Optional[str] = None,
         page: int = 1,
-        limit: int = 10
+        limit: int = 10,
+        sort_by: str = "transaction_id",
+        sort_order: str = "desc"
     ) -> List[Transaction]:
         offset = (page - 1) * limit
         conditions = []
         params = []
 
         if source_id is not None:
-            conditions.append("source = %s")
+            conditions.append("source_id = %s")
             params.append(source_id)
         if dest_id is not None:
-            conditions.append("dest = %s")
+            conditions.append("dest_id = %s")
             params.append(dest_id)
         if currency_id is not None:
             conditions.append("currency_id = %s")
             params.append(currency_id)
         if user_id is not None:
-            conditions.append("(source = %s OR dest = %s)")
+            conditions.append("(source_id = %s OR dest_id = %s)")
             params.extend([user_id, user_id])
         if start_timestamp is not None:
             conditions.append("timestamp >= %s")
@@ -174,22 +184,45 @@ class TransactionModel:
             conditions.append("amount <= %s")
             params.append(max_amount)
         if input_data is not None:
-            conditions.append("inputData = %s")
+            conditions.append("input_data = %s")
             params.append(input_data)
 
+        allowed_sort_by = ["transaction_id", "timestamp", "amount"]
+        if sort_by not in allowed_sort_by:
+            sort_by = "transaction_id"
+
+        sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+        order_by_clause = f"ORDER BY {sort_by} {sort_order}"
+
+
         if not conditions:
-            # Add a condition that's always true to prevent an empty WHERE clause
-            # and still allow for pagination, etc.
-            query = "SELECT * FROM transaction ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query = f"SELECT * FROM transaction {order_by_clause} LIMIT %s OFFSET %s"
             params.extend([limit, offset])
         else:
-            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} {order_by_clause} LIMIT %s OFFSET %s"
             params.extend([limit, offset])
 
         with self.db as cursor:
             cursor.execute(query, tuple(params))
             results = cursor.fetchall()
             return [Transaction(**row) for row in results]
+
+    def get_user_stats(self, user_id: int) -> dict:
+        query = """
+            SELECT 
+                COUNT(*) as total_transactions,
+                MIN(timestamp) as first_transaction_timestamp,
+                MAX(timestamp) as last_transaction_timestamp
+            FROM transaction 
+            WHERE source_id = %s OR dest_id = %s
+        """
+        params = (user_id, user_id)
+        with self.db as cursor:
+            cursor.execute(query, params)
+            result = cursor.fetchone()
+            if not result or result['total_transactions'] == 0:
+                return {"total_transactions": 0, "first_transaction_timestamp": None, "last_transaction_timestamp": None}
+            return result
 
 class ContractModel:
     def __init__(self, db_connection: DatabaseConnection):
@@ -331,6 +364,12 @@ class LiquidityPoolModel:
             result = cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
+    def get_all(self) -> List[LiquidityPool]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM liquidity_pool")
+            results = cursor.fetchall()
+            return [LiquidityPool(**row) for row in results]
+
     def get_by_currency_pair(self, currency_a_id: int, currency_b_id: int) -> Optional[LiquidityPool]:
         with self.db as cursor:
             cursor.execute(
@@ -408,3 +447,33 @@ class LiquidityProviderModel:
             "DELETE FROM liquidity_provider WHERE pool_id = %s AND user_id = %s",
             (pool_id, user_id)
         )
+
+class ContractVariableModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, user_id: int, key: bytes) -> Optional[ContractVariable]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT * FROM contract_variables WHERE user_id = %s AND `key` = %s",
+                (user_id, key)
+            )
+            result = cursor.fetchone()
+            return ContractVariable(**result) if result else None
+
+    def set(self, user_id: int, key: bytes, value: bytes):
+        with self.db as cursor:
+            cursor.execute(
+                """
+                INSERT INTO contract_variables (user_id, `key`, `value`)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
+                """,
+                (user_id, key, value)
+            )
+
+    def get_all_for_user(self, user_id: int) -> List[ContractVariable]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM contract_variables WHERE user_id = %s", (user_id,))
+            results = cursor.fetchall()
+            return [ContractVariable(**row) for row in results]

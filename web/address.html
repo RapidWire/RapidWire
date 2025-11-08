@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Details - RapidWire Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="univ.css">
+    <style>
+        .tab-button.active {
+            border-color: #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        .tab-panel-scroll {
+            max-height: 500px; 
+            overflow-y: auto; 
+        }
+
+        
+        @media (max-width: 767px) {
+            #tx-history-container {
+                background-color: #ffffff00;
+                border-width: 0;
+                box-shadow: none;
+            }
+            #tx-history-container table thead {
+                
+                display: none;
+            }
+            #tx-history-container table tbody tr {
+                
+                display: block;
+                margin-bottom: 0.5rem;
+                border: 1px solid #e2e8f0; 
+                border-radius: 0.5rem; 
+                overflow: hidden;
+                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); 
+                background-color: #f8fafc;
+            }
+            #tx-history-container table tbody td {
+                
+                display: block;
+                padding: 0.5rem 1rem; 
+                text-align: left; 
+            }
+            #tx-history-container table tbody td::before {
+                display: none; 
+            }
+
+            
+            #tx-history-container table tbody td[data-label="Tx ID"] {
+                padding-top: 0.75rem;
+                padding-bottom: 0.5rem;
+                font-weight: 600;
+                border-bottom: 1px solid #e2e8f0; 
+            }
+            
+            
+            #tx-history-container table tbody td[data-label="From / To"] {
+                padding-top: 0.75rem;
+                padding-bottom: 0.75rem;
+            }
+
+            
+            #tx-history-container table tbody td[data-label="Data"] {
+                padding-top: 0.75rem;
+                padding-bottom: 0.75rem;
+                background-color: #e2e8f0; 
+                border-top: 1px solid #e2e8f0; 
+            }
+            #tx-history-container table tbody td[data-label="Data"]::before {
+                
+                content: 'Data:';
+                font-weight: 600;
+                color: #64748b;
+                margin-right: 0.5rem;
+            }
+
+            #tx-history-container td.hidden[data-label="Timestamp"] {
+                display: none;
+            }
+
+            #tx-history-container td.hidden[data-label="Amount"] {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100">
+    <div class="container max-w-7xl mx-auto p-4 md:p-8">
+        
+        <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-300">
+            <h1 class="text-2xl font-bold text-blue-600">RapidWire Explorer</h1>
+            <a href="explorer.html" class="text-sm font-medium text-blue-600 hover:underline">
+                &larr; Back to Explorer
+            </a>
+        </header>
+
+        
+        <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-8">
+            <h2 class="text-lg font-semibold text-slate-500 mb-3">Account</h2>
+            <div id="address-header-container" class="flex items-center">
+                <code id="address-header" class="text-xl font-mono text-slate-900 break-all">
+                    Loading...
+                </code>
+            </div>
+        </div>
+
+        
+        <div class="lg:grid lg:grid-cols-3 lg:gap-8">
+            
+            
+            <div class="lg:col-span-1 space-y-8">
+                <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200">
+                    <h3 class="text-xl font-semibold mb-6 border-b pb-3">Overview</h3>
+                    <div id="overview-container" class="space-y-5">
+                        <p class="text-slate-500 italic">Loading overview...</p>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="lg:col-span-2 mt-8 lg:mt-0">
+                
+                <div class="bg-white rounded-lg shadow-md border border-slate-200">
+                    
+                    <div class="flex border-b border-slate-300">
+                        <button id="tab-balances-btn" class="tab-button active py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('balances')">
+                            Balances
+                        </button>
+                        <button id="tab-stakes-btn" class="tab-button py-4 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800" onclick="switchTab('stakes')">
+                            Staked
+                        </button>
+                    </div>
+
+                    
+                    <div id="tab-content">
+                        
+                        <div id="tab-balances" class="tab-panel tab-panel-scroll">
+                            <div id="balances-container" class="divide-y divide-slate-200">
+                                <p class="text-slate-500 italic col-span-full p-6">Loading balances...</p>
+                            </div>
+                        </div>
+
+                        
+                        <div id="tab-stakes" class="tab-panel tab-panel-scroll hidden">
+                            <div id="stakes-container" class="divide-y divide-slate-200">
+                                <p class="text-slate-500 italic col-span-full p-6">Loading stakes...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div> 
+
+        
+        <div class="mt-12">
+            <h3 class="text-2xl font-semibold mb-4 text-slate-800">Transaction History</h3>
+            <div id="tx-history-container" class="bg-white rounded-lg shadow-md border border-slate-200 overflow-x-auto md:overflow-x-visible">
+                <p class="text-slate-500 italic p-6">Loading transaction history...</p>
+            </div>
+            <div class="flex justify-between items-center mt-10">
+            <button id="prevButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                &larr; Previous
+            </button>
+            <div id="pageInfo" class="text-sm text-slate-600">
+                Page 1
+            </div>
+            <button id="nextButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                Next &rarr;
+            </button>
+        </div>
+        </div>
+    </div>
+
+<script src="univ.js"></script>
+<script>
+    const LIMIT = 20;
+    let currentPage = 1;
+
+    const prevButton = document.getElementById('prevButton');
+    const nextButton = document.getElementById('nextButton');
+    const pageInfo = document.getElementById('pageInfo');
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('active');
+        });
+
+        document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        document.getElementById(`tab-${tabName}-btn`).classList.add('active');
+    }
+
+    async function getCurrency(currencyId) {
+        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+    }
+
+    function displayOverview(stats) {
+        const container = document.getElementById('overview-container');
+        
+        const formatDt = (timestamp) => {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp * 1000);
+            return `${date.toLocaleString()}`;
+        };
+
+        container.innerHTML = `
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-medium">Transactions</span>
+                <span class="font-mono font-semibold text-slate-800">${stats.total_transactions}</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-medium">First transaction</span>
+                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.first_transaction_timestamp)}</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-slate-500 font-medium">Last transaction</span>
+                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.last_transaction_timestamp)}</span>
+            </div>
+        `;
+    }
+
+    async function displayTransactions(transactionsData, userId) {
+        const container = document.getElementById('tx-history-container');
+        if (transactionsData.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 italic p-6">No transaction history found for this address.</p>';
+            return;
+        }
+
+        const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
+        const currencies = await Promise.all(currencyPromises);
+
+        const otherPartyLinks = await Promise.all(transactionsData.map(tx => {
+            const otherPartyId = tx.source_id == userId ? tx.dest_id : tx.source_id;
+            return formatUserLink(otherPartyId);
+        }));
+
+        let tableHTML = `
+            <table class="w-full">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tx ID</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Timestamp</th>
+                        
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">From / To</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Data</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 md:divide-y-0">
+        `;
+        
+        transactionsData.forEach((tx, index) => {
+            const currency = currencies[index];
+            const isOut = tx.source_id == userId;
+            const otherPartyLink = otherPartyLinks[index];
+            const amountClass = isOut ? 'text-red-600' : 'text-green-600';
+            const amountSign = isOut ? '-' : '+';
+            const timestampStr = new Date(tx.timestamp * 1000).toLocaleString();
+            const fromToText = isOut ? 'To' : 'From';
+            const amountHTML = `${amountSign} ${formatAmount(tx.amount, networkDecimals)} <span class="text-slate-500 font-normal">${currency.symbol}</span>`;
+
+            tableHTML += `
+                <tr class="md:table-row">
+                    
+                    <td data-label="Tx ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
+                        
+                        <div class="md:hidden flex justify-between items-center w-full">
+                            <a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a>
+                            <span class="text-sm text-slate-600 whitespace-nowrap font-sans">${timestampStr}</span>
+                        </div>
+                        
+                        <a href="transaction.html?id=${tx.transaction_id}" class="hidden md:inline">${tx.transaction_id}</a>
+                    </td>
+                    
+                    
+                    <td data-label="Timestamp" class="p-4 text-sm text-slate-600 whitespace-nowrap hidden md:table-cell">${timestampStr}</td>
+                    
+                    
+
+                    
+                    <td data-label="From / To" class="p-4 md:table-cell">
+                        
+                        <div class="md:hidden flex justify-between items-center w-full">
+                            <div><span class="text-sm text-slate-500">${fromToText}:</span> ${otherPartyLink}</div>
+                            <div class="font-mono text-lg font-semibold ${amountClass} ml-4">
+                                ${amountHTML}
+                            </div>
+                        </div>
+                        
+                        <span class="hidden md:inline">${otherPartyLink}</span>
+                    </td>
+                    
+                    
+                    <td data-label="Amount" class="p-4 font-mono text-sm font-semibold ${amountClass} hidden md:table-cell">
+                        ${amountHTML}
+                    </td>
+                    
+                    
+                    <td data-label="Data" class="p-4 font-mono text-sm text-slate-500 md:table-cell">
+                        ${tx.input_data || '—'}
+                    </td>
+                </tr>
+            `;
+        });
+        container.innerHTML = tableHTML + '</tbody></table>';
+    }
+
+    async function displayBalances(userId) {
+        const container = document.getElementById('balances-container');
+        try {
+            const response = await fetch(`${API_BASE_URL}/balance/${userId}`);
+            if (!response.ok) throw new Error('Failed to fetch balances.');
+            const balances = await response.json();
+
+            if (balances.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 italic col-span-full p-6">No balances found for this address.</p>';
+                return;
+            }
+
+            let listHTML = '';
+            balances.forEach(bal => {
+                listHTML += `
+                <div class="flex justify-between items-center p-6 hover:bg-slate-50">
+                    <div class="flex items-center">
+                        <div>
+                            <a href="currency.html?symbol=${bal.currency.symbol}" class="font-semibold text-lg text-blue-600 hover:underline">${bal.currency.name}</a>
+                        </div>
+                    </div>
+                    <div class_content="text-right text-2xl font-bold font-mono text-slate-700">
+                        ${formatAmount(bal.amount, networkDecimals)} 
+                        <span class="text-lg font-bold font-mono text-slate-500 ml-1">${bal.currency.symbol}</span>
+                    </div>
+                </div>
+                `;
+            });
+            container.innerHTML = listHTML;
+        } catch (error) {
+            container.innerHTML = `<p class="text-red-600 col-span-full p-6">Error: ${error.message}</p>`;
+        }
+    }
+
+    async function displayStakes(userId) {
+        const container = document.getElementById('stakes-container');
+        try {
+            const response = await fetch(`${API_BASE_URL}/stakes/${userId}`);
+            if (!response.ok) throw new Error('Failed to fetch stakes.');
+            const stakes = await response.json();
+
+            if (stakes.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 italic col-span-full p-6">No active stakes found for this address.</p>';
+                return;
+            }
+
+            let listHTML = '';
+            stakes.forEach(s => {
+                listHTML += `
+                <div class="flex justify-between items-center p-6 hover:bg-slate-50">
+                    <div class="flex items-center">
+                        <div>
+                            <div class="font-semibold text-lg text-slate-900">${s.currency.name}</div>
+                            <a href="currency.html?symbol=${s.currency.symbol}" class="text-sm text-blue-600 hover:underline font-mono">${s.currency.symbol}</a>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold font-mono text-slate-900">
+                            ${formatAmount(s.stake.amount, networkDecimals)}
+                            <span class="text-lg font-bold font-mono text-slate-500 ml-1">${s.currency.symbol}</span>
+                        </div>
+                        <div class="text-xs text-slate-500 mt-1">
+                            Rate: ${(s.currency.daily_interest_rate / 10000).toFixed(4)}% daily
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+            container.innerHTML = listHTML;
+        } catch (error) {
+            container.innerHTML = `<p class="text-red-600 col-span-full p-6">Error: ${error.message}</p>`;
+        }
+    }
+
+    async function fetchAddressDetails(userId, page = 1) {
+        currentPage = page;
+        pageInfo.textContent = `Page: ${currentPage}`;
+        prevButton.disabled = (currentPage === 1);
+        const header = document.getElementById('address-header');
+        try {
+            await getConfig();
+            
+            const username = await getUserName(userId);
+            if (username) {
+                header.innerHTML = `
+                    <span class="text-3xl mr-4">👤</span>
+                    <div>
+                        <div class="text-2xl font-mono font-semibold text-slate-900">${username}</div>
+                        <div class="text-md font-mono text-slate-600">${userId}</div>
+                    </div>`;
+            } else {
+                header.textContent = `${userId}`;
+            }
+
+            const [statsResponse, txsResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/user/${userId}/stats`),
+                fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&page=${currentPage}&limit=${LIMIT}`)
+            ]);
+
+            if (!statsResponse.ok) throw new Error('Failed to fetch address stats.');
+            const statsData = await statsResponse.json();
+            displayOverview(statsData);
+
+            if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+            const txsData = await txsResponse.json();
+            
+            if(currentPage == 1) {
+                displayBalances(userId);
+                displayStakes(userId);
+            }
+            await displayTransactions(txsData, userId);
+            nextButton.disabled = (txsData.length < LIMIT);
+
+        } catch (error) {
+            document.getElementById('overview-container').innerHTML = `<p class="text-red-600 p-6">Error: ${error.message}</p>`;
+            document.getElementById('tx-history-container').innerHTML = `<p class="text-red-600 p-6">Error: ${error.message}</p>`;
+            header.textContent = `Error loading details for ${userId}`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const userId = new URLSearchParams(window.location.search).get('user_id');
+        if (userId) {
+            fetchAddressDetails(userId, 1);
+            prevButton.addEventListener('click', () => { if (currentPage > 1) fetchAddressDetails(userId, currentPage - 1); });
+            nextButton.addEventListener('click', () => fetchAddressDetails(userId, currentPage + 1));
+        } else {
+            document.getElementById('address-header').innerHTML = '<span class="text-red-600">No User ID provided.</span>';
+        }
+    });
+</script>
+</body>
+</html>

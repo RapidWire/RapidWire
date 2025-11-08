@@ -5,10 +5,11 @@ from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
 import asteval
 from decimal import Decimal
+import hashlib
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel
+from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel
 from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
 from .exceptions import (
     UserNotFound,
@@ -32,6 +33,8 @@ CONTRACT_METHOD_COSTS = {
     'pay_claim': 5,
     'cancel_claim': 2,
     'execute_contract': 15,
+    'get_variable': 1,
+    'set_variable': 3,
 }
 
 
@@ -44,41 +47,41 @@ class ContractAPI:
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
 
-    def get_transaction(self, tx_id: int) -> Optional[dict]:
+    def get_transaction(self, tx_id: int) -> Optional[Transaction]:
         tx = self.core.Transactions.get(tx_id)
-        return tx.dict() if tx else None
+        return tx if tx else None
 
-    def transfer(self, source: int, dest: int, currency: int, amount: int) -> dict:
+    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transaction:
         if source != self.tx.dest:
             raise PermissionError("Contract can only initiate transfers from its own account.")
         new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
-        return new_tx.dict()
+        return new_tx
 
-    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[dict]:
+    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transaction]:
         txs = self.core.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
-        return [tx.dict() for tx in txs]
+        return txs
 
-    def get_currency(self, currency_id: int) -> Optional[dict]:
+    def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
-        return curr.dict() if curr else None
+        return curr if curr else None
 
-    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> dict:
+    def create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None) -> Claim:
         claim = self.core.Claims.create(claimant, payer, currency, amount, desc)
-        return claim.dict()
+        return claim
 
-    def get_claim(self, claim_id: int) -> Optional[dict]:
+    def get_claim(self, claim_id: int) -> Optional[Claim]:
         claim = self.core.Claims.get(claim_id)
-        return claim.dict() if claim else None
+        return claim if claim else None
     
-    def pay_claim(self, claim_id: int, payer_id: int) -> dict:
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transaction:
         tx, _ = self.core.pay_claim(claim_id, payer_id)
-        return tx.dict()
+        return tx
 
-    def cancel_claim(self, claim_id: int, user_id: int) -> dict:
+    def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.core.cancel_claim(claim_id, user_id)
-        return claim.dict()
+        return claim
 
-    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[dict, Optional[str]]:
+    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
         source_id = self.tx.dest
 
         callee_contract = self.core.Contracts.get(destination_id)
@@ -95,7 +98,30 @@ class ContractAPI:
             input_data=input_data,
             chain_context=self.chain_context
         )
-        return new_tx.dict(), message
+        return new_tx, message
+
+    def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
+        if user_id is None:
+            user_id = self.tx.dest
+        variable = self.core.ContractVariables.get(user_id, key)
+        return variable.value if variable else None
+
+    def set_variable(self, key: bytes, value: bytes):
+        if len(key) > 8:
+            raise ValueError("Key must be 8 bytes or less.")
+        if len(value) > 16:
+            raise ValueError("Value must be 16 bytes or less.")
+
+        user_variables = self.core.ContractVariables.get_all_for_user(self.tx.dest)
+        if len(user_variables) >= 2000:
+             # Check if the key already exists, if so, it's an update, not an insert
+            if not any(v.key == key for v in user_variables):
+                raise ValueError("Maximum of 2000 variables reached for this user.")
+
+        self.core.ContractVariables.set(self.tx.dest, key, value)
+
+    def cancel(self, reason: str):
+        raise TransactionCanceledByContract(reason)
 
 
 class RapidWire:
@@ -110,6 +136,7 @@ class RapidWire:
         self.Stakes = StakeModel(self.db)
         self.LiquidityPools = LiquidityPoolModel(self.db)
         self.LiquidityProviders = LiquidityProviderModel(self.db)
+        self.ContractVariables = ContractVariableModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
@@ -130,7 +157,8 @@ class RapidWire:
             return stake
 
         days_passed = elapsed_seconds // SECONDS_IN_A_DAY
-        reward = int(Decimal(stake.amount) * (Decimal(1) + currency.daily_interest_rate)**Decimal(days_passed) - Decimal(stake.amount))
+        daily_rate = Decimal(currency.daily_interest_rate) / Decimal(10000)
+        reward = int(Decimal(stake.amount) * (Decimal(1) + daily_rate)**Decimal(days_passed) - Decimal(stake.amount))
 
         if reward > 0:
             new_amount = stake.amount + reward
@@ -138,7 +166,7 @@ class RapidWire:
             # We need to create a transaction for the reward
             cursor.execute(
                 """
-                INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
@@ -203,7 +231,7 @@ class RapidWire:
 
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (source_id, destination_id, currency_id, amount, input_data, int(time()))
@@ -243,14 +271,42 @@ class RapidWire:
 
                         network_config = Config
 
-                        user_symbols = {
-                            'api': api_handler,
-                            'tx': transaction_context,
-                            'network_config': network_config,
-                            'Cancel': TransactionCanceledByContract
+                        symtable = {
+                            'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
+                            'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
+                            'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
+                            'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
+                            'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
                         }
 
-                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, user_symbols=user_symbols, nested_symtable=True, config=contract_config)
+                        symtable.update({
+                            'get_balance': api_handler.get_balance,
+                            'get_transaction': api_handler.get_transaction,
+                            'transfer': api_handler.transfer,
+                            'search_transactions': api_handler.search_transactions,
+                            'get_currency': api_handler.get_currency,
+                            'create_claim': api_handler.create_claim,
+                            'get_claim': api_handler.get_claim,
+                            'pay_claim': api_handler.pay_claim,
+                            'cancel_claim': api_handler.cancel_claim,
+                            'execute_contract': api_handler.execute_contract,
+                            'get_variable': api_handler.get_variable,
+                            'set_variable': api_handler.set_variable,
+                            'get_transaction': api_handler.get_transaction,
+                            'network_max_cost': network_config.Contract.max_cost,
+
+                            'tx': TransactionContext(
+                                source=source_id,
+                                dest=destination_id,
+                                currency=currency_id,
+                                amount=amount,
+                                input_data=input_data,
+                                transaction_id=transaction_id
+                            ),
+                            'Cancel': TransactionCanceledByContract,
+                        })
+
+                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=contract_config)
 
                         try:
                             aeval.eval(contract.script, show_errors=False)
@@ -281,7 +337,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: Decimal) -> Tuple[Currency, Optional[Transaction]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transaction]]:
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
         
         initial_tx = None
@@ -314,6 +370,9 @@ class RapidWire:
         
         self.Currencies.delete(currency_id)
         return transactions
+
+    def cancel_delete_request(self, currency_id: int):
+        self.Currencies.cancel_delete_request(currency_id)
 
     def pay_claim(self, claim_id: int, payer_id: int) -> Tuple[Transaction, Optional[str]]:
         claim = self.Claims.get(claim_id)
@@ -372,7 +431,7 @@ class RapidWire:
                 # Create a transaction for the deposit
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
@@ -404,7 +463,7 @@ class RapidWire:
                 # Create a transaction for the withdrawal
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     """,
                     (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
@@ -414,7 +473,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake withdrawal: {err}")
 
-    def request_interest_rate_change(self, currency_id: int, new_rate: Decimal, user_id: int) -> Currency:
+    def request_interest_rate_change(self, currency_id: int, new_rate: int, user_id: int) -> Currency:
         currency = self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency not found.")
@@ -439,6 +498,8 @@ class RapidWire:
         return self.Currencies.apply_rate_change(currency)
 
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
+        if len(script) > self.Config.Contract.max_script_length:
+            raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
         if max_cost is None:
             max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
@@ -486,7 +547,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
@@ -524,7 +585,7 @@ class RapidWire:
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
@@ -534,60 +595,113 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
 
-    def get_swap_rate(self, from_symbol: str, to_symbol: str, amount: int) -> int:
-        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
-        if not pool:
-            raise ValueError("Liquidity pool not found.")
-
+    def find_swap_route(self, from_symbol: str, to_symbol: str) -> List[LiquidityPool]:
         from_currency = self.Currencies.get_by_symbol(from_symbol)
+        to_currency = self.Currencies.get_by_symbol(to_symbol)
+        if not from_currency or not to_currency:
+            raise CurrencyNotFound("One of the currencies for the swap was not found.")
 
-        if from_currency.currency_id == pool.currency_a_id:
-            reserve_in = pool.reserve_a
-            reserve_out = pool.reserve_b
-        elif from_currency.currency_id == pool.currency_b_id:
-            reserve_in = pool.reserve_b
-            reserve_out = pool.reserve_a
-        else:
-            raise ValueError("Invalid currency for this pool.")
+        all_pools = self.LiquidityPools.get_all()
 
-        fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
-        amount_in_with_fee = Decimal(amount) * (Decimal(1) - fee_rate)
-        return int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+        # Quick check for a direct pool
+        direct_pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
+        if direct_pool:
+            return [direct_pool]
+
+        # Graph representation: currency_id -> list of (neighbor_currency_id, pool)
+        graph: dict[int, list[tuple[int, LiquidityPool]]] = {}
+        for pool in all_pools:
+            if pool.currency_a_id not in graph:
+                graph[pool.currency_a_id] = []
+            if pool.currency_b_id not in graph:
+                graph[pool.currency_b_id] = []
+            graph[pool.currency_a_id].append((pool.currency_b_id, pool))
+            graph[pool.currency_b_id].append((pool.currency_a_id, pool))
+
+        # BFS to find the shortest path
+        queue = [(from_currency.currency_id, [])]
+        visited = {from_currency.currency_id}
+
+        while queue:
+            current_currency_id, path = queue.pop(0)
+
+            if current_currency_id == to_currency.currency_id:
+                return path
+
+            if current_currency_id in graph:
+                for neighbor_currency_id, pool in graph[current_currency_id]:
+                    if neighbor_currency_id not in visited:
+                        visited.add(neighbor_currency_id)
+                        new_path = path + [pool]
+                        queue.append((neighbor_currency_id, new_path))
+
+        raise ValueError("No swap route found between the specified currencies.")
+
+    def get_swap_rate(self, amount_in: int, route: List[LiquidityPool], from_currency_id: int) -> int:
+        current_amount = amount_in
+        current_currency_id = from_currency_id
+
+        for pool in route:
+            if current_currency_id == pool.currency_a_id:
+                reserve_in = pool.reserve_a
+                reserve_out = pool.reserve_b
+                current_currency_id = pool.currency_b_id
+            elif current_currency_id == pool.currency_b_id:
+                reserve_in = pool.reserve_b
+                reserve_out = pool.reserve_a
+                current_currency_id = pool.currency_a_id
+            else:
+                raise ValueError("Invalid currency for this pool in the route.")
+
+            fee_rate = Decimal(self.Config.Swap.fee) / Decimal(10000)
+            amount_in_with_fee = Decimal(current_amount) * (Decimal(1) - fee_rate)
+            current_amount = int(amount_in_with_fee * Decimal(reserve_out) / (Decimal(reserve_in) + amount_in_with_fee))
+
+        return current_amount
 
     def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
-        amount_out = self.get_swap_rate(from_symbol, to_symbol, amount)
-        pool = self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
-
+        route = self.find_swap_route(from_symbol, to_symbol)
         from_currency = self.Currencies.get_by_symbol(from_symbol)
 
-        if from_currency.currency_id == pool.currency_a_id:
-            to_currency_id = pool.currency_b_id
-            reserve_a_change = amount
-            reserve_b_change = -amount_out
-        else:
-            to_currency_id = pool.currency_a_id
-            reserve_a_change = -amount_out
-            reserve_b_change = amount
+        amount_out = self.get_swap_rate(amount, route, from_currency.currency_id)
+
+        current_currency_id = from_currency.currency_id
+        amount_in = amount
 
         try:
             with self.db as cursor:
                 user = self.get_user(user_id)
-                source_balance = user.get_balance(from_currency.currency_id)
+                source_balance = user.get_balance(current_currency_id)
                 if source_balance.amount < amount:
                     raise InsufficientFunds("Insufficient funds for swap.")
-                user._update_balance(cursor, from_currency.currency_id, -amount)
-                user._update_balance(cursor, to_currency_id, amount_out)
-                self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+                user._update_balance(cursor, current_currency_id, -amount)
+
+                for i, pool in enumerate(route):
+                    if current_currency_id == pool.currency_a_id:
+                        next_currency_id = pool.currency_b_id
+                        reserve_a_change = amount_in
+                        reserve_b_change = -self.get_swap_rate(amount_in, [pool], current_currency_id)
+                    else:
+                        next_currency_id = pool.currency_a_id
+                        reserve_a_change = -self.get_swap_rate(amount_in, [pool], current_currency_id)
+                        reserve_b_change = amount_in
+
+                    self.LiquidityPools.update_reserves(cursor, pool.pool_id, reserve_a_change, reserve_b_change, 0)
+
+                    amount_in = abs(reserve_a_change) if current_currency_id == pool.currency_b_id else abs(reserve_b_change)
+                    current_currency_id = next_currency_id
+
+                user._update_balance(cursor, current_currency_id, amount_out)
 
                 current_time = int(time())
                 cursor.execute(
                     """
-                    INSERT INTO transaction (source, dest, currency_id, amount, inputData, timestamp)
+                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
                     """,
                     (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
-                     SYSTEM_USER_ID, user_id, to_currency_id, amount_out, "swap", current_time)
+                     SYSTEM_USER_ID, user_id, current_currency_id, amount_out, "swap", current_time)
                 )
-            return amount_out, to_currency_id
+            return amount_out, current_currency_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during swap: {err}")

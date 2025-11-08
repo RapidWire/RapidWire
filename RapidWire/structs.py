@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, Literal
 from decimal import Decimal
 
@@ -10,9 +10,15 @@ class Currency(BaseModel):
     supply: int
     minting_renounced: bool
     delete_requested_at: Optional[int] = None
-    daily_interest_rate: Decimal
-    new_daily_interest_rate: Optional[Decimal] = None
+    daily_interest_rate: int
+    new_daily_interest_rate: Optional[int] = None
     rate_change_requested_at: Optional[int] = None
+
+    @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')
+    def serialize_integers(self, value: int|None, _info):
+        if value is None:
+            return value
+        return str(value)
 
 class Balance(BaseModel):
     user_id: int
@@ -21,12 +27,16 @@ class Balance(BaseModel):
 
 class Transaction(BaseModel):
     transaction_id: int
-    source_id: int = Field(alias="source")
-    destination_id: int = Field(alias="dest")
+    source_id: int
+    dest_id: int
     currency_id: int
     amount: int
-    input_data: Optional[str] = Field(None, alias="inputData")
+    input_data: Optional[str]
     timestamp: int
+
+    @field_serializer('transaction_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class APIKey(BaseModel):
     user_id: int
@@ -47,6 +57,10 @@ class Claim(BaseModel):
     status: Literal['pending', 'paid', 'canceled']
     created_at: int
     description: Optional[str] = None
+
+    @field_serializer('claim_id', 'claimant_id', 'payer_id', 'currency_id', 'amount', 'created_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class Stake(BaseModel):
     user_id: int
@@ -79,3 +93,8 @@ class LiquidityProvider(BaseModel):
     pool_id: int
     user_id: int
     shares: int
+
+class ContractVariable(BaseModel):
+    user_id: int
+    key: bytes
+    value: bytes

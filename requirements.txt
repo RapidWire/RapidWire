@@ -1,4 +1,4 @@
-discord.py
+httpx
 mysql-connector-python
 asteval
 pydantic

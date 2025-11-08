@@ -1,7 +1,8 @@
-config.py
-!/RapidWire/config.py
+/config.py
 .env*
 .vscode
+
+*.log
 
 __pycache__/
 *.pyc
