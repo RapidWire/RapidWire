@@ -148,6 +148,18 @@ CREATE TABLE `contract_variables` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notification_permissions`
+--
+
+CREATE TABLE `notification_permissions` (
+  `user_id` bigint UNSIGNED NOT NULL,
+  `allowed_user_id` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 --
 -- Indexes for dumped tables
 --
@@ -222,6 +234,12 @@ ALTER TABLE `liquidity_provider`
 --
 ALTER TABLE `contract_variables`
   ADD PRIMARY KEY (`user_id`, `key`);
+
+--
+-- Indexes for table `notification_permissions`
+--
+ALTER TABLE `notification_permissions`
+  ADD PRIMARY KEY (`user_id`,`allowed_user_id`);
 
 --
 -- AUTO_INCREMENT for dumped tables

@@ -9,7 +9,7 @@ import hashlib
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel
+from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel, NotificationPermissionModel
 from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
 from .exceptions import (
     UserNotFound,
@@ -137,6 +137,7 @@ class RapidWire:
         self.LiquidityPools = LiquidityPoolModel(self.db)
         self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.ContractVariables = ContractVariableModel(self.db)
+        self.NotificationPermissions = NotificationPermissionModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:

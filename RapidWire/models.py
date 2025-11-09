@@ -6,7 +6,7 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider, ContractVariable
+from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider, ContractVariable, NotificationPermission
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -299,6 +299,12 @@ class ClaimModel:
             results = cursor.fetchall()
             return [Claim(**row) for row in results]
 
+    def get_claims_created_after(self, timestamp: int) -> List[Claim]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM claims WHERE created_at > %s", (timestamp,))
+            results = cursor.fetchall()
+            return [Claim(**row) for row in results]
+
     def create(self, claimant_id: int, payer_id: int, currency_id: int, amount: int, description: Optional[str]) -> Claim:
         with self.db as cursor:
             cursor.execute(
@@ -477,3 +483,32 @@ class ContractVariableModel:
             cursor.execute("SELECT * FROM contract_variables WHERE user_id = %s", (user_id,))
             results = cursor.fetchall()
             return [ContractVariable(**row) for row in results]
+
+class NotificationPermissionModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def add(self, user_id: int, allowed_user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "INSERT INTO notification_permissions (user_id, allowed_user_id) VALUES (%s, %s) ON DUPLICATE KEY UPDATE user_id = user_id",
+                (user_id, allowed_user_id)
+            )
+
+    def remove(self, user_id: int, allowed_user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "DELETE FROM notification_permissions WHERE user_id = %s AND allowed_user_id = %s",
+                (user_id, allowed_user_id)
+            )
+
+    def get_for_user(self, user_id: int) -> List[NotificationPermission]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM notification_permissions WHERE user_id = %s", (user_id,))
+            results = cursor.fetchall()
+            return [NotificationPermission(**row) for row in results]
+
+    def check(self, user_id: int, allowed_user_id: int) -> bool:
+        with self.db as cursor:
+            cursor.execute("SELECT 1 FROM notification_permissions WHERE user_id = %s AND allowed_user_id = %s", (user_id, allowed_user_id))
+            return cursor.fetchone() is not None
