@@ -133,8 +133,8 @@ async def balance(interaction: discord.Interaction, user: Optional[User] = None)
         await interaction.followup.send(embed=create_error_embed(f"残高の取得中に予期せぬエラーが発生しました。\n`{e}`"))
 
 @app_commands.command(name="transfer", description="指定したユーザーに通貨を送金します。")
-@app_commands.describe(user="送金先のユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)", input_data="コントラクトに渡すデータ")
-async def transfer(interaction: discord.Interaction, user: User, amount: float, symbol: Optional[str] = None, input_data: Optional[str] = None):
+@app_commands.describe(user="送金先のユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
+async def transfer(interaction: discord.Interaction, user: User, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     
     if amount <= 0:
@@ -149,29 +149,38 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
 
-        contract = Rapid.Contracts.get(user.id)
-        if contract and contract.script:
-            Rapid.execute_contract(
-                caller_id=interaction.user.id,
-                contract_owner_id=user.id,
-                input_data=input_data
-            )
-            desc = f"{user.mention} のコントラクトを実行しました。"
-            await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了"))
-        else:
-            tx = Rapid.transfer(
-                source_id=interaction.user.id,
-                destination_id=user.id,
-                currency_id=currency.currency_id,
-                amount=int_amount
-            )
-            desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。\n\n**転送ID:** `{tx.transfer_id}`"
-            await interaction.followup.send(embed=create_success_embed(desc, title="送金完了"))
+        tx = Rapid.transfer(
+            source_id=interaction.user.id,
+            destination_id=user.id,
+            currency_id=currency.currency_id,
+            amount=int_amount
+        )
+        desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。\n\n**転送ID:** `{tx.transfer_id}`"
+        await interaction.followup.send(embed=create_success_embed(desc, title="送金完了"))
 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
     except exceptions.TransactionCanceledByContract as e:
         await interaction.followup.send(embed=create_error_embed(f"送金は受信者のコントラクトによってキャンセルされました。\n```{e}```"))
+    except exceptions.ContractError as e:
+        await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
+    except exceptions.TransactionError as e:
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+
+@app_commands.command(name="execute_contract", description="指定したユーザーのコントラクトを実行します。")
+@app_commands.describe(user="コントラクトの所有者", input_data="コントラクトに渡すデータ")
+async def execute_contract(interaction: discord.Interaction, user: User, input_data: Optional[str] = None):
+    await interaction.response.defer(thinking=True)
+    try:
+        execution_id = Rapid.execute_contract(
+            caller_id=interaction.user.id,
+            contract_owner_id=user.id,
+            input_data=input_data
+        )
+        desc = f"{user.mention} のコントラクトを実行しました。\n\n**実行ID:** `{execution_id}`"
+        await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了"))
     except exceptions.ContractError as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
     except exceptions.TransactionError as e:
@@ -846,6 +855,7 @@ async def notification_list(interaction: discord.Interaction):
 def setup(tree: app_commands.CommandTree):
     tree.add_command(balance)
     tree.add_command(transfer)
+    tree.add_command(execute_contract)
     tree.add_command(history)
     tree.add_command(currency_group)
     tree.add_command(stake_group)
