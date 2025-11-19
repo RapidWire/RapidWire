@@ -46,6 +46,49 @@ class SwapConfirmationView(discord.ui.View):
         await interaction.response.edit_message(embed=create_error_embed("スワップはキャンセルされました。"), view=None)
         self.stop()
 
+class ClaimNotificationView(discord.ui.View):
+    def __init__(self, claim_id: int, rapid_instance: RapidWire):
+        super().__init__(timeout=None)
+        self.claim_id = claim_id
+        self.rapid = rapid_instance
+
+    @discord.ui.button(label="承認", style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            tx, _ = self.rapid.pay_claim(self.claim_id, interaction.user.id)
+            desc = f"請求ID `{self.claim_id}` の支払いが完了しました。\n**トランザクションID:** `{tx.transaction_id}`"
+            await interaction.response.edit_message(embed=create_success_embed(desc, "支払い完了"), view=None)
+        except Exception as e:
+            await interaction.response.edit_message(embed=create_error_embed(f"支払処理中にエラーが発生しました: {e}"), view=None)
+
+    @discord.ui.button(label="拒否", style=discord.ButtonStyle.red)
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            claim = self.rapid.cancel_claim(self.claim_id, interaction.user.id)
+            desc = f"請求ID `{self.claim_id}` を拒否しました。"
+            await interaction.response.edit_message(embed=create_success_embed(desc, "請求拒否"), view=None)
+        except Exception as e:
+            await interaction.response.edit_message(embed=create_error_embed(f"拒否処理中にエラーが発生しました: {e}"), view=None)
+
+    @discord.ui.button(label="このユーザーからの通知を停止", style=discord.ButtonStyle.grey)
+    async def stop_notifications(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            claim = self.rapid.Claims.get(self.claim_id)
+            if claim:
+                self.rapid.NotificationPermissions.remove(interaction.user.id, claim.claimant_id)
+                await interaction.response.send_message("このユーザーからの通知を停止しました。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"通知停止中にエラーが発生しました: {e}", ephemeral=True)
+
+def create_claim_notification_embed(claim: structs.Claim, claimant: User, currency: structs.Currency) -> Embed:
+    embed = Embed(title="請求の通知", color=Color.blue())
+    embed.add_field(name="請求者", value=claimant.mention, inline=False)
+    embed.add_field(name="金額", value=f"`{format_amount(claim.amount)} {currency.symbol}`", inline=False)
+    if claim.description:
+        embed.add_field(name="説明", value=claim.description, inline=False)
+    embed.set_footer(text=f"請求ID: {claim.claim_id}")
+    return embed
+
 def create_error_embed(description: str) -> Embed:
     return Embed(title="エラー", description=description, color=Color.red())
 
@@ -743,6 +786,51 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
         if not interaction.is_expired():
             await interaction.followup.send(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"))
 
+notification_group = app_commands.Group(name="notification", description="請求通知に関わるコマンド")
+
+@notification_group.command(name="allow", description="指定したユーザーからの請求通知を許可します。")
+@app_commands.describe(user="許可するユーザー")
+async def notification_allow(interaction: discord.Interaction, user: User):
+    await interaction.response.defer(thinking=True)
+    try:
+        Rapid.NotificationPermissions.add(interaction.user.id, user.id)
+        await interaction.followup.send(embed=create_success_embed(f"{user.mention} からに請求が来た際にDMで通知を送ります。"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
+
+@notification_group.command(name="deny", description="指定したユーザーからの請求通知を拒否します。")
+@app_commands.describe(user="拒否するユーザー")
+async def notification_deny(interaction: discord.Interaction, user: User):
+    await interaction.response.defer(thinking=True)
+    try:
+        Rapid.NotificationPermissions.remove(interaction.user.id, user.id)
+        await interaction.followup.send(embed=create_success_embed(f"{user.mention} からの請求通知をオフにしました。"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
+
+@notification_group.command(name="list", description="請求通知を許可しているユーザーの一覧を表示します。")
+async def notification_list(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    try:
+        permissions = Rapid.NotificationPermissions.get_for_user(interaction.user.id)
+        if not permissions:
+            await interaction.followup.send(embed=create_success_embed("現在、請求通知を許可しているユーザーはいません。"))
+            return
+
+        embed = Embed(title="請求通知許可ユーザー一覧", color=Color.blue())
+        user_mentions = []
+        for p in permissions:
+            try:
+                user = await interaction.client.fetch_user(p.allowed_user_id)
+                user_mentions.append(user.mention)
+            except discord.NotFound:
+                user_mentions.append(f"`{p.allowed_user_id}` (不明なユーザー)")
+
+        embed.description = "\n".join(user_mentions)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
+
 def setup(tree: app_commands.CommandTree):
     tree.add_command(balance)
     tree.add_command(transfer)
@@ -753,3 +841,4 @@ def setup(tree: app_commands.CommandTree):
     tree.add_command(claim_group)
     tree.add_command(lp_group)
     tree.add_command(swap)
+    tree.add_command(notification_group)
