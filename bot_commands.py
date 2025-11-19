@@ -55,8 +55,8 @@ class ClaimNotificationView(discord.ui.View):
     @discord.ui.button(label="承認", style=discord.ButtonStyle.green)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            tx, _ = self.rapid.pay_claim(self.claim_id, interaction.user.id)
-            desc = f"請求ID `{self.claim_id}` の支払いが完了しました。\n**トランザクションID:** `{tx.transaction_id}`"
+            tx = self.rapid.pay_claim(self.claim_id, interaction.user.id)
+            desc = f"請求ID `{self.claim_id}` の支払いが完了しました。\n**転送ID:** `{tx.transfer_id}`"
             await interaction.response.edit_message(embed=create_success_embed(desc, "支払い完了"), view=None)
         except Exception as e:
             await interaction.response.edit_message(embed=create_error_embed(f"支払処理中にエラーが発生しました: {e}"), view=None)
@@ -148,20 +148,25 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
             return
 
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
-        
-        tx, msg = Rapid.transfer(
-            source_id=interaction.user.id,
-            destination_id=user.id,
-            currency_id=currency.currency_id,
-            amount=int_amount,
-            input_data=input_data
-        )
 
-        desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。\n\n**トランザクションID:** `{tx.transaction_id}`"
-        if msg:
-            desc += f"\n\n**コントラクトからのメッセージ:**\n```\n{msg}\n```"
-        
-        await interaction.followup.send(embed=create_success_embed(desc, title="送金完了"))
+        contract = Rapid.Contracts.get(user.id)
+        if contract and contract.script:
+            Rapid.execute_contract(
+                caller_id=interaction.user.id,
+                contract_owner_id=user.id,
+                input_data=input_data
+            )
+            desc = f"{user.mention} のコントラクトを実行しました。"
+            await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了"))
+        else:
+            tx = Rapid.transfer(
+                source_id=interaction.user.id,
+                destination_id=user.id,
+                currency_id=currency.currency_id,
+                amount=int_amount
+            )
+            desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。\n\n**転送ID:** `{tx.transfer_id}`"
+            await interaction.followup.send(embed=create_success_embed(desc, title="送金完了"))
 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
@@ -174,9 +179,9 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
 
-@app_commands.command(name="history", description="取引履歴を表示します。")
+@app_commands.command(name="history", description="転送履歴を表示します。")
 @app_commands.describe(
-    transaction_id="詳細を表示する取引ID (任意)",
+    transfer_id="詳細を表示する転送ID (任意)",
     user="対象ユーザー",
     source="送金元ユーザー",
     destination="送金先ユーザー",
@@ -190,7 +195,7 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 )
 async def history(
     interaction: discord.Interaction,
-    transaction_id: Optional[int] = None,
+    transfer_id: Optional[int] = None,
     user: Optional[User] = None,
     source: Optional[User] = None,
     destination: Optional[User] = None,
@@ -204,24 +209,27 @@ async def history(
 ):
     await interaction.response.defer(thinking=True)
     try:
-        if transaction_id:
-            tx = Rapid.Transactions.get(transaction_id)
+        if transfer_id:
+            tx = Rapid.Transfers.get(transfer_id)
             if not tx:
-                await interaction.followup.send(embed=create_error_embed("指定された取引IDは見つかりませんでした。"))
+                await interaction.followup.send(embed=create_error_embed("指定された転送IDは見つかりませんでした。"))
                 return
 
             currency = Rapid.Currencies.get(tx.currency_id)
             source_user_mention = f"<@{tx.source_id}>" if tx.source_id != SYSTEM_USER_ID else "システム"
             dest_user_mention = f"<@{tx.dest_id}>" if tx.dest_id != SYSTEM_USER_ID else "システム"
             
-            embed = Embed(title=f"取引詳細: ID {tx.transaction_id}", color=Color.blue())
+            embed = Embed(title=f"転送詳細: ID {tx.transfer_id}", color=Color.blue())
             embed.add_field(name="日時", value=f"<t:{tx.timestamp}:F>", inline=False)
             embed.add_field(name="From", value=source_user_mention, inline=True)
             embed.add_field(name="To", value=dest_user_mention, inline=True)
             embed.add_field(name="金額", value=f"`{format_amount(tx.amount)} {currency.symbol if currency else '???'}`", inline=False)
-            if tx.input_data:
-                embed.add_field(name="メモ (Input Data)", value=f"```{tx.input_data}```", inline=False)
             
+            if tx.execution_id:
+                execution = Rapid.Executions.get(tx.execution_id)
+                if execution and execution.input_data:
+                     embed.add_field(name="メモ (Input Data)", value=f"```{execution.input_data}```", inline=False)
+
             await interaction.followup.send(embed=embed)
             return
 
@@ -259,16 +267,16 @@ async def history(
         if max_amount is not None:
             search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
 
-        transactions = Rapid.Transactions.search(**search_params)
+        transfers = Rapid.search_transfers(**search_params)
 
         target_user = user or source or destination or interaction.user
 
-        if not transactions:
-            await interaction.followup.send(embed=create_success_embed(f"指定された条件の取引履歴はありません。", "取引履歴"))
+        if not transfers:
+            await interaction.followup.send(embed=create_success_embed(f"指定された条件の転送履歴はありません。", "転送履歴"))
             return
 
-        embed = Embed(title=f"取引履歴 (ページ {page})", color=Color.blue())
-        for tx in transactions:
+        embed = Embed(title=f"転送履歴 (ページ {page})", color=Color.blue())
+        for tx in transfers:
             currency = Rapid.Currencies.get(tx.currency_id)
             if not currency: continue
 
@@ -286,7 +294,7 @@ async def history(
                     direction_emoji = "📥"
                     direction_text = f"from {source_user_mention}"
 
-            field_name = f"{direction_emoji} | ID: {tx.transaction_id} | <t:{tx.timestamp}:R>"
+            field_name = f"{direction_emoji} | ID: {tx.transfer_id} | <t:{tx.timestamp}:R>"
             field_value = f"`{format_amount(tx.amount)} {currency.symbol}` {direction_text}"
             embed.add_field(name=field_name, value=field_value, inline=False)
         
@@ -319,7 +327,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
         desc += f"総供給量は `{format_amount(new_currency.supply)}` です。\n"
         desc += f"ステーキングの日利は `{daily_interest_rate:.4f}%` です。"
         if tx:
-            desc += f"\n初期供給のトランザクションID: `{tx.transaction_id}`"
+            desc += f"\n初期供給の転送ID: `{tx.transfer_id}`"
 
         await interaction.followup.send(embed=create_success_embed(desc, title="通貨発行成功"))
     except exceptions.DuplicateEntryError:
@@ -635,8 +643,8 @@ async def claim_list(interaction: discord.Interaction):
 async def claim_pay(interaction: discord.Interaction, claim_id: int):
     await interaction.response.defer(thinking=True)
     try:
-        tx, _ = Rapid.pay_claim(claim_id, interaction.user.id)
-        desc = f"請求ID `{claim_id}` の支払いが完了しました。\n**トランザクションID:** `{tx.transaction_id}`"
+        tx = Rapid.pay_claim(claim_id, interaction.user.id)
+        desc = f"請求ID `{claim_id}` の支払いが完了しました。\n**転送ID:** `{tx.transfer_id}`"
         await interaction.followup.send(embed=create_success_embed(desc, "支払い完了"))
     except (ValueError, PermissionError) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))

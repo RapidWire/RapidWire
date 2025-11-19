@@ -194,7 +194,7 @@ class RapidWire:
                     cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
         return cost
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> None:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> int:
         try:
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
@@ -268,7 +268,7 @@ class RapidWire:
                 except Exception as e:
                     self.Executions.update(cursor, execution_id, f"{e.__class__.__name__}: {str(e)}", chain_context.total_cost, 'failed')
                     raise
-
+            return execution_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during contract execution: {err}")
 
