@@ -343,6 +343,10 @@ async def currency_info(interaction: discord.Interaction, symbol: Optional[str] 
     embed.add_field(name="発行者", value=issuer.mention, inline=False)
     embed.add_field(name="総供給量", value=f"`{format_amount(currency.supply)}`", inline=False)
     embed.add_field(name="ステーキング日利", value=f"`{Decimal(currency.daily_interest_rate) / Decimal(100):.4f}%`", inline=False)
+    if currency.new_daily_interest_rate and currency.rate_change_requested_at:
+        embed.add_field(name="次期ステーキング日利", value=f"`{Decimal(currency.new_daily_interest_rate) / Decimal(100):.4f}%`", inline=False)
+        embed.add_field(name="利率変更要求日時", value=f"<t:{currency.rate_change_requested_at}:F>", inline=True)
+
     embed.add_field(name="Mint/利率変更 放棄状態", value="はい" if currency.minting_renounced else "いいえ", inline=True)
     if currency.delete_requested_at:
         embed.add_field(name="削除要求日時", value=f"<t:{currency.delete_requested_at}:F>", inline=True)
