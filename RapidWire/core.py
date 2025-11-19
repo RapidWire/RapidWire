@@ -9,8 +9,16 @@ import hashlib
 
 from .config import Config
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel, NotificationPermissionModel
-from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
+from .models import (
+    UserModel, CurrencyModel, ContractModel, APIKeyModel, ClaimModel,
+    StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel,
+    NotificationPermissionModel, ExecutionModel, TransferModel, ContractHistoryModel,
+    AllowanceModel, AllowanceLogModel
+)
+from .structs import (
+    Currency, Claim, Stake, TransactionContext, ChainContext, LiquidityPool,
+    LiquidityProvider, Transfer
+)
 from .exceptions import (
     UserNotFound,
     CurrencyNotFound,
@@ -47,19 +55,19 @@ class ContractAPI:
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
 
-    def get_transaction(self, tx_id: int) -> Optional[Transaction]:
-        tx = self.core.Transactions.get(tx_id)
-        return tx if tx else None
-
-    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transaction:
+    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transfer:
         if source != self.tx.dest:
             raise PermissionError("Contract can only initiate transfers from its own account.")
-        new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
-        return new_tx
+        return self.core.transfer(source, dest, currency, amount, execution_id=self.tx.execution_id)
 
-    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transaction]:
-        txs = self.core.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
-        return txs
+    def approve(self, spender: int, currency: int, amount: int):
+        self.core.approve(self.tx.dest, spender, currency, amount, execution_id=self.tx.execution_id)
+
+    def transfer_from(self, sender: int, recipient: int, currency: int, amount: int) -> Transfer:
+        return self.core.transfer_from(sender, recipient, currency, amount, self.tx.dest, execution_id=self.tx.execution_id)
+
+    def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
+        return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
 
     def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
@@ -73,15 +81,15 @@ class ContractAPI:
         claim = self.core.Claims.get(claim_id)
         return claim if claim else None
     
-    def pay_claim(self, claim_id: int, payer_id: int) -> Transaction:
-        tx, _ = self.core.pay_claim(claim_id, payer_id)
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transfer:
+        tx = self.core.pay_claim(claim_id, payer_id)
         return tx
 
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.core.cancel_claim(claim_id, user_id)
         return claim
 
-    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
+    def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> None:
         source_id = self.tx.dest
 
         callee_contract = self.core.Contracts.get(destination_id)
@@ -90,15 +98,11 @@ class ContractAPI:
 
         self.chain_context.total_cost += callee_contract.cost
 
-        new_tx, message = self.core.transfer(
-            source_id=source_id,
-            destination_id=destination_id,
-            currency_id=currency_id,
-            amount=amount,
-            input_data=input_data,
-            chain_context=self.chain_context
+        self.core.execute_contract(
+            caller_id=source_id,
+            contract_owner_id=destination_id,
+            input_data=input_data
         )
-        return new_tx, message
 
     def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
         if user_id is None:
@@ -129,7 +133,6 @@ class RapidWire:
         self.connection = mysql.connector.connect(**db_config)
         self.db = DatabaseConnection(self.connection)
         self.Currencies = CurrencyModel(self.db)
-        self.Transactions = TransactionModel(self.db)
         self.Contracts = ContractModel(self.db)
         self.APIKeys = APIKeyModel(self.db)
         self.Claims = ClaimModel(self.db)
@@ -138,6 +141,11 @@ class RapidWire:
         self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.ContractVariables = ContractVariableModel(self.db)
         self.NotificationPermissions = NotificationPermissionModel(self.db)
+        self.Executions = ExecutionModel(self.db)
+        self.Transfers = TransferModel(self.db)
+        self.ContractHistories = ContractHistoryModel(self.db)
+        self.Allowances = AllowanceModel(self.db)
+        self.AllowanceLogs = AllowanceLogModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
@@ -164,14 +172,8 @@ class RapidWire:
         if reward > 0:
             new_amount = stake.amount + reward
             self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
-            # We need to create a transaction for the reward
-            cursor.execute(
-                """
-                INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
-            )
+            # We need to create a transfer for the reward
+            self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, reward)
             # Update the supply
             self.Currencies.update_supply(cursor, currency_id, reward)
             return self.Stakes.get(user_id, currency_id)
@@ -192,24 +194,97 @@ class RapidWire:
                     cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
         return cost
 
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> None:
+        try:
+            with self.db as cursor:
+                execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
+                contract = self.Contracts.get(contract_owner_id)
+                if not contract or not contract.script:
+                    raise ContractError("Contract not found or script is empty.")
+
+                chain_context = ChainContext(
+                    total_cost=contract.cost,
+                    budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
+                )
+
+                transaction_context = TransactionContext(
+                    source=caller_id,
+                    dest=contract_owner_id,
+                    currency=0,
+                    amount=0,
+                    input_data=input_data,
+                    execution_id=execution_id
+                )
+
+                api_handler = ContractAPI(self, transaction_context, chain_context)
+
+                symtable = {
+                    'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
+                    'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
+                    'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
+                    'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
+                    'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
+                }
+
+                symtable.update({
+                    'get_balance': api_handler.get_balance,
+                    'transfer': api_handler.transfer,
+                    'approve': api_handler.approve,
+                    'transfer_from': api_handler.transfer_from,
+                    'get_currency': api_handler.get_currency,
+                    'create_claim': api_handler.create_claim,
+                    'get_claim': api_handler.get_claim,
+                    'pay_claim': api_handler.pay_claim,
+                    'cancel_claim': api_handler.cancel_claim,
+                    'execute_contract': api_handler.execute_contract,
+                    'get_variable': api_handler.get_variable,
+                    'set_variable': api_handler.set_variable,
+                    'network_max_cost': self.Config.Contract.max_cost,
+                    'tx': transaction_context,
+                    'Cancel': TransactionCanceledByContract,
+                })
+
+                aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True)
+
+                try:
+                    aeval.eval(contract.script, show_errors=False)
+                    output_data = str(aeval.symtable.get('return_message')) if 'return_message' in aeval.symtable else None
+                    if aeval.error:
+                        err_dict:dict[str,str] = {}
+                        aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
+                        for err in aeval_error:
+                            err_dict[str(err.exc.__name__)] = str(err.msg)
+                        if 'TransactionCanceledByContract' in err_dict:
+                            raise TransactionCanceledByContract(err_dict['TransactionCanceledByContract'])
+                        raise ContractError(err_dict)
+
+                    self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
+                except TransactionCanceledByContract as e:
+                    self.Executions.update(cursor, execution_id, str(e), chain_context.total_cost, 'reverted')
+                    raise
+                except ContractError as e:
+                    self.Executions.update(cursor, execution_id, str(e), chain_context.total_cost, 'failed')
+                    raise
+                except Exception as e:
+                    self.Executions.update(cursor, execution_id, f"{e.__class__.__name__}: {str(e)}", chain_context.total_cost, 'failed')
+                    raise
+
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during contract execution: {err}")
+
     def transfer(
         self,
         source_id: int,
         destination_id: int,
         currency_id: int,
         amount: int,
-        input_data: Optional[str] = None,
-        execute_contract: bool = True,
-        chain_context: Optional[ChainContext] = None
-    ) -> Tuple[Transaction, Optional[str]]:
+        execution_id: Optional[int] = None
+    ) -> Transfer:
         if source_id == destination_id:
             raise ValueError("Source and destination cannot be the same.")
         if amount <= 0:
             raise ValueError("Transfer amount must be positive.")
-        if input_data and not re.match(r'^[a-zA-Z0-9:]*$', input_data):
-            raise ValueError("input_data must be alphanumeric or colon.")
 
-        contract_message = None
         try:
             with self.db as cursor:
                 source = self.get_user(source_id)
@@ -230,143 +305,41 @@ class RapidWire:
                     source._update_balance(cursor, currency_id, -amount)
                     destination._update_balance(cursor, currency_id, amount)
 
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (source_id, destination_id, currency_id, amount, input_data, int(time()))
-                )
-                transaction_id = cursor.lastrowid
+                transfer_id = self.Transfers.create(cursor, source_id, destination_id, currency_id, amount, execution_id)
 
-                if execute_contract:
-                    contract = self.Contracts.get(destination_id)
-                    if contract and contract.script:
-                        if chain_context is None:
-                            # Start of a new chain
-                            chain_context = ChainContext(
-                                total_cost=contract.cost,
-                                budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
-                            )
-
-                        if chain_context.total_cost > chain_context.budget:
-                            raise TransactionError(f"Aggregated contract cost ({chain_context.total_cost}) exceeds budget ({chain_context.budget}).")
-
-                        transaction_context = TransactionContext(
-                            source=source_id,
-                            dest=destination_id,
-                            currency=currency_id,
-                            amount=amount,
-                            input_data=input_data,
-                            transaction_id=transaction_id
-                        )
-
-                        api_handler = ContractAPI(self, transaction_context, chain_context)
-
-                        contract_config = {
-                            'augassign': True,
-                            'if': True,
-                            'ifexp': True,
-                            'raise': True,
-                        }
-
-                        network_config = Config
-
-                        symtable = {
-                            'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
-                            'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
-                            'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
-                            'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
-                            'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
-                        }
-
-                        symtable.update({
-                            'get_balance': api_handler.get_balance,
-                            'get_transaction': api_handler.get_transaction,
-                            'transfer': api_handler.transfer,
-                            'search_transactions': api_handler.search_transactions,
-                            'get_currency': api_handler.get_currency,
-                            'create_claim': api_handler.create_claim,
-                            'get_claim': api_handler.get_claim,
-                            'pay_claim': api_handler.pay_claim,
-                            'cancel_claim': api_handler.cancel_claim,
-                            'execute_contract': api_handler.execute_contract,
-                            'get_variable': api_handler.get_variable,
-                            'set_variable': api_handler.set_variable,
-                            'get_transaction': api_handler.get_transaction,
-                            'network_max_cost': network_config.Contract.max_cost,
-
-                            'tx': TransactionContext(
-                                source=source_id,
-                                dest=destination_id,
-                                currency=currency_id,
-                                amount=amount,
-                                input_data=input_data,
-                                transaction_id=transaction_id
-                            ),
-                            'Cancel': TransactionCanceledByContract,
-                        })
-
-                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=contract_config)
-
-                        try:
-                            aeval.eval(contract.script, show_errors=False)
-                            if 'return_message' in aeval.symtable:
-                                contract_message = str(aeval.symtable['return_message'])
-                            if aeval.error:
-                                err_dict:dict[str,str] = {}
-                                aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
-                                for err in aeval_error:
-                                    err_dict[str(err.exc.__name__)] = str(err.msg)
-                                if 'TransactionCanceledByContract' in err_dict:
-                                    raise TransactionCanceledByContract(err_dict['TransactionCanceledByContract'])
-                                raise ContractError(err_dict)
-                            
-                        except TransactionCanceledByContract:
-                            raise
-                        except ContractError:
-                            raise
-                        except Exception as e:
-                            raise TransactionError(f"{e.__class__.__name__}: {str(e)}")
-
-                cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
-                result = cursor.fetchone()
-                return (Transaction(**result), contract_message)
-
-        except TransactionCanceledByContract:
-            raise
+            transfer = self.Transfers.get(transfer_id)
+            if not transfer:
+                raise TransactionError("Failed to retrieve transfer record after creation.")
+            return transfer
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transaction]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
         
         initial_tx = None
         if supply > 0:
-            initial_tx, _ = self.transfer(
+            initial_tx = self.transfer(
                 source_id=SYSTEM_USER_ID,
                 destination_id=issuer_id,
                 currency_id=guild_id,
-                amount=supply,
-                input_data="create"
+                amount=supply
             )
             
         return self.Currencies.get(guild_id), initial_tx
 
-    def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transaction:
-        tx, _ = self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount, "mint")
-        return tx
+    def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transfer:
+        return self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount)
 
-    def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transaction:
-        tx, _ = self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount, "burn")
-        return tx
+    def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transfer:
+        return self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount)
         
-    def delete_currency(self, currency_id: int) -> List[Transaction]:
+    def delete_currency(self, currency_id: int) -> List[Transfer]:
         holders = self.Currencies.get_all_holders(currency_id)
         transactions = []
         
         for holder in holders:
-            tx, _ = self.transfer(holder.user_id, SYSTEM_USER_ID, currency_id, holder.amount, "delete:burn")
+            tx = self.transfer(holder.user_id, SYSTEM_USER_ID, currency_id, holder.amount)
             transactions.append(tx)
         
         self.Currencies.delete(currency_id)
@@ -375,7 +348,7 @@ class RapidWire:
     def cancel_delete_request(self, currency_id: int):
         self.Currencies.cancel_delete_request(currency_id)
 
-    def pay_claim(self, claim_id: int, payer_id: int) -> Tuple[Transaction, Optional[str]]:
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transfer:
         claim = self.Claims.get(claim_id)
         if not claim:
             raise ValueError("Claim not found.")
@@ -384,16 +357,15 @@ class RapidWire:
         if claim.status != 'pending':
             raise ValueError(f"This claim is not pending (status: {claim.status}).")
 
-        tx, msg = self.transfer(
+        tx = self.transfer(
             source_id=claim.payer_id,
             destination_id=claim.claimant_id,
             currency_id=claim.currency_id,
-            amount=claim.amount,
-            input_data=f"claim:{claim_id}"
+            amount=claim.amount
         )
         
         self.Claims.update_status(claim_id, 'paid')
-        return tx, msg
+        return tx
 
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.Claims.get(claim_id)
@@ -429,19 +401,13 @@ class RapidWire:
                 # Upsert the stake
                 self.Stakes.upsert(cursor, user_id, currency_id, amount, int(time()))
 
-                # Create a transaction for the deposit
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
-                )
+                # Create a transfer for the deposit
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, currency_id, amount)
             return self.Stakes.get(user_id, currency_id)
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake deposit: {err}")
 
-    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transaction:
+    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transfer:
         if amount <= 0:
             raise ValueError("Withdrawal amount must be positive.")
 
@@ -461,16 +427,9 @@ class RapidWire:
                 # Transfer funds back to the user
                 self.get_user(user_id)._update_balance(cursor, currency_id, amount)
 
-                # Create a transaction for the withdrawal
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
-                )
-                tx_id = cursor.lastrowid
-            return self.Transactions.get(tx_id)
+                # Create a transfer for the withdrawal
+                transfer_id = self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, amount)
+            return self.Transfers.get(transfer_id)
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake withdrawal: {err}")
 
@@ -504,7 +463,36 @@ class RapidWire:
         if max_cost is None:
             max_cost = Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
-        return self.Contracts.set(user_id, script, cost, max_cost)
+        script_hash = hashlib.sha256(script.encode()).digest()
+
+        try:
+            with self.db as cursor:
+                execution_id = self.Executions.create(cursor, user_id, 0, 'update_contract', 'pending')
+                self.Contracts.set(user_id, script, cost, max_cost)
+                self.ContractHistories.create(cursor, execution_id, user_id, script_hash, cost)
+                self.Executions.update(cursor, execution_id, None, 0, 'success')
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during contract update: {err}")
+
+    def approve(self, owner_id: int, spender_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None):
+        try:
+            with self.db as cursor:
+                self.Allowances.upsert(cursor, owner_id, spender_id, currency_id, amount)
+                self.AllowanceLogs.create(cursor, owner_id, spender_id, currency_id, amount, execution_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during approval: {err}")
+
+    def transfer_from(self, source_id: int, destination_id: int, currency_id: int, amount: int, spender_id: int, execution_id: Optional[int] = None) -> Transfer:
+        allowance = self.Allowances.get(source_id, spender_id, currency_id)
+        if not allowance or allowance.amount < amount:
+            raise InsufficientFunds("Spender does not have sufficient allowance.")
+
+        try:
+            with self.db as cursor:
+                self.Allowances.spend(cursor, source_id, spender_id, currency_id, amount)
+                return self.transfer(source_id, destination_id, currency_id, amount, execution_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during transfer_from: {err}")
 
     def create_liquidity_pool(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int, user_id: int) -> LiquidityPool:
         if self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id):
@@ -545,15 +533,8 @@ class RapidWire:
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)
                 self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, shares_to_mint)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
-                     user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b, "lp:add", current_time)
-                )
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a)
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b)
             return shares_to_mint
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
@@ -583,18 +564,14 @@ class RapidWire:
                 else:
                     self.LiquidityProviders.delete(cursor, pool.pool_id, user_id)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
-                     SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b, "lp:remove", current_time)
-                )
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a)
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b)
             return amount_a, amount_b
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
+
+    def search_transfers(self, **kwargs) -> List[Transfer]:
+        return self.Transfers.search(**kwargs)
 
     def find_swap_route(self, from_symbol: str, to_symbol: str) -> List[LiquidityPool]:
         from_currency = self.Currencies.get_by_symbol(from_symbol)
@@ -694,15 +671,8 @@ class RapidWire:
 
                 user._update_balance(cursor, current_currency_id, amount_out)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
-                     SYSTEM_USER_ID, user_id, current_currency_id, amount_out, "swap", current_time)
-                )
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency.currency_id, amount)
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, current_currency_id, amount_out)
             return amount_out, current_currency_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during swap: {err}")

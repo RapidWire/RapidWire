@@ -94,22 +94,6 @@ CREATE TABLE `staking` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `transaction`
---
-
-CREATE TABLE `transaction` (
-  `transaction_id` bigint UNSIGNED NOT NULL,
-  `source_id` bigint UNSIGNED NOT NULL,
-  `dest_id` bigint UNSIGNED NOT NULL,
-  `currency_id` bigint UNSIGNED NOT NULL,
-  `amount` bigint UNSIGNED NOT NULL,
-  `input_data` varchar(16) DEFAULT NULL,
-  `timestamp` bigint NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `liquidity_pool`
 --
 
@@ -159,6 +143,87 @@ CREATE TABLE `notification_permissions` (
   `allowed_user_id` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+--
+-- New Tables
+--
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `execution`
+--
+
+CREATE TABLE `execution` (
+`execution_id` bigint UNSIGNED NOT NULL,
+`caller_id` bigint UNSIGNED NOT NULL COMMENT '操作を行ったユーザー (Sender)',
+`contract_owner_id` bigint UNSIGNED NOT NULL COMMENT '実行対象 (0=System, その他=User Contract)',
+`input_data` text DEFAULT NULL COMMENT '入力データ または システムコマンド(例: update_contract)',
+`output_data` text DEFAULT NULL COMMENT '返り値 または エラーメッセージ',
+`cost` int UNSIGNED NOT NULL DEFAULT '0',
+`status` enum('pending', 'success', 'failed', 'reverted') NOT NULL,
+`timestamp` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `transfer`
+--
+
+CREATE TABLE `transfer` (
+`transfer_id` bigint UNSIGNED NOT NULL,
+`execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID (直接送金の場合はNULLも可)',
+`source_id` bigint UNSIGNED NOT NULL,
+`dest_id` bigint UNSIGNED NOT NULL,
+`currency_id` bigint UNSIGNED NOT NULL,
+`amount` bigint UNSIGNED NOT NULL,
+`timestamp` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `contract_history`
+--
+
+CREATE TABLE `contract_history` (
+`history_id` bigint UNSIGNED NOT NULL,
+`execution_id` bigint UNSIGNED NOT NULL COMMENT '親Execution ID',
+`user_id` bigint UNSIGNED NOT NULL COMMENT 'コントラクトの所有者',
+`script_hash` binary(64) NOT NULL COMMENT 'SHA-256 Hash',
+`cost` int UNSIGNED NOT NULL COMMENT '計算されたコスト',
+`created_at` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `allowance`
+--
+
+CREATE TABLE `allowance` (
+`owner_id` bigint UNSIGNED NOT NULL,
+`spender_id` bigint UNSIGNED NOT NULL,
+`currency_id` bigint UNSIGNED NOT NULL,
+`amount` bigint UNSIGNED NOT NULL,
+`last_updated_at` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `allowance_log`
+--
+
+CREATE TABLE `allowance_log` (
+`log_id` bigint UNSIGNED NOT NULL,
+`execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID',
+`owner_id` bigint UNSIGNED NOT NULL,
+`spender_id` bigint UNSIGNED NOT NULL,
+`currency_id` bigint UNSIGNED NOT NULL,
+`amount` bigint UNSIGNED NOT NULL COMMENT '設定された許可額',
+`timestamp` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
 -- Indexes for dumped tables
@@ -207,15 +272,6 @@ ALTER TABLE `staking`
   ADD KEY `currency_id` (`currency_id`);
 
 --
--- Indexes for table `transaction`
---
-ALTER TABLE `transaction`
-  ADD PRIMARY KEY (`transaction_id`),
-  ADD KEY `source_id` (`source_id`),
-  ADD KEY `dest_id` (`dest_id`),
-  ADD KEY `currency_id` (`currency_id`);
-
---
 -- Indexes for table `liquidity_pool`
 --
 ALTER TABLE `liquidity_pool`
@@ -242,6 +298,49 @@ ALTER TABLE `notification_permissions`
   ADD PRIMARY KEY (`user_id`,`allowed_user_id`);
 
 --
+-- Indexes for new tables
+--
+
+--
+-- Indexes for table `execution`
+--
+ALTER TABLE `execution`
+  ADD PRIMARY KEY (`execution_id`),
+  ADD KEY `caller_id` (`caller_id`),
+  ADD KEY `contract_owner_id` (`contract_owner_id`),
+  ADD KEY `timestamp` (`timestamp`);
+
+--
+-- Indexes for table `transfer`
+--
+ALTER TABLE `transfer`
+  ADD PRIMARY KEY (`transfer_id`),
+  ADD KEY `execution_id` (`execution_id`),
+  ADD KEY `source_id` (`source_id`),
+  ADD KEY `dest_id` (`dest_id`);
+
+--
+-- Indexes for table `contract_history`
+--
+ALTER TABLE `contract_history`
+  ADD PRIMARY KEY (`history_id`),
+  ADD KEY `execution_id` (`execution_id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `allowance`
+--
+ALTER TABLE `allowance`
+  ADD PRIMARY KEY (`owner_id`, `spender_id`, `currency_id`);
+
+--
+-- Indexes for table `allowance_log`
+--
+ALTER TABLE `allowance_log`
+  ADD PRIMARY KEY (`log_id`),
+  ADD KEY `execution_id` (`execution_id`);
+
+--
 -- AUTO_INCREMENT for dumped tables
 --
 
@@ -250,12 +349,6 @@ ALTER TABLE `notification_permissions`
 --
 ALTER TABLE `claims`
   MODIFY `claim_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for `transaction`
---
-ALTER TABLE `transaction`
-  MODIFY `transaction_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `liquidity_pool`
@@ -268,5 +361,33 @@ ALTER TABLE `liquidity_pool`
 --
 ALTER TABLE `liquidity_provider`
   MODIFY `provider_id` int UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for new tables
+--
+
+--
+-- AUTO_INCREMENT for table `execution`
+--
+ALTER TABLE `execution`
+  MODIFY `execution_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `transfer`
+--
+ALTER TABLE `transfer`
+  MODIFY `transfer_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `contract_history`
+--
+ALTER TABLE `contract_history`
+  MODIFY `history_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `allowance_log`
+--
+ALTER TABLE `allowance_log`
+  MODIFY `log_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
 
 COMMIT;

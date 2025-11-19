@@ -25,19 +25,6 @@ class Balance(BaseModel):
     currency_id: int
     amount: int
 
-class Transaction(BaseModel):
-    transaction_id: int
-    source_id: int
-    dest_id: int
-    currency_id: int
-    amount: int
-    input_data: Optional[str]
-    timestamp: int
-
-    @field_serializer('transaction_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class APIKey(BaseModel):
     user_id: int
     api_key: str
@@ -74,7 +61,50 @@ class TransactionContext(BaseModel):
     currency: int
     amount: int
     input_data: Optional[str] = None
-    transaction_id: int
+    execution_id: Optional[int] = None
+
+class Execution(BaseModel):
+    execution_id: int
+    caller_id: int
+    contract_owner_id: int
+    input_data: Optional[str]
+    output_data: Optional[str]
+    cost: int
+    status: Literal['pending', 'success', 'failed', 'reverted']
+    timestamp: int
+
+class Transfer(BaseModel):
+    transfer_id: int
+    execution_id: Optional[int]
+    source_id: int
+    dest_id: int
+    currency_id: int
+    amount: int
+    timestamp: int
+
+class ContractHistory(BaseModel):
+    history_id: int
+    execution_id: int
+    user_id: int
+    script_hash: bytes
+    cost: int
+    created_at: int
+
+class Allowance(BaseModel):
+    owner_id: int
+    spender_id: int
+    currency_id: int
+    amount: int
+    last_updated_at: int
+
+class AllowanceLog(BaseModel):
+    log_id: int
+    execution_id: Optional[int]
+    owner_id: int
+    spender_id: int
+    currency_id: int
+    amount: int
+    timestamp: int
 
 class ChainContext(BaseModel):
     total_cost: int

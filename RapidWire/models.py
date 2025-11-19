@@ -6,7 +6,11 @@ import string
 from decimal import Decimal
 
 from .database import DatabaseConnection
-from .structs import Balance, Currency, Transaction, Contract, APIKey, Claim, Stake, LiquidityPool, LiquidityProvider, ContractVariable, NotificationPermission
+from .structs import (
+    Balance, Currency, Contract, APIKey, Claim, Stake, LiquidityPool,
+    LiquidityProvider, ContractVariable, NotificationPermission, Execution,
+    Transfer, ContractHistory, Allowance, AllowanceLog
+)
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
 class UserModel:
@@ -118,111 +122,6 @@ class CurrencyModel:
             )
             if cursor.rowcount == 0: return None
         return self.get(currency.currency_id)
-
-class TransactionModel:
-    def __init__(self, db_connection: DatabaseConnection):
-        self.db = db_connection
-
-    def get(self, transaction_id: int) -> Optional[Transaction]:
-        with self.db as cursor:
-            cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
-            result = cursor.fetchone()
-            return Transaction(**result) if result else None
-    
-    def get_user_history(self, user_id: int, page: int = 1, limit: int = 10) -> List[Transaction]:
-        offset = (page - 1) * limit
-        with self.db as cursor:
-            cursor.execute(
-                "SELECT * FROM transaction WHERE source_id = %s OR dest_id = %s ORDER BY timestamp DESC LIMIT %s OFFSET %s",
-                (user_id, user_id, limit, offset)
-            )
-            results = cursor.fetchall()
-            return [Transaction(**row) for row in results]
-
-    def search(
-        self,
-        source_id: Optional[int] = None,
-        dest_id: Optional[int] = None,
-        currency_id: Optional[int] = None,
-        user_id: Optional[int] = None,
-        start_timestamp: Optional[int] = None,
-        end_timestamp: Optional[int] = None,
-        min_amount: Optional[int] = None,
-        max_amount: Optional[int] = None,
-        input_data: Optional[str] = None,
-        page: int = 1,
-        limit: int = 10,
-        sort_by: str = "transaction_id",
-        sort_order: str = "desc"
-    ) -> List[Transaction]:
-        offset = (page - 1) * limit
-        conditions = []
-        params = []
-
-        if source_id is not None:
-            conditions.append("source_id = %s")
-            params.append(source_id)
-        if dest_id is not None:
-            conditions.append("dest_id = %s")
-            params.append(dest_id)
-        if currency_id is not None:
-            conditions.append("currency_id = %s")
-            params.append(currency_id)
-        if user_id is not None:
-            conditions.append("(source_id = %s OR dest_id = %s)")
-            params.extend([user_id, user_id])
-        if start_timestamp is not None:
-            conditions.append("timestamp >= %s")
-            params.append(start_timestamp)
-        if end_timestamp is not None:
-            conditions.append("timestamp <= %s")
-            params.append(end_timestamp)
-        if min_amount is not None:
-            conditions.append("amount >= %s")
-            params.append(min_amount)
-        if max_amount is not None:
-            conditions.append("amount <= %s")
-            params.append(max_amount)
-        if input_data is not None:
-            conditions.append("input_data = %s")
-            params.append(input_data)
-
-        allowed_sort_by = ["transaction_id", "timestamp", "amount"]
-        if sort_by not in allowed_sort_by:
-            sort_by = "transaction_id"
-
-        sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
-        order_by_clause = f"ORDER BY {sort_by} {sort_order}"
-
-
-        if not conditions:
-            query = f"SELECT * FROM transaction {order_by_clause} LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
-        else:
-            query = f"SELECT * FROM transaction WHERE {' AND '.join(conditions)} {order_by_clause} LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
-
-        with self.db as cursor:
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall()
-            return [Transaction(**row) for row in results]
-
-    def get_user_stats(self, user_id: int) -> dict:
-        query = """
-            SELECT 
-                COUNT(*) as total_transactions,
-                MIN(timestamp) as first_transaction_timestamp,
-                MAX(timestamp) as last_transaction_timestamp
-            FROM transaction 
-            WHERE source_id = %s OR dest_id = %s
-        """
-        params = (user_id, user_id)
-        with self.db as cursor:
-            cursor.execute(query, params)
-            result = cursor.fetchone()
-            if not result or result['total_transactions'] == 0:
-                return {"total_transactions": 0, "first_transaction_timestamp": None, "last_transaction_timestamp": None}
-            return result
 
 class ContractModel:
     def __init__(self, db_connection: DatabaseConnection):
@@ -512,3 +411,182 @@ class NotificationPermissionModel:
         with self.db as cursor:
             cursor.execute("SELECT 1 FROM notification_permissions WHERE user_id = %s AND allowed_user_id = %s", (user_id, allowed_user_id))
             return cursor.fetchone() is not None
+
+class ExecutionModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, execution_id: int) -> Optional[Execution]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM execution WHERE execution_id = %s", (execution_id,))
+            result = cursor.fetchone()
+            return Execution(**result) if result else None
+
+    def create(self, cursor, caller_id: int, contract_owner_id: int, input_data: Optional[str], status: str) -> int:
+        cursor.execute(
+            """
+            INSERT INTO execution (caller_id, contract_owner_id, input_data, status, timestamp)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (caller_id, contract_owner_id, input_data, status, int(time()))
+        )
+        return cursor.lastrowid
+
+    def update(self, cursor, execution_id: int, output_data: Optional[str], cost: int, status: str):
+        cursor.execute(
+            """
+            UPDATE execution
+            SET output_data = %s, cost = %s, status = %s
+            WHERE execution_id = %s
+            """,
+            (output_data, cost, status, execution_id)
+        )
+
+class TransferModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, transfer_id: int) -> Optional[Transfer]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM transfer WHERE transfer_id = %s", (transfer_id,))
+            result = cursor.fetchone()
+            return Transfer(**result) if result else None
+
+    def create(self, cursor, source_id: int, dest_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None) -> int:
+        cursor.execute(
+            """
+            INSERT INTO transfer (execution_id, source_id, dest_id, currency_id, amount, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (execution_id, source_id, dest_id, currency_id, amount, int(time()))
+        )
+        return cursor.lastrowid
+
+    def search(
+        self,
+        source_id: Optional[int] = None,
+        dest_id: Optional[int] = None,
+        currency_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        start_timestamp: Optional[int] = None,
+        end_timestamp: Optional[int] = None,
+        min_amount: Optional[int] = None,
+        max_amount: Optional[int] = None,
+        input_data: Optional[str] = None,
+        page: int = 1,
+        limit: int = 10,
+        sort_by: str = "transfer_id",
+        sort_order: str = "desc"
+    ) -> List[Transfer]:
+        offset = (page - 1) * limit
+        conditions = []
+        params = []
+
+        base_query = "SELECT t.* FROM transfer t"
+        if input_data is not None:
+            base_query += " JOIN execution e ON t.execution_id = e.execution_id"
+            conditions.append("e.input_data = %s")
+            params.append(input_data)
+
+        if source_id is not None:
+            conditions.append("t.source_id = %s")
+            params.append(source_id)
+        if dest_id is not None:
+            conditions.append("t.dest_id = %s")
+            params.append(dest_id)
+        if currency_id is not None:
+            conditions.append("t.currency_id = %s")
+            params.append(currency_id)
+        if user_id is not None:
+            conditions.append("(t.source_id = %s OR t.dest_id = %s)")
+            params.extend([user_id, user_id])
+        if start_timestamp is not None:
+            conditions.append("t.timestamp >= %s")
+            params.append(start_timestamp)
+        if end_timestamp is not None:
+            conditions.append("t.timestamp <= %s")
+            params.append(end_timestamp)
+        if min_amount is not None:
+            conditions.append("t.amount >= %s")
+            params.append(min_amount)
+        if max_amount is not None:
+            conditions.append("t.amount <= %s")
+            params.append(max_amount)
+
+        allowed_sort_by = ["transfer_id", "timestamp", "amount"]
+        if sort_by not in allowed_sort_by:
+            sort_by = "transfer_id"
+
+        sort_order = "ASC" if sort_order.upper() == "ASC" else "DESC"
+        order_by_clause = f"ORDER BY t.{sort_by} {sort_order}"
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        query = f"{base_query} {where_clause} {order_by_clause} LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        with self.db as cursor:
+            cursor.execute(query, tuple(params))
+            results = cursor.fetchall()
+            return [Transfer(**row) for row in results]
+
+class ContractHistoryModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, history_id: int) -> Optional[ContractHistory]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM contract_history WHERE history_id = %s", (history_id,))
+            result = cursor.fetchone()
+            return ContractHistory(**result) if result else None
+
+    def create(self, cursor, execution_id: int, user_id: int, script_hash: bytes, cost: int):
+        cursor.execute(
+            """
+            INSERT INTO contract_history (execution_id, user_id, script_hash, cost, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (execution_id, user_id, script_hash, cost, int(time()))
+        )
+
+class AllowanceModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def get(self, owner_id: int, spender_id: int, currency_id: int) -> Optional[Allowance]:
+        with self.db as cursor:
+            cursor.execute(
+                "SELECT * FROM allowance WHERE owner_id = %s AND spender_id = %s AND currency_id = %s",
+                (owner_id, spender_id, currency_id)
+            )
+            result = cursor.fetchone()
+            return Allowance(**result) if result else None
+
+    def upsert(self, cursor, owner_id: int, spender_id: int, currency_id: int, amount: int):
+        cursor.execute(
+            """
+            INSERT INTO allowance (owner_id, spender_id, currency_id, amount, last_updated_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE amount = VALUES(amount), last_updated_at = VALUES(last_updated_at)
+            """,
+            (owner_id, spender_id, currency_id, amount, int(time()))
+        )
+
+    def spend(self, cursor, owner_id: int, spender_id: int, currency_id: int, amount: int):
+        cursor.execute(
+            "UPDATE allowance SET amount = amount - %s WHERE owner_id = %s AND spender_id = %s AND currency_id = %s",
+            (amount, owner_id, spender_id, currency_id)
+        )
+
+class AllowanceLogModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def create(self, cursor, owner_id: int, spender_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None):
+        cursor.execute(
+            """
+            INSERT INTO allowance_log (execution_id, owner_id, spender_id, currency_id, amount, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (execution_id, owner_id, spender_id, currency_id, amount, int(time()))
+        )
