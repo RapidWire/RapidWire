@@ -25,13 +25,13 @@ transfer(tx["dest"], 12345, tx["currency"], 100)
 グローバル変数として自動的に提供されます。
 """
 from typing import Optional, List, Tuple, Any
-from .structs import Transaction, Currency, Claim, TransactionContext
+from .structs import Transaction, Currency, Claim, ExecutionContext
 
 # --- グローバル変数: トランザクションコンテキスト ---
 
-tx: TransactionContext = ...
+ctx: ExecutionContext = ...
 """
-現在のトランザクションコンテキスト。
+現在の実行コンテキスト。
 グローバルスコープで利用可能です。
 """
 
@@ -50,7 +50,7 @@ def transfer(source: int, dest: int, currency: int, amount: int) -> Transaction:
     """
     新しい送金を開始します。
     注意: `source`はコントラクトの所有者でなければなりません。
-    (例: `api.transfer(source=tx['dest'], ...)` )
+    (例: `api.transfer(source=ctx['contract_owner_id'], ...)` )
     """
     ...
 
@@ -90,7 +90,7 @@ def execute_contract(destination_id: int, currency_id: int, amount: int, input_d
 def get_variable(user_id: int, key: bytes) -> Optional[bytes]:
     """
     コントラクトに関連付けられた永続的な変数を取得します。
-    `user_id` は変数が属するユーザーIDです。通常は自分自身 (`tx['dest']`) を指定します。
+    `user_id` は変数が属するユーザーIDです。通常は自分自身 (`ctx['contract_owner_id']`) を指定します。
     キーと値はバイト文字列として扱われます。
     """
     ...
@@ -98,7 +98,7 @@ def get_variable(user_id: int, key: bytes) -> Optional[bytes]:
 def set_variable(key: bytes, value: bytes) -> None:
     """
     コントラクトに関連付けられた永続的な変数を設定します。
-    このコントラクトの所有者 (`tx['dest']`) に変数を保存します。
+    このコントラクトの所有者 (`ctx['contract_owner_id']`) に変数を保存します。
     キーは8バイト以下、値は16バイト以下でなければなりません。
     """
     ...

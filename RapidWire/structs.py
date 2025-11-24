@@ -55,12 +55,10 @@ class Stake(BaseModel):
     amount: int
     last_updated_at: int
 
-class TransactionContext(BaseModel):
-    source: int
-    dest: int
-    currency: int
-    amount: int
-    input_data: Optional[str] = None
+class ExecutionContext(BaseModel):
+    caller_id: int
+    contract_owner_id: int
+    input: Optional[str] = None
     execution_id: Optional[int] = None
 
 class Execution(BaseModel):

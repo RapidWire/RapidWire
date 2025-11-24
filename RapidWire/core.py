@@ -16,7 +16,7 @@ from .models import (
     AllowanceModel, AllowanceLogModel
 )
 from .structs import (
-    Currency, Claim, Stake, TransactionContext, ChainContext, LiquidityPool,
+    Currency, Claim, Stake, ExecutionContext, ChainContext, LiquidityPool,
     LiquidityProvider, Transfer
 )
 from .exceptions import (
@@ -47,24 +47,24 @@ CONTRACT_METHOD_COSTS = {
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', transaction_context: TransactionContext, chain_context: Optional[ChainContext] = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None):
         self.core = rapidwire_instance
-        self.tx = transaction_context
+        self.ctx = execution_context
         self.chain_context = chain_context
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
 
     def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transfer:
-        if source != self.tx.dest:
+        if source != self.ctx.contract_owner_id:
             raise PermissionError("Contract can only initiate transfers from its own account.")
-        return self.core.transfer(source, dest, currency, amount, execution_id=self.tx.execution_id)
+        return self.core.transfer(source, dest, currency, amount, execution_id=self.ctx.execution_id)
 
     def approve(self, spender: int, currency: int, amount: int):
-        self.core.approve(self.tx.dest, spender, currency, amount, execution_id=self.tx.execution_id)
+        self.core.approve(self.ctx.contract_owner_id, spender, currency, amount, execution_id=self.ctx.execution_id)
 
     def transfer_from(self, sender: int, recipient: int, currency: int, amount: int) -> Transfer:
-        return self.core.transfer_from(sender, recipient, currency, amount, self.tx.dest, execution_id=self.tx.execution_id)
+        return self.core.transfer_from(sender, recipient, currency, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
 
     def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
         return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
@@ -90,7 +90,7 @@ class ContractAPI:
         return claim
 
     def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> None:
-        source_id = self.tx.dest
+        source_id = self.ctx.contract_owner_id
 
         callee_contract = self.core.Contracts.get(destination_id)
         if not callee_contract:
@@ -106,7 +106,7 @@ class ContractAPI:
 
     def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
         if user_id is None:
-            user_id = self.tx.dest
+            user_id = self.ctx.contract_owner_id
         variable = self.core.ContractVariables.get(user_id, key)
         return variable.value if variable else None
 
@@ -116,13 +116,13 @@ class ContractAPI:
         if len(value) > 16:
             raise ValueError("Value must be 16 bytes or less.")
 
-        user_variables = self.core.ContractVariables.get_all_for_user(self.tx.dest)
+        user_variables = self.core.ContractVariables.get_all_for_user(self.ctx.contract_owner_id)
         if len(user_variables) >= 2000:
              # Check if the key already exists, if so, it's an update, not an insert
             if not any(v.key == key for v in user_variables):
                 raise ValueError("Maximum of 2000 variables reached for this user.")
 
-        self.core.ContractVariables.set(self.tx.dest, key, value)
+        self.core.ContractVariables.set(self.ctx.contract_owner_id, key, value)
 
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
@@ -207,16 +207,14 @@ class RapidWire:
                     budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
                 )
 
-                transaction_context = TransactionContext(
-                    source=caller_id,
-                    dest=contract_owner_id,
-                    currency=0,
-                    amount=0,
-                    input_data=input_data,
+                execution_context = ExecutionContext(
+                    caller_id=caller_id,
+                    contract_owner_id=contract_owner_id,
+                    input=input_data,
                     execution_id=execution_id
                 )
 
-                api_handler = ContractAPI(self, transaction_context, chain_context)
+                api_handler = ContractAPI(self, execution_context, chain_context)
 
                 symtable = {
                     'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
@@ -240,7 +238,7 @@ class RapidWire:
                     'get_variable': api_handler.get_variable,
                     'set_variable': api_handler.set_variable,
                     'network_max_cost': self.Config.Contract.max_cost,
-                    'tx': transaction_context,
+                    'ctx': execution_context,
                     'Cancel': TransactionCanceledByContract,
                 })
 
