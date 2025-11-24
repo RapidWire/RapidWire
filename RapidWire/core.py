@@ -252,8 +252,7 @@ class RapidWire:
                     'Cancel': TransactionCanceledByContract,
                 })
 
-                aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True)
-                aeval.config = aeval_config
+                aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=aeval_config)
 
                 try:
                     aeval.eval(contract.script, show_errors=False)
@@ -263,8 +262,6 @@ class RapidWire:
                         aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
                         for err in aeval_error:
                             err_dict[str(err.exc.__name__)] = str(err.msg)
-                        if 'TransactionCanceledByContract' in err_dict:
-                            raise TransactionCanceledByContract(err_dict['TransactionCanceledByContract'])
                         raise ContractError(err_dict)
 
                     self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
