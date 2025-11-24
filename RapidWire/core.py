@@ -219,6 +219,13 @@ class RapidWire:
 
                 api_handler = ContractAPI(self, execution_context, chain_context)
 
+                aeval_config = {
+                    'augassign': True,
+                    'if': True,
+                    'ifexp': True,
+                    'raise': True,
+                }
+
                 symtable = {
                     'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
                     'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
@@ -246,6 +253,7 @@ class RapidWire:
                 })
 
                 aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True)
+                aeval.config = aeval_config
 
                 try:
                     aeval.eval(contract.script, show_errors=False)
