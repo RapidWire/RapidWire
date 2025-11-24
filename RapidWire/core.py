@@ -468,11 +468,13 @@ class RapidWire:
         try:
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, user_id, 0, 'update_contract', 'pending')
-                self.Contracts.set(user_id, script, cost, max_cost)
+                contract = self.Contracts.set(user_id, script, cost, max_cost)
                 self.ContractHistories.create(cursor, execution_id, user_id, script_hash, cost)
                 self.Executions.update(cursor, execution_id, None, 0, 'success')
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during contract update: {err}")
+        
+        return contract
 
     def approve(self, owner_id: int, spender_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None):
         try:
