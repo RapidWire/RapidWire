@@ -25,7 +25,7 @@ transfer(tx["dest"], 12345, tx["currency"], 100)
 グローバル変数として自動的に提供されます。
 """
 from typing import Optional, List, Tuple, Any
-from .structs import Transaction, Currency, Claim, ExecutionContext
+from .structs import Transfer as Transaction, Currency, Claim, ExecutionContext
 
 # --- グローバル変数: トランザクションコンテキスト ---
 
@@ -78,12 +78,10 @@ def cancel_claim(claim_id: int, user_id: int) -> Claim:
     """請求をキャンセルします。"""
     ...
 
-def execute_contract(destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
+def execute_contract(destination_id: int, input_data: Optional[str] = None) -> Optional[str]:
     """
     別のコントラクトを実行します。
-    このコントラクトのアカウントから`destination_id`へ新しいトランザクションを作成し、
-    相手のコントラクトを実行します。
-    戻り値: (作成されたトランザクションの辞書, 相手のコントラクトからの返信メッセージ)
+    戻り値: 相手のコントラクトからの返信メッセージ (あれば)
     """
     ...
 

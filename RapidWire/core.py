@@ -89,7 +89,7 @@ class ContractAPI:
         claim = self.core.cancel_claim(claim_id, user_id)
         return claim
 
-    def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> None:
+    def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> Optional[str]:
         source_id = self.ctx.contract_owner_id
 
         callee_contract = self.core.Contracts.get(destination_id)
@@ -98,11 +98,14 @@ class ContractAPI:
 
         self.chain_context.total_cost += callee_contract.cost
 
-        self.core.execute_contract(
+        execution_id = self.core.execute_contract(
             caller_id=source_id,
             contract_owner_id=destination_id,
             input_data=input_data
         )
+
+        execution = self.core.Executions.get(execution_id)
+        return execution.output_data if execution else None
 
     def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
         if user_id is None:
@@ -495,6 +498,9 @@ class RapidWire:
             raise TransactionError(f"Database error during transfer_from: {err}")
 
     def create_liquidity_pool(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int, user_id: int) -> LiquidityPool:
+        if amount_a <= 0 or amount_b <= 0:
+            raise ValueError("Amounts must be positive.")
+
         if self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id):
             raise ValueError("Liquidity pool already exists for this currency pair.")
 
@@ -511,23 +517,39 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during liquidity pool creation: {err}")
 
-    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a: int, amount_b: int, user_id: int) -> Tuple[int, int]:
+    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a_desired: int, amount_b_desired: int, user_id: int) -> Tuple[int, int]:
         pool = self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
         if not pool:
             raise ValueError("Liquidity pool not found.")
 
-        if pool.reserve_a == 0 or pool.reserve_b == 0:
-            shares_a = amount_a
-            shares_b = amount_b
-        else:
-            shares_a = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
-            shares_b = int(Decimal(amount_b) * Decimal(pool.total_shares) / Decimal(pool.reserve_b))
+        if amount_a_desired <= 0 or amount_b_desired <= 0:
+            raise ValueError("Amounts must be positive.")
 
-        shares_to_mint = min(shares_a, shares_b)
+        if pool.reserve_a == 0 or pool.reserve_b == 0:
+            amount_a = amount_a_desired
+            amount_b = amount_b_desired
+            shares_to_mint = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
+        else:
+            amount_b_optimal = int(Decimal(amount_a_desired) * Decimal(pool.reserve_b) / Decimal(pool.reserve_a))
+            if amount_b_optimal <= amount_b_desired:
+                amount_a = amount_a_desired
+                amount_b = amount_b_optimal
+            else:
+                amount_a_optimal = int(Decimal(amount_b_desired) * Decimal(pool.reserve_a) / Decimal(pool.reserve_b))
+                amount_a = amount_a_optimal
+                amount_b = amount_b_desired
+
+            shares_to_mint = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
 
         try:
             with self.db as cursor:
                 user = self.get_user(user_id)
+                source_balance_a = user.get_balance(pool.currency_a_id)
+                source_balance_b = user.get_balance(pool.currency_b_id)
+
+                if source_balance_a.amount < amount_a or source_balance_b.amount < amount_b:
+                    raise InsufficientFunds("Insufficient funds to add liquidity.")
+
                 user._update_balance(cursor, pool.currency_a_id, -amount_a)
                 user._update_balance(cursor, pool.currency_b_id, -amount_b)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)

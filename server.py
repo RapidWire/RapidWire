@@ -439,8 +439,9 @@ async def get_swap_route(symbol_from: str, symbol_to: str):
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+app.mount("/", StaticFiles(directory="web", html=True), name="web")
+
 if __name__ == "__main__":
-    app.mount("/", StaticFiles(directory="web", html=True), name="web")
     uvicorn.run(
         app,
         host=config.APIServer.host,

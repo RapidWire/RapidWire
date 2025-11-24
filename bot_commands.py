@@ -33,6 +33,19 @@ class SwapConfirmationView(discord.ui.View):
     @discord.ui.button(label="確定", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
+            # Slippage check (tolerance 1%)
+            route = Rapid.find_swap_route(self.from_symbol, self.to_symbol)
+            from_currency = Rapid.Currencies.get_by_symbol(self.from_symbol)
+            current_rate = Rapid.get_swap_rate(self.amount_in, route, from_currency.currency_id)
+
+            slippage_tolerance = Decimal("0.01")
+            min_amount_out = Decimal(self.amount_out_est) * (Decimal("1") - slippage_tolerance)
+
+            if Decimal(current_rate) < min_amount_out:
+                await interaction.response.edit_message(embed=create_error_embed("価格が変動したため、スワップを中断しました。再度お試しください。"), view=None)
+                self.stop()
+                return
+
             amount_out, _ = Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
             self.swap_executed = True
             desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(amount_out)} {self.to_symbol}` にスワップしました。"
