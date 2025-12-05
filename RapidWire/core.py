@@ -1,13 +1,13 @@
 import mysql.connector
 import re
-import ast
+import json
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
-import asteval
 from decimal import Decimal
 import hashlib
 
 from .config import Config
+from .vm import RapidWireVM
 from .database import DatabaseConnection
 from .models import (
     UserModel, CurrencyModel, ContractModel, APIKeyModel, ClaimModel,
@@ -30,19 +30,15 @@ from .exceptions import (
 
 SYSTEM_USER_ID = 0
 SECONDS_IN_A_DAY = 86400
-CONTRACT_METHOD_COSTS = {
-    'get_balance': 1,
-    'get_transaction': 2,
-    'transfer': 10,
-    'search_transactions': 5,
-    'get_currency': 1,
-    'create_claim': 3,
-    'get_claim': 2,
-    'pay_claim': 5,
-    'cancel_claim': 2,
-    'execute_contract': 15,
-    'get_variable': 1,
-    'set_variable': 3,
+CONTRACT_OP_COSTS = {
+    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
+    'if': 1, 'exit': 0, 'cancel': 0,
+    'transfer': 10, 'get_balance': 1, 'reply': 1,
+    'store_get': 1, 'store_set': 3, 'store_get_other': 1,
+    'approve': 3, 'transfer_from': 10,
+    'get_currency': 1, 'get_transaction': 2, 'attr': 0,
+    'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
+    'exec': 15,
 }
 
 
@@ -68,6 +64,9 @@ class ContractAPI:
 
     def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
         return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
+
+    def get_transaction(self, tx_id: int) -> Optional[Transfer]:
+        return self.core.Transfers.get(tx_id)
 
     def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
@@ -185,17 +184,23 @@ class RapidWire:
 
     def _calculate_contract_cost(self, script: str) -> int:
         try:
-            tree = ast.parse(script)
-        except SyntaxError:
-            raise ValueError("Invalid syntax in contract script.")
+            ops = json.loads(script)
+            if not isinstance(ops, list):
+                raise ValueError("Contract script must be a JSON list.")
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON in contract script.")
 
-        cost = 0
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if isinstance(node.func.value, ast.Name) and node.func.value.id == 'api':
-                    method_name = node.func.attr
-                    cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
-        return cost
+        def calculate_block_cost(block):
+            cost = 0
+            for cmd in block:
+                op = cmd.get('op')
+                cost += CONTRACT_OP_COSTS.get(op, 0)
+                if op == 'if':
+                    cost += calculate_block_cost(cmd.get('then', []))
+                    cost += calculate_block_cost(cmd.get('else', []))
+            return cost
+
+        return calculate_block_cost(ops)
 
     def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> int:
         try:
@@ -219,50 +224,19 @@ class RapidWire:
 
                 api_handler = ContractAPI(self, execution_context, chain_context)
 
-                aeval_config = {
-                    'augassign': True,
-                    'if': True,
-                    'ifexp': True,
-                    'raise': True,
+                system_vars = {
+                    '_tx_source': caller_id,
+                    '_tx_dest': contract_owner_id,
+                    '_tx_currency': 0,
+                    '_tx_amount': 0,
+                    '_tx_input': input_data if input_data else ""
                 }
 
-                symtable = {
-                    'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
-                    'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
-                    'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
-                    'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
-                    'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
-                }
-
-                symtable.update({
-                    'get_balance': api_handler.get_balance,
-                    'transfer': api_handler.transfer,
-                    'approve': api_handler.approve,
-                    'transfer_from': api_handler.transfer_from,
-                    'get_currency': api_handler.get_currency,
-                    'create_claim': api_handler.create_claim,
-                    'get_claim': api_handler.get_claim,
-                    'pay_claim': api_handler.pay_claim,
-                    'cancel_claim': api_handler.cancel_claim,
-                    'execute_contract': api_handler.execute_contract,
-                    'get_variable': api_handler.get_variable,
-                    'set_variable': api_handler.set_variable,
-                    'network_max_cost': self.Config.Contract.max_cost,
-                    'ctx': execution_context,
-                    'Cancel': TransactionCanceledByContract,
-                })
-
-                aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=aeval_config)
+                vm = RapidWireVM(json.loads(contract.script), api_handler, system_vars)
 
                 try:
-                    aeval.eval(contract.script, show_errors=False)
-                    output_data = str(aeval.symtable.get('return_message')) if 'return_message' in aeval.symtable else None
-                    if aeval.error:
-                        err_dict:dict[str,str] = {}
-                        aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
-                        for err in aeval_error:
-                            err_dict[str(err.exc.__name__)] = str(err.msg)
-                        raise ContractError(err_dict)
+                    vm.run()
+                    output_data = vm.return_message
 
                     self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
                 except TransactionCanceledByContract as e:

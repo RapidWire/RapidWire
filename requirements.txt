@@ -1,6 +1,5 @@
 httpx
 mysql-connector-python
-asteval
 pydantic
 uvicorn
 fastapi
