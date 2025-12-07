@@ -227,8 +227,6 @@ class RapidWire:
                 system_vars = {
                     '_tx_source': caller_id,
                     '_tx_dest': contract_owner_id,
-                    '_tx_currency': 0,
-                    '_tx_amount': 0,
                     '_tx_input': input_data if input_data else ""
                 }
 

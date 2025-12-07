@@ -45,15 +45,25 @@ class RapidWireVM:
                 self._set_var(out, result)
 
     def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
+        # Helper to ensure numbers
+        def to_num(x):
+            try:
+                return int(x)
+            except (ValueError, TypeError):
+                try:
+                    return float(x)
+                except (ValueError, TypeError):
+                    return 0
+
         # A. Calculation & Logic
-        if op == 'add': return args[0] + args[1]
-        if op == 'sub': return args[0] - args[1]
-        if op == 'mul': return args[0] * args[1]
-        if op == 'div': return args[0] // args[1]
-        if op == 'mod': return args[0] % args[1]
+        if op == 'add': return to_num(args[0]) + to_num(args[1])
+        if op == 'sub': return to_num(args[0]) - to_num(args[1])
+        if op == 'mul': return to_num(args[0]) * to_num(args[1])
+        if op == 'div': return to_num(args[0]) // to_num(args[1])
+        if op == 'mod': return to_num(args[0]) % to_num(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
         if op == 'eq': return 1 if args[0] == args[1] else 0
-        if op == 'gt': return 1 if args[0] > args[1] else 0
+        if op == 'gt': return 1 if to_num(args[0]) > to_num(args[1]) else 0
 
         # B. Flow Control
         if op == 'if':
@@ -76,7 +86,7 @@ class RapidWireVM:
             # args: [to, amount, cur]
             to_id = int(args[0])
             amount = int(args[1])
-            cur_id = int(args[2]) if len(args) > 2 else int(self.vars['_tx_currency'])
+            cur_id = int(args[2])
             # source is contract owner (self)
             return self.api.transfer(self.vars['_tx_dest'], to_id, cur_id, amount)
 
@@ -150,6 +160,17 @@ class RapidWireVM:
             elif isinstance(obj, dict):
                 return obj.get(prop)
             return None
+
+        if op == 'getitem':
+            # args: [obj, index]
+            obj = args[0]
+            idx = args[1]
+            try:
+                if isinstance(idx, str) and idx.isdigit():
+                    idx = int(idx)
+                return obj[idx]
+            except:
+                return None
 
         if op == 'create_claim':
             # args: [payer, amount, cur, desc]

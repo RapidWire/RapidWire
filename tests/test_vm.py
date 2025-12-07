@@ -9,8 +9,6 @@ class TestRapidWireVM(unittest.TestCase):
         self.system_vars = {
             '_tx_source': 100,
             '_tx_dest': 200,
-            '_tx_currency': 1,
-            '_tx_amount': 50,
             '_tx_input': "test_input"
         }
 
@@ -23,6 +21,37 @@ class TestRapidWireVM(unittest.TestCase):
         vm.run()
         self.assertEqual(vm.vars['_res'], 30)
         self.assertEqual(vm.vars['_res2'], 25)
+
+    def test_arithmetic_cast(self):
+        script = [
+            {"op": "add", "args": ["10", "20"], "out": "_res"},
+            {"op": "store_set", "args": ["temp", "_res"]}, # Store 30 (as "30")
+            {"op": "store_get", "args": ["temp"], "out": "_val"}, # Get "30"
+            {"op": "add", "args": ["_val", "5"], "out": "_final"} # Should be 30 + 5 = 35
+        ]
+        # Mock api response for store_get
+        def side_effect(user, key):
+            if key == b'temp':
+                return b'30'
+            return None
+        self.api.get_variable.side_effect = side_effect
+
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_final'], 35)
+
+    def test_getitem(self):
+        script = [
+            {"op": "getitem", "args": ["_my_list", "1"], "out": "_res1"},
+            {"op": "getitem", "args": ["_my_dict", "key"], "out": "_res2"}
+        ]
+        self.system_vars['_my_list'] = ["a", "b", "c"]
+        self.system_vars['_my_dict'] = {"key": "value"}
+
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_res1'], "b")
+        self.assertEqual(vm.vars['_res2'], "value")
 
     def test_flow_control(self):
         script = [
