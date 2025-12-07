@@ -26,7 +26,8 @@ CREATE TABLE `api_key` (
 CREATE TABLE `balance` (
   `user_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
-  `amount` decimal(24, 0) NOT NULL
+  `amount` decimal(24, 0) NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -43,7 +44,8 @@ CREATE TABLE `claims` (
   `amount` decimal(24, 0) NOT NULL,
   `status` enum('pending','paid','canceled') NOT NULL DEFAULT 'pending',
   `created_at` bigint UNSIGNED NOT NULL,
-  `description` varchar(100) DEFAULT NULL
+  `description` varchar(100) DEFAULT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -75,7 +77,8 @@ CREATE TABLE `currency` (
   `delete_requested_at` bigint UNSIGNED DEFAULT NULL,
   `daily_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
   `new_daily_interest_rate` int UNSIGNED DEFAULT NULL,
-  `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL
+  `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL,
+  CHECK (`supply` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -88,7 +91,8 @@ CREATE TABLE `staking` (
   `user_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
   `amount` decimal(24, 0) NOT NULL,
-  `last_updated_at` bigint UNSIGNED NOT NULL
+  `last_updated_at` bigint UNSIGNED NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -103,7 +107,10 @@ CREATE TABLE `liquidity_pool` (
   `currency_b_id` bigint UNSIGNED NOT NULL,
   `reserve_a` decimal(24, 0) NOT NULL,
   `reserve_b` decimal(24, 0) NOT NULL,
-  `total_shares` decimal(24, 0) NOT NULL
+  `total_shares` decimal(24, 0) NOT NULL,
+  CHECK (`reserve_a` >= 0),
+  CHECK (`reserve_b` >= 0),
+  CHECK (`total_shares` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -116,7 +123,8 @@ CREATE TABLE `liquidity_provider` (
   `provider_id` int UNSIGNED NOT NULL,
   `pool_id` int UNSIGNED NOT NULL,
   `user_id` bigint UNSIGNED NOT NULL,
-  `shares` decimal(24, 0) NOT NULL
+  `shares` decimal(24, 0) NOT NULL,
+  CHECK (`shares` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -188,7 +196,8 @@ CREATE TABLE `transfer` (
 `dest_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
 `amount` decimal(24, 0) NOT NULL,
-`timestamp` bigint UNSIGNED NOT NULL
+`timestamp` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -217,7 +226,8 @@ CREATE TABLE `allowance` (
 `spender_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
 `amount` decimal(24, 0) NOT NULL,
-`last_updated_at` bigint UNSIGNED NOT NULL
+`last_updated_at` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -233,7 +243,8 @@ CREATE TABLE `allowance_log` (
 `spender_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
 `amount` decimal(24, 0) NOT NULL COMMENT '設定された許可額',
-`timestamp` bigint UNSIGNED NOT NULL
+`timestamp` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
