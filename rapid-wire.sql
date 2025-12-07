@@ -144,6 +144,17 @@ CREATE TABLE `notification_permissions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
+
+--
+-- Table structure for table `discord_permissions`
+--
+
+CREATE TABLE `discord_permissions` (
+  `guild_id` bigint UNSIGNED NOT NULL,
+  `user_id` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
 --
 -- New Tables
 --
@@ -296,6 +307,12 @@ ALTER TABLE `contract_variables`
 --
 ALTER TABLE `notification_permissions`
   ADD PRIMARY KEY (`user_id`,`allowed_user_id`);
+
+--
+-- Indexes for table `discord_permissions`
+--
+ALTER TABLE `discord_permissions`
+  ADD PRIMARY KEY (`guild_id`,`user_id`);
 
 --
 -- Indexes for new tables

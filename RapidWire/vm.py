@@ -1,4 +1,5 @@
 from typing import Any, List, Dict, Optional, TYPE_CHECKING
+import asyncio
 from .exceptions import ContractError, TransactionCanceledByContract
 
 if TYPE_CHECKING:
@@ -43,6 +44,19 @@ class RapidWireVM:
 
             if out:
                 self._set_var(out, result)
+
+    @staticmethod
+    def _run_async(coro):
+        """
+        Helper to run async code from sync context if possible.
+        Schedules the coroutine as a Task on the running loop.
+        Returns the Task object if successful, None otherwise.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            return asyncio.create_task(coro)
+        except RuntimeError:
+            return None
 
     def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
         # Helper to ensure numbers
@@ -196,6 +210,32 @@ class RapidWireVM:
             dest = int(args[0])
             input_data = str(args[1]) if len(args) > 1 else None
             return self.api.execute_contract(dest, input_data)
+
+        if op == 'discord_send':
+            # args: [guild_id, channel_id, message]
+            try:
+                guild_id = int(args[0])
+                channel_id = int(args[1])
+                message = str(args[2])
+            except (ValueError, IndexError):
+                 raise ContractError("Invalid arguments for discord_send")
+
+            # We schedule this as a task. Return 1 (success) optimistically.
+            self._run_async(self.api.discord_send(guild_id, channel_id, message))
+            return 1
+
+        if op == 'discord_role_add':
+            # args: [user_id, guild_id, role_id]
+            try:
+                user_id = int(args[0])
+                guild_id = int(args[1])
+                role_id = int(args[2])
+            except (ValueError, IndexError):
+                raise ContractError("Invalid arguments for discord_role_add")
+
+            # We schedule this as a task. Return 1 (success) optimistically.
+            self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
+            return 1
 
         # Fallback or Error
         raise ContractError(f"Unknown operation: {op}")

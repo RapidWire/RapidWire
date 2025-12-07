@@ -130,3 +130,7 @@ class ContractVariable(BaseModel):
 class NotificationPermission(BaseModel):
     user_id: int
     allowed_user_id: int
+
+class DiscordPermission(BaseModel):
+    guild_id: int
+    user_id: int

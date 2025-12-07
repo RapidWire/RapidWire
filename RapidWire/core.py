@@ -13,7 +13,7 @@ from .models import (
     UserModel, CurrencyModel, ContractModel, APIKeyModel, ClaimModel,
     StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel,
     NotificationPermissionModel, ExecutionModel, TransferModel, ContractHistoryModel,
-    AllowanceModel, AllowanceLogModel
+    AllowanceModel, AllowanceLogModel, DiscordPermissionModel
 )
 from .structs import (
     Currency, Claim, Stake, ExecutionContext, ChainContext, LiquidityPool,
@@ -39,14 +39,16 @@ CONTRACT_OP_COSTS = {
     'get_currency': 1, 'get_transaction': 2, 'attr': 0,
     'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
     'exec': 15,
+    'discord_send': 5, 'discord_role_add': 10,
 }
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, discord_client: Any = None):
         self.core = rapidwire_instance
         self.ctx = execution_context
         self.chain_context = chain_context
+        self.discord_client = discord_client
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
@@ -100,7 +102,8 @@ class ContractAPI:
         execution_id = self.core.execute_contract(
             caller_id=source_id,
             contract_owner_id=destination_id,
-            input_data=input_data
+            input_data=input_data,
+            discord_client=self.discord_client
         )
 
         execution = self.core.Executions.get(execution_id)
@@ -129,6 +132,66 @@ class ContractAPI:
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
 
+    async def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
+        if not self.discord_client:
+            return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            channel = self.discord_client.get_channel(channel_id)
+            if not channel:
+                # Try fetching if not in cache
+                channel = await self.discord_client.fetch_channel(channel_id)
+
+            if not channel:
+                return False
+
+            if channel.guild.id != guild_id:
+                 raise PermissionError("Channel does not belong to the specified guild.")
+
+            await channel.send(message)
+            return True
+        except Exception as e:
+            # We might want to log this error or return it somehow, but for now just return False
+            print(f"Error sending message: {e}")
+            return False
+
+    async def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.discord_client:
+             return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            guild = self.discord_client.get_guild(guild_id)
+            if not guild:
+                 guild = await self.discord_client.fetch_guild(guild_id)
+
+            if not guild:
+                return False
+
+            member = guild.get_member(user_id)
+            if not member:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except:
+                    return False
+
+            role = guild.get_role(role_id)
+            if not role:
+                 return False
+
+            await member.add_roles(role)
+            return True
+        except Exception as e:
+            print(f"Error adding role: {e}")
+            return False
+
 
 class RapidWire:
     def __init__(self, db_config: dict):
@@ -143,6 +206,7 @@ class RapidWire:
         self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.ContractVariables = ContractVariableModel(self.db)
         self.NotificationPermissions = NotificationPermissionModel(self.db)
+        self.DiscordPermissions = DiscordPermissionModel(self.db)
         self.Executions = ExecutionModel(self.db)
         self.Transfers = TransferModel(self.db)
         self.ContractHistories = ContractHistoryModel(self.db)
@@ -202,7 +266,7 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> int:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> int:
         try:
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
@@ -222,7 +286,7 @@ class RapidWire:
                     execution_id=execution_id
                 )
 
-                api_handler = ContractAPI(self, execution_context, chain_context)
+                api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
 
                 system_vars = {
                     '_tx_source': caller_id,

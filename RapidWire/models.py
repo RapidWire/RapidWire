@@ -9,7 +9,7 @@ from .database import DatabaseConnection
 from .structs import (
     Balance, Currency, Contract, APIKey, Claim, Stake, LiquidityPool,
     LiquidityProvider, ContractVariable, NotificationPermission, Execution,
-    Transfer, ContractHistory, Allowance, AllowanceLog
+    Transfer, ContractHistory, Allowance, AllowanceLog, DiscordPermission
 )
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
@@ -607,3 +607,32 @@ class AllowanceLogModel:
             """,
             (execution_id, owner_id, spender_id, currency_id, amount, int(time()))
         )
+
+class DiscordPermissionModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def add(self, guild_id: int, user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "INSERT INTO discord_permissions (guild_id, user_id) VALUES (%s, %s) ON DUPLICATE KEY UPDATE user_id = user_id",
+                (guild_id, user_id)
+            )
+
+    def remove(self, guild_id: int, user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "DELETE FROM discord_permissions WHERE guild_id = %s AND user_id = %s",
+                (guild_id, user_id)
+            )
+
+    def check(self, guild_id: int, user_id: int) -> bool:
+        with self.db as cursor:
+            cursor.execute("SELECT 1 FROM discord_permissions WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
+            return cursor.fetchone() is not None
+
+    def get_all(self, guild_id: int) -> List[DiscordPermission]:
+         with self.db as cursor:
+            cursor.execute("SELECT * FROM discord_permissions WHERE guild_id = %s", (guild_id,))
+            results = cursor.fetchall()
+            return [DiscordPermission(**row) for row in results]
