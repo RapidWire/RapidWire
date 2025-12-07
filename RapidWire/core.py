@@ -34,7 +34,7 @@ CONTRACT_OP_COSTS = {
     'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
     'if': 1, 'exit': 0, 'cancel': 0,
     'transfer': 10, 'get_balance': 1, 'reply': 1,
-    'store_get': 1, 'store_set': 3, 'store_get_other': 1,
+    'store_str_get': 1, 'store_int_get': 1, 'store_str_set': 3, 'store_int_set': 3,
     'approve': 3, 'transfer_from': 10,
     'get_currency': 1, 'get_transaction': 2, 'attr': 0,
     'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,

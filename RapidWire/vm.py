@@ -121,30 +121,33 @@ class RapidWireVM:
             self.return_message = str(args[0])
             return None
 
-        if op == 'store_get':
+        if op == 'store_str_get':
+             # args: [key]
+             key = str(args[0])
+             val = self.api.get_variable(None, key) # None user_id defaults to owner in api
+             if val is None: return ""
+             return str(val)
+
+        if op == 'store_int_get':
              # args: [key]
              key = str(args[0])
              val = self.api.get_variable(None, key) # None user_id defaults to owner in api
              if val is None: return 0
-             return val
+             return to_num(val)
 
-        if op == 'store_set':
+        if op == 'store_str_set':
              # args: [key, val]
              key = str(args[0])
-             val = args[1]
-             # Ensure val is int or str, otherwise cast to str
-             if not isinstance(val, (int, str)):
-                 val = str(val)
+             val = str(args[1])
              self.api.set_variable(key, val)
              return None
 
-        if op == 'store_get_other':
-            # args: [user_id, key]
-            user_id = int(args[0])
-            key = str(args[1])
-            val = self.api.get_variable(user_id, key)
-            if val is None: return 0
-            return val
+        if op == 'store_int_set':
+             # args: [key, val]
+             key = str(args[0])
+             val = to_num(args[1])
+             self.api.set_variable(key, val)
+             return None
 
         if op == 'approve':
             # args: [spender, amount, cur]

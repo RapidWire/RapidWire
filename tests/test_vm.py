@@ -25,14 +25,14 @@ class TestRapidWireVM(unittest.TestCase):
     def test_arithmetic_cast(self):
         script = [
             {"op": "add", "args": ["10", "20"], "out": "_res"},
-            {"op": "store_set", "args": ["temp", "_res"]}, # Store 30 (as "30")
-            {"op": "store_get", "args": ["temp"], "out": "_val"}, # Get "30"
+            {"op": "store_int_set", "args": ["temp", "_res"]}, # Store 30
+            {"op": "store_int_get", "args": ["temp"], "out": "_val"}, # Get 30
             {"op": "add", "args": ["_val", "5"], "out": "_final"} # Should be 30 + 5 = 35
         ]
         # Mock api response for store_get
         def side_effect(user, key):
-            if key == b'temp':
-                return b'30'
+            if key == 'temp':
+                return '30'
             return None
         self.api.get_variable.side_effect = side_effect
 
@@ -96,16 +96,48 @@ class TestRapidWireVM(unittest.TestCase):
         vm.run()
         self.assertIsNone(vm.return_message)
 
-    def test_store_ops(self):
+    def test_store_ops_str(self):
         script = [
-            {"op": "store_set", "args": ["key", "value"]},
-            {"op": "store_get", "args": ["key"], "out": "_val"}
+            {"op": "store_str_set", "args": ["key", "value"]},
+            {"op": "store_str_get", "args": ["key"], "out": "_val"}
         ]
-        self.api.get_variable.return_value = b'value'
+        self.api.get_variable.return_value = 'value'
         vm = RapidWireVM(script, self.api, self.system_vars)
         vm.run()
-        self.api.set_variable.assert_called_with(b'key', b'value')
+        self.api.set_variable.assert_called_with('key', 'value')
         self.assertEqual(vm.vars['_val'], 'value')
+
+    def test_store_ops_int(self):
+        script = [
+            {"op": "store_int_set", "args": ["key", 123]},
+            {"op": "store_int_get", "args": ["key"], "out": "_val"}
+        ]
+        self.api.get_variable.return_value = 123
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.api.set_variable.assert_called_with('key', 123)
+        self.assertEqual(vm.vars['_val'], 123)
+
+    def test_store_ops_type_safety(self):
+        # test that store_str_get returns string even if stored value is something else (or None)
+        script = [
+            {"op": "store_str_get", "args": ["key"], "out": "_val"}
+        ]
+        self.api.get_variable.return_value = 123
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_val'], "123")
+        self.assertIsInstance(vm.vars['_val'], str)
+
+        # test that store_int_get returns int even if stored value is string "123"
+        script = [
+            {"op": "store_int_get", "args": ["key"], "out": "_val"}
+        ]
+        self.api.get_variable.return_value = "123"
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_val'], 123)
+        self.assertIsInstance(vm.vars['_val'], int)
 
     def test_hash(self):
         script = [
