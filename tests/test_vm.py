@@ -7,9 +7,9 @@ class TestRapidWireVM(unittest.TestCase):
     def setUp(self):
         self.api = MagicMock()
         self.system_vars = {
-            '_tx_source': 100,
-            '_tx_dest': 200,
-            '_tx_input': "test_input"
+            '_sender': 100,
+            '_self': 200,
+            '_input': "test_input"
         }
 
     def test_arithmetic(self):
@@ -55,7 +55,7 @@ class TestRapidWireVM(unittest.TestCase):
 
     def test_flow_control(self):
         script = [
-            {"op": "eq", "args": ["_tx_input", "test_input"], "out": "_is_match"},
+            {"op": "eq", "args": ["_input", "test_input"], "out": "_is_match"},
             {
                 "op": "if",
                 "args": ["_is_match"],

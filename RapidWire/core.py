@@ -289,9 +289,9 @@ class RapidWire:
                 api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
 
                 system_vars = {
-                    '_tx_source': caller_id,
-                    '_tx_dest': contract_owner_id,
-                    '_tx_input': input_data if input_data else ""
+                    '_sender': caller_id,
+                    '_self': contract_owner_id,
+                    '_input': input_data if input_data else ""
                 }
 
                 vm = RapidWireVM(json.loads(contract.script), api_handler, system_vars)

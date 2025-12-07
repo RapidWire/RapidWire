@@ -104,7 +104,7 @@ class RapidWireVM:
             amount = int(args[1])
             cur_id = int(args[2])
             # source is contract owner (self)
-            return self.api.transfer(self.vars['_tx_dest'], to_id, cur_id, amount)
+            return self.api.transfer(self.vars['_self'], to_id, cur_id, amount)
 
         if op == 'get_balance':
              # args: [user, cur]
@@ -197,15 +197,15 @@ class RapidWireVM:
             desc = str(args[3]) if len(args) > 3 else None
             # ContractAPI.create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None)
             # claimant is self (contract owner)
-            return self.api.create_claim(self.vars['_tx_dest'], payer, cur, amount, desc)
+            return self.api.create_claim(self.vars['_self'], payer, cur, amount, desc)
 
         if op == 'pay_claim':
              # args: [claim_id]
-             return self.api.pay_claim(int(args[0]), self.vars['_tx_dest'])
+             return self.api.pay_claim(int(args[0]), self.vars['_self'])
 
         if op == 'cancel_claim':
              # args: [claim_id]
-             return self.api.cancel_claim(int(args[0]), self.vars['_tx_dest'])
+             return self.api.cancel_claim(int(args[0]), self.vars['_self'])
 
         if op == 'exec':
             # args: [dest, input]
