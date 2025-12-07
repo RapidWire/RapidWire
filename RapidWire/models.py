@@ -357,7 +357,7 @@ class ContractVariableModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    def get(self, user_id: int, key: bytes) -> Optional[ContractVariable]:
+    def get(self, user_id: int, key: str) -> Optional[ContractVariable]:
         with self.db as cursor:
             # Check integer variables
             cursor.execute(
@@ -379,7 +379,7 @@ class ContractVariableModel:
 
             return None
 
-    def set(self, user_id: int, key: bytes, value: int | str):
+    def set(self, user_id: int, key: str, value: int | str):
         with self.db as cursor:
             if isinstance(value, int):
                 # Insert into int table

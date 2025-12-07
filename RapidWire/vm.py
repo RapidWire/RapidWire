@@ -123,14 +123,14 @@ class RapidWireVM:
 
         if op == 'store_get':
              # args: [key]
-             key = str(args[0]).encode()
+             key = str(args[0])
              val = self.api.get_variable(None, key) # None user_id defaults to owner in api
              if val is None: return 0
              return val
 
         if op == 'store_set':
              # args: [key, val]
-             key = str(args[0]).encode()
+             key = str(args[0])
              val = args[1]
              # Ensure val is int or str, otherwise cast to str
              if not isinstance(val, (int, str)):
@@ -141,7 +141,7 @@ class RapidWireVM:
         if op == 'store_get_other':
             # args: [user_id, key]
             user_id = int(args[0])
-            key = str(args[1]).encode()
+            key = str(args[1])
             val = self.api.get_variable(user_id, key)
             if val is None: return 0
             return val

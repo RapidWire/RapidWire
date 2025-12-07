@@ -109,15 +109,15 @@ class ContractAPI:
         execution = self.core.Executions.get(execution_id)
         return execution.output_data if execution else None
 
-    def get_variable(self, user_id: int|None, key: bytes) -> int | str | None:
+    def get_variable(self, user_id: int|None, key: str) -> int | str | None:
         if user_id is None:
             user_id = self.ctx.contract_owner_id
         variable = self.core.ContractVariables.get(user_id, key)
         return variable.value if variable else None
 
-    def set_variable(self, key: bytes, value: int | str):
-        if len(key) > 8:
-            raise ValueError("Key must be 8 bytes or less.")
+    def set_variable(self, key: str, value: int | str):
+        if len(key) > 255:
+            raise ValueError("Key must be 255 characters or less.")
         # Value limit checks depend on type now.
         # Int: decimal(65,0) is huge, no check needed for typical use.
         # Str: text is huge, no check needed for typical use.
