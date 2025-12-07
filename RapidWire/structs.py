@@ -125,7 +125,7 @@ class LiquidityProvider(BaseModel):
 class ContractVariable(BaseModel):
     user_id: int
     key: bytes
-    value: bytes
+    value: int | str
 
 class NotificationPermission(BaseModel):
     user_id: int

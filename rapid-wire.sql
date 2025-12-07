@@ -130,15 +130,26 @@ CREATE TABLE `liquidity_provider` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contract_variables`
+-- Table structure for table `contract_int_variables`
 --
 
-CREATE TABLE `contract_variables` (
+CREATE TABLE `contract_int_variables` (
   `user_id` bigint UNSIGNED NOT NULL,
   `key` varbinary(8) NOT NULL,
-  `value` varbinary(16) NOT NULL
+  `value` decimal(65, 0) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `contract_str_variables`
+--
+
+CREATE TABLE `contract_str_variables` (
+  `user_id` bigint UNSIGNED NOT NULL,
+  `key` varbinary(8) NOT NULL,
+  `value` text NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -308,9 +319,15 @@ ALTER TABLE `liquidity_provider`
   ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
 
 --
--- Indexes for table `contract_variables`
+-- Indexes for table `contract_int_variables`
 --
-ALTER TABLE `contract_variables`
+ALTER TABLE `contract_int_variables`
+  ADD PRIMARY KEY (`user_id`, `key`);
+
+--
+-- Indexes for table `contract_str_variables`
+--
+ALTER TABLE `contract_str_variables`
   ADD PRIMARY KEY (`user_id`, `key`);
 
 --

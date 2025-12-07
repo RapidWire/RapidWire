@@ -126,15 +126,15 @@ class RapidWireVM:
              key = str(args[0]).encode()
              val = self.api.get_variable(None, key) # None user_id defaults to owner in api
              if val is None: return 0
-             try:
-                 return val.decode()
-             except:
-                 return val
+             return val
 
         if op == 'store_set':
              # args: [key, val]
              key = str(args[0]).encode()
-             val = str(args[1]).encode()
+             val = args[1]
+             # Ensure val is int or str, otherwise cast to str
+             if not isinstance(val, (int, str)):
+                 val = str(val)
              self.api.set_variable(key, val)
              return None
 
@@ -144,10 +144,7 @@ class RapidWireVM:
             key = str(args[1]).encode()
             val = self.api.get_variable(user_id, key)
             if val is None: return 0
-            try:
-                return val.decode()
-            except:
-                return val
+            return val
 
         if op == 'approve':
             # args: [spender, amount, cur]
