@@ -107,5 +107,22 @@ class TestRapidWireVM(unittest.TestCase):
         self.api.set_variable.assert_called_with(b'key', b'value')
         self.assertEqual(vm.vars['_val'], 'value')
 
+    def test_hash(self):
+        script = [
+            {"op": "hash", "args": ["hello"], "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        # "hello" sha256: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        self.assertEqual(vm.vars['_res'], "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+
+    def test_random(self):
+        script = [
+            {"op": "random", "args": ["1", "10"], "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertTrue(1 <= vm.vars['_res'] <= 10)
+
 if __name__ == '__main__':
     unittest.main()

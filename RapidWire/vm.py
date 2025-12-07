@@ -1,5 +1,7 @@
 from typing import Any, List, Dict, Optional, TYPE_CHECKING
 import asyncio
+import hashlib
+import random
 from .exceptions import ContractError, TransactionCanceledByContract
 
 if TYPE_CHECKING:
@@ -236,6 +238,23 @@ class RapidWireVM:
             # We schedule this as a task. Return 1 (success) optimistically.
             self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
             return 1
+
+        if op == 'hash':
+            # args: [string]
+            try:
+                s = str(args[0])
+                return hashlib.sha256(s.encode('utf-8')).hexdigest()
+            except IndexError:
+                raise ContractError("Invalid arguments for hash")
+
+        if op == 'random':
+            # args: [min, max]
+            try:
+                min_val = int(args[0])
+                max_val = int(args[1])
+                return random.randint(min_val, max_val)
+            except (ValueError, IndexError):
+                raise ContractError("Invalid arguments for random")
 
         # Fallback or Error
         raise ContractError(f"Unknown operation: {op}")
