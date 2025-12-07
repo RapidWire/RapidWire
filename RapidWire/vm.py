@@ -27,6 +27,12 @@ class RapidWireVM:
 
     def _set_var(self, name: str, value: Any):
         if name and isinstance(name, str) and name.startswith('_'):
+            if isinstance(value, (int, float)):
+                if abs(value) > 10**24:
+                    raise ContractError(f"Variable '{name}' exceeded numeric limit.")
+            elif isinstance(value, str):
+                if len(value) > 100:
+                    raise ContractError(f"Variable '{name}' exceeded string length limit.")
             self.vars[name] = value
 
     def run(self):
