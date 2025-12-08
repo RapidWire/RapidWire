@@ -327,6 +327,56 @@ class Compiler:
                 })
                 return out_var, instrs
 
+        elif isinstance(node, ast.BoolOp):
+            # Boolean Operation (and, or)
+            op_type = type(node.op)
+            values = node.values
+            out_var = target_var if target_var else self._get_temp_var()
+
+            def process_bool_op(values, target):
+                # Helper to recursively process bool ops
+                if len(values) == 1:
+                    v_var, v_instrs = self._process_expr(values[0], target_var=target)
+                    # If process_expr didn't assign to target (e.g. constant/variable), generate set
+                    if v_var != target:
+                        v_instrs.append({"op": "set", "args": [v_var], "out": target})
+                    return v_instrs
+
+                head = values[0]
+                head_var, head_instrs = self._process_expr(head)
+
+                # Assign head result to target initially
+                if head_var != target:
+                    head_instrs.append({"op": "set", "args": [head_var], "out": target})
+
+                # Recursively process the rest
+                rest_instrs = process_bool_op(values[1:], target)
+
+                if op_type == ast.And:
+                    # if target (head) is true, evaluate rest. Else target remains head (false).
+                    if_op = {
+                        "op": "if",
+                        "args": [target],
+                        "then": rest_instrs,
+                        "else": []
+                    }
+                    head_instrs.append(if_op)
+                elif op_type == ast.Or:
+                    # if target (head) is true, keep it. Else evaluate rest.
+                    if_op = {
+                        "op": "if",
+                        "args": [target],
+                        "then": [],
+                        "else": rest_instrs
+                    }
+                    head_instrs.append(if_op)
+                else:
+                    raise ValueError(f"Unsupported BoolOp: {op_type}")
+
+                return head_instrs
+
+            return out_var, process_bool_op(values, out_var)
+
         else:
              raise ValueError(f"Unsupported expression type: {type(node)}")
 
