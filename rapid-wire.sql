@@ -26,7 +26,8 @@ CREATE TABLE `api_key` (
 CREATE TABLE `balance` (
   `user_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
-  `amount` bigint UNSIGNED NOT NULL
+  `amount` decimal(24, 0) NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -40,10 +41,11 @@ CREATE TABLE `claims` (
   `claimant_id` bigint UNSIGNED NOT NULL COMMENT '請求者',
   `payer_id` bigint UNSIGNED NOT NULL COMMENT '支払者',
   `currency_id` bigint UNSIGNED NOT NULL,
-  `amount` bigint UNSIGNED NOT NULL,
+  `amount` decimal(24, 0) NOT NULL,
   `status` enum('pending','paid','canceled') NOT NULL DEFAULT 'pending',
   `created_at` bigint UNSIGNED NOT NULL,
-  `description` varchar(100) DEFAULT NULL
+  `description` varchar(100) DEFAULT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -70,12 +72,13 @@ CREATE TABLE `currency` (
   `name` varchar(24) NOT NULL,
   `symbol` varchar(8) NOT NULL,
   `issuer` bigint UNSIGNED NOT NULL,
-  `supply` bigint UNSIGNED NOT NULL,
+  `supply` decimal(24, 0) NOT NULL,
   `minting_renounced` tinyint(1) NOT NULL DEFAULT '0',
   `delete_requested_at` bigint UNSIGNED DEFAULT NULL,
   `daily_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
   `new_daily_interest_rate` int UNSIGNED DEFAULT NULL,
-  `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL
+  `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL,
+  CHECK (`supply` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -87,8 +90,9 @@ CREATE TABLE `currency` (
 CREATE TABLE `staking` (
   `user_id` bigint UNSIGNED NOT NULL,
   `currency_id` bigint UNSIGNED NOT NULL,
-  `amount` bigint UNSIGNED NOT NULL,
-  `last_updated_at` bigint UNSIGNED NOT NULL
+  `amount` decimal(24, 0) NOT NULL,
+  `last_updated_at` bigint UNSIGNED NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -101,9 +105,12 @@ CREATE TABLE `liquidity_pool` (
   `pool_id` int UNSIGNED NOT NULL,
   `currency_a_id` bigint UNSIGNED NOT NULL,
   `currency_b_id` bigint UNSIGNED NOT NULL,
-  `reserve_a` bigint UNSIGNED NOT NULL,
-  `reserve_b` bigint UNSIGNED NOT NULL,
-  `total_shares` bigint UNSIGNED NOT NULL
+  `reserve_a` decimal(24, 0) NOT NULL,
+  `reserve_b` decimal(24, 0) NOT NULL,
+  `total_shares` decimal(24, 0) NOT NULL,
+  CHECK (`reserve_a` >= 0),
+  CHECK (`reserve_b` >= 0),
+  CHECK (`total_shares` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -116,21 +123,33 @@ CREATE TABLE `liquidity_provider` (
   `provider_id` int UNSIGNED NOT NULL,
   `pool_id` int UNSIGNED NOT NULL,
   `user_id` bigint UNSIGNED NOT NULL,
-  `shares` bigint UNSIGNED NOT NULL
+  `shares` decimal(24, 0) NOT NULL,
+  CHECK (`shares` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contract_variables`
+-- Table structure for table `contract_int_variables`
 --
 
-CREATE TABLE `contract_variables` (
+CREATE TABLE `contract_int_variables` (
   `user_id` bigint UNSIGNED NOT NULL,
-  `key` varbinary(8) NOT NULL,
-  `value` varbinary(16) NOT NULL
+  `key` varchar(31) NOT NULL,
+  `value` decimal(30, 0) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `contract_str_variables`
+--
+
+CREATE TABLE `contract_str_variables` (
+  `user_id` bigint UNSIGNED NOT NULL,
+  `key` varchar(31) NOT NULL,
+  `value` varchar(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -141,6 +160,17 @@ CREATE TABLE `contract_variables` (
 CREATE TABLE `notification_permissions` (
   `user_id` bigint UNSIGNED NOT NULL,
   `allowed_user_id` bigint UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `discord_permissions`
+--
+
+CREATE TABLE `discord_permissions` (
+  `guild_id` bigint UNSIGNED NOT NULL,
+  `user_id` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -176,8 +206,9 @@ CREATE TABLE `transfer` (
 `source_id` bigint UNSIGNED NOT NULL,
 `dest_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
-`amount` bigint UNSIGNED NOT NULL,
-`timestamp` bigint UNSIGNED NOT NULL
+`amount` decimal(24, 0) NOT NULL,
+`timestamp` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -205,8 +236,9 @@ CREATE TABLE `allowance` (
 `owner_id` bigint UNSIGNED NOT NULL,
 `spender_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
-`amount` bigint UNSIGNED NOT NULL,
-`last_updated_at` bigint UNSIGNED NOT NULL
+`amount` decimal(24, 0) NOT NULL,
+`last_updated_at` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -221,8 +253,9 @@ CREATE TABLE `allowance_log` (
 `owner_id` bigint UNSIGNED NOT NULL,
 `spender_id` bigint UNSIGNED NOT NULL,
 `currency_id` bigint UNSIGNED NOT NULL,
-`amount` bigint UNSIGNED NOT NULL COMMENT '設定された許可額',
-`timestamp` bigint UNSIGNED NOT NULL
+`amount` decimal(24, 0) NOT NULL COMMENT '設定された許可額',
+`timestamp` bigint UNSIGNED NOT NULL,
+CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -286,9 +319,15 @@ ALTER TABLE `liquidity_provider`
   ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
 
 --
--- Indexes for table `contract_variables`
+-- Indexes for table `contract_int_variables`
 --
-ALTER TABLE `contract_variables`
+ALTER TABLE `contract_int_variables`
+  ADD PRIMARY KEY (`user_id`, `key`);
+
+--
+-- Indexes for table `contract_str_variables`
+--
+ALTER TABLE `contract_str_variables`
   ADD PRIMARY KEY (`user_id`, `key`);
 
 --
@@ -296,6 +335,12 @@ ALTER TABLE `contract_variables`
 --
 ALTER TABLE `notification_permissions`
   ADD PRIMARY KEY (`user_id`,`allowed_user_id`);
+
+--
+-- Indexes for table `discord_permissions`
+--
+ALTER TABLE `discord_permissions`
+  ADD PRIMARY KEY (`guild_id`,`user_id`);
 
 --
 -- Indexes for new tables

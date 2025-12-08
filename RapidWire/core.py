@@ -1,19 +1,19 @@
 import mysql.connector
 import re
-import ast
+import json
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
-import asteval
 from decimal import Decimal
 import hashlib
 
 from .config import Config
+from .vm import RapidWireVM
 from .database import DatabaseConnection
 from .models import (
     UserModel, CurrencyModel, ContractModel, APIKeyModel, ClaimModel,
     StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel,
     NotificationPermissionModel, ExecutionModel, TransferModel, ContractHistoryModel,
-    AllowanceModel, AllowanceLogModel
+    AllowanceModel, AllowanceLogModel, DiscordPermissionModel
 )
 from .structs import (
     Currency, Claim, Stake, ExecutionContext, ChainContext, LiquidityPool,
@@ -30,27 +30,25 @@ from .exceptions import (
 
 SYSTEM_USER_ID = 0
 SECONDS_IN_A_DAY = 86400
-CONTRACT_METHOD_COSTS = {
-    'get_balance': 1,
-    'get_transaction': 2,
-    'transfer': 10,
-    'search_transactions': 5,
-    'get_currency': 1,
-    'create_claim': 3,
-    'get_claim': 2,
-    'pay_claim': 5,
-    'cancel_claim': 2,
-    'execute_contract': 15,
-    'get_variable': 1,
-    'set_variable': 3,
+CONTRACT_OP_COSTS = {
+    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
+    'if': 1, 'exit': 0, 'cancel': 0,
+    'transfer': 10, 'get_balance': 1, 'reply': 1,
+    'store_str_get': 1, 'store_int_get': 1, 'store_str_set': 3, 'store_int_set': 3,
+    'approve': 3, 'transfer_from': 10,
+    'get_currency': 1, 'get_transaction': 2, 'attr': 0,
+    'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
+    'exec': 15,
+    'discord_send': 5, 'discord_role_add': 10,
 }
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, discord_client: Any = None):
         self.core = rapidwire_instance
         self.ctx = execution_context
         self.chain_context = chain_context
+        self.discord_client = discord_client
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
@@ -68,6 +66,9 @@ class ContractAPI:
 
     def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
         return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
+
+    def get_transaction(self, tx_id: int) -> Optional[Transfer]:
+        return self.core.Transfers.get(tx_id)
 
     def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
@@ -101,27 +102,30 @@ class ContractAPI:
         execution_id = self.core.execute_contract(
             caller_id=source_id,
             contract_owner_id=destination_id,
-            input_data=input_data
+            input_data=input_data,
+            discord_client=self.discord_client
         )
 
         execution = self.core.Executions.get(execution_id)
         return execution.output_data if execution else None
 
-    def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
+    def get_variable(self, user_id: int|None, key: str) -> int | str | None:
         if user_id is None:
             user_id = self.ctx.contract_owner_id
         variable = self.core.ContractVariables.get(user_id, key)
         return variable.value if variable else None
 
-    def set_variable(self, key: bytes, value: bytes):
-        if len(key) > 8:
-            raise ValueError("Key must be 8 bytes or less.")
-        if len(value) > 16:
-            raise ValueError("Value must be 16 bytes or less.")
+    def set_variable(self, key: str, value: int | str):
+        if len(key) > 31:
+            raise ValueError("Key must be 31 characters or less.")
+        if isinstance(value, str) and len(value) > 255:
+            raise ValueError("String value is too long.")
+        if isinstance(value, int) and abs(value) > 10**30:
+            raise ValueError("Integer value is too large.")
 
         user_variables = self.core.ContractVariables.get_all_for_user(self.ctx.contract_owner_id)
         if len(user_variables) >= 2000:
-             # Check if the key already exists, if so, it's an update, not an insert
+            # Check if the key already exists, if so, it's an update, not an insert
             if not any(v.key == key for v in user_variables):
                 raise ValueError("Maximum of 2000 variables reached for this user.")
 
@@ -129,6 +133,66 @@ class ContractAPI:
 
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
+
+    async def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
+        if not self.discord_client:
+            return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            channel = self.discord_client.get_channel(channel_id)
+            if not channel:
+                # Try fetching if not in cache
+                channel = await self.discord_client.fetch_channel(channel_id)
+
+            if not channel:
+                return False
+
+            if channel.guild.id != guild_id:
+                raise PermissionError("Channel does not belong to the specified guild.")
+
+            await channel.send(message)
+            return True
+        except Exception as e:
+            # We might want to log this error or return it somehow, but for now just return False
+            print(f"Error sending message: {e}")
+            return False
+
+    async def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.discord_client:
+             return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            guild = self.discord_client.get_guild(guild_id)
+            if not guild:
+                guild = await self.discord_client.fetch_guild(guild_id)
+
+            if not guild:
+                return False
+
+            member = guild.get_member(user_id)
+            if not member:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except:
+                    return False
+
+            role = guild.get_role(role_id)
+            if not role:
+                return False
+
+            await member.add_roles(role)
+            return True
+        except Exception as e:
+            print(f"Error adding role: {e}")
+            return False
 
 
 class RapidWire:
@@ -144,6 +208,7 @@ class RapidWire:
         self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.ContractVariables = ContractVariableModel(self.db)
         self.NotificationPermissions = NotificationPermissionModel(self.db)
+        self.DiscordPermissions = DiscordPermissionModel(self.db)
         self.Executions = ExecutionModel(self.db)
         self.Transfers = TransferModel(self.db)
         self.ContractHistories = ContractHistoryModel(self.db)
@@ -175,7 +240,7 @@ class RapidWire:
         if reward > 0:
             new_amount = stake.amount + reward
             self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
-            # We need to create a transfer for the reward
+            # need to create a transfer for the reward
             self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, reward)
             # Update the supply
             self.Currencies.update_supply(cursor, currency_id, reward)
@@ -185,19 +250,25 @@ class RapidWire:
 
     def _calculate_contract_cost(self, script: str) -> int:
         try:
-            tree = ast.parse(script)
-        except SyntaxError:
-            raise ValueError("Invalid syntax in contract script.")
+            ops = json.loads(script)
+            if not isinstance(ops, list):
+                raise ValueError("Contract script must be a JSON list.")
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON in contract script.")
 
-        cost = 0
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if isinstance(node.func.value, ast.Name) and node.func.value.id == 'api':
-                    method_name = node.func.attr
-                    cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
-        return cost
+        def calculate_block_cost(block):
+            cost = 0
+            for cmd in block:
+                op = cmd.get('op')
+                cost += CONTRACT_OP_COSTS.get(op, 0)
+                if op == 'if':
+                    cost += calculate_block_cost(cmd.get('then', []))
+                    cost += calculate_block_cost(cmd.get('else', []))
+            return cost
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None) -> int:
+        return calculate_block_cost(ops)
+
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> int:
         try:
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
@@ -217,52 +288,19 @@ class RapidWire:
                     execution_id=execution_id
                 )
 
-                api_handler = ContractAPI(self, execution_context, chain_context)
+                api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
 
-                aeval_config = {
-                    'augassign': True,
-                    'if': True,
-                    'ifexp': True,
-                    'raise': True,
+                system_vars = {
+                    '_sender': caller_id,
+                    '_self': contract_owner_id,
+                    '_input': input_data if input_data else ""
                 }
 
-                symtable = {
-                    'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
-                    'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
-                    'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
-                    'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
-                    'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
-                }
-
-                symtable.update({
-                    'get_balance': api_handler.get_balance,
-                    'transfer': api_handler.transfer,
-                    'approve': api_handler.approve,
-                    'transfer_from': api_handler.transfer_from,
-                    'get_currency': api_handler.get_currency,
-                    'create_claim': api_handler.create_claim,
-                    'get_claim': api_handler.get_claim,
-                    'pay_claim': api_handler.pay_claim,
-                    'cancel_claim': api_handler.cancel_claim,
-                    'execute_contract': api_handler.execute_contract,
-                    'get_variable': api_handler.get_variable,
-                    'set_variable': api_handler.set_variable,
-                    'network_max_cost': self.Config.Contract.max_cost,
-                    'ctx': execution_context,
-                    'Cancel': TransactionCanceledByContract,
-                })
-
-                aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=aeval_config)
+                vm = RapidWireVM(json.loads(contract.script), api_handler, system_vars)
 
                 try:
-                    aeval.eval(contract.script, show_errors=False)
-                    output_data = str(aeval.symtable.get('return_message')) if 'return_message' in aeval.symtable else None
-                    if aeval.error:
-                        err_dict:dict[str,str] = {}
-                        aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
-                        for err in aeval_error:
-                            err_dict[str(err.exc.__name__)] = str(err.msg)
-                        raise ContractError(err_dict)
+                    vm.run()
+                    output_data = vm.return_message
 
                     self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
                 except TransactionCanceledByContract as e:

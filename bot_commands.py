@@ -190,7 +190,8 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
         execution_id = Rapid.execute_contract(
             caller_id=interaction.user.id,
             contract_owner_id=user.id,
-            input_data=input_data
+            input_data=input_data,
+            discord_client=interaction.client
         )
         desc = f"{user.mention} のコントラクトを実行しました。\n\n**実行ID:** `{execution_id}`"
         await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了"))
@@ -865,6 +866,59 @@ async def notification_list(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
 
+# --- Discord Permission Commands ---
+
+discord_permission_group = app_commands.Group(name="discord-permission", description="[管理者] コントラクトによるDiscord操作権限を管理します。")
+
+@discord_permission_group.command(name="allow", description="指定したユーザーのコントラクトにDiscord操作を許可します。")
+@app_commands.describe(user="許可するユーザー")
+@app_commands.checks.has_permissions(administrator=True)
+async def discord_permission_allow(interaction: discord.Interaction, user: User):
+    await interaction.response.defer(thinking=True)
+    if not interaction.guild: return
+    try:
+        Rapid.DiscordPermissions.add(interaction.guild.id, user.id)
+        await interaction.followup.send(embed=create_success_embed(f"{user.mention} のコントラクトによるDiscord操作を許可しました。", "権限付与成功"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
+
+@discord_permission_group.command(name="deny", description="指定したユーザーのコントラクトによるDiscord操作を禁止します。")
+@app_commands.describe(user="禁止するユーザー")
+@app_commands.checks.has_permissions(administrator=True)
+async def discord_permission_deny(interaction: discord.Interaction, user: User):
+    await interaction.response.defer(thinking=True)
+    if not interaction.guild: return
+    try:
+        Rapid.DiscordPermissions.remove(interaction.guild.id, user.id)
+        await interaction.followup.send(embed=create_success_embed(f"{user.mention} のコントラクトによるDiscord操作を禁止しました。", "権限剥奪成功"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
+
+@discord_permission_group.command(name="list", description="Discord操作を許可されているユーザーの一覧を表示します。")
+@app_commands.checks.has_permissions(administrator=True)
+async def discord_permission_list(interaction: discord.Interaction):
+    await interaction.response.defer(thinking=True)
+    if not interaction.guild: return
+    try:
+        permissions = Rapid.DiscordPermissions.get_all(interaction.guild.id)
+        if not permissions:
+            await interaction.followup.send(embed=create_success_embed("現在、Discord操作を許可されているユーザーはいません。", "権限一覧"))
+            return
+
+        embed = Embed(title="Discord操作許可ユーザー一覧", color=Color.blue())
+        user_mentions = []
+        for p in permissions:
+            try:
+                user = await interaction.client.fetch_user(p.user_id)
+                user_mentions.append(user.mention)
+            except discord.NotFound:
+                user_mentions.append(f"`{p.user_id}` (不明なユーザー)")
+
+        embed.description = "\n".join(user_mentions)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
+
 def setup(tree: app_commands.CommandTree):
     tree.add_command(balance)
     tree.add_command(transfer)
@@ -877,3 +931,4 @@ def setup(tree: app_commands.CommandTree):
     tree.add_command(lp_group)
     tree.add_command(swap)
     tree.add_command(notification_group)
+    tree.add_command(discord_permission_group)

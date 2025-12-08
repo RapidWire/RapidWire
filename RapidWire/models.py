@@ -9,7 +9,7 @@ from .database import DatabaseConnection
 from .structs import (
     Balance, Currency, Contract, APIKey, Claim, Stake, LiquidityPool,
     LiquidityProvider, ContractVariable, NotificationPermission, Execution,
-    Transfer, ContractHistory, Allowance, AllowanceLog
+    Transfer, ContractHistory, Allowance, AllowanceLog, DiscordPermission
 )
 from .exceptions import UserNotFound, CurrencyNotFound, InsufficientFunds, DuplicateEntryError
 
@@ -357,31 +357,76 @@ class ContractVariableModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    def get(self, user_id: int, key: bytes) -> Optional[ContractVariable]:
+    def get(self, user_id: int, key: str) -> Optional[ContractVariable]:
         with self.db as cursor:
+            # Check integer variables
             cursor.execute(
-                "SELECT * FROM contract_variables WHERE user_id = %s AND `key` = %s",
+                "SELECT * FROM contract_int_variables WHERE user_id = %s AND `key` = %s",
                 (user_id, key)
             )
             result = cursor.fetchone()
-            return ContractVariable(**result) if result else None
+            if result:
+                return ContractVariable(**result)
 
-    def set(self, user_id: int, key: bytes, value: bytes):
-        with self.db as cursor:
+            # Check string variables
             cursor.execute(
-                """
-                INSERT INTO contract_variables (user_id, `key`, `value`)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
-                """,
-                (user_id, key, value)
+                "SELECT * FROM contract_str_variables WHERE user_id = %s AND `key` = %s",
+                (user_id, key)
             )
+            result = cursor.fetchone()
+            if result:
+                return ContractVariable(**result)
+
+            return None
+
+    def set(self, user_id: int, key: str, value: int | str):
+        with self.db as cursor:
+            if isinstance(value, int):
+                # Insert into int table
+                cursor.execute(
+                    """
+                    INSERT INTO contract_int_variables (user_id, `key`, `value`)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
+                    """,
+                    (user_id, key, value)
+                )
+                # Remove from str table if exists (to maintain type consistency for key)
+                cursor.execute(
+                    "DELETE FROM contract_str_variables WHERE user_id = %s AND `key` = %s",
+                    (user_id, key)
+                )
+            else:
+                # Insert into str table
+                cursor.execute(
+                    """
+                    INSERT INTO contract_str_variables (user_id, `key`, `value`)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
+                    """,
+                    (user_id, key, str(value))
+                )
+                # Remove from int table if exists
+                cursor.execute(
+                    "DELETE FROM contract_int_variables WHERE user_id = %s AND `key` = %s",
+                    (user_id, key)
+                )
 
     def get_all_for_user(self, user_id: int) -> List[ContractVariable]:
         with self.db as cursor:
-            cursor.execute("SELECT * FROM contract_variables WHERE user_id = %s", (user_id,))
-            results = cursor.fetchall()
-            return [ContractVariable(**row) for row in results]
+            variables = []
+
+            # Get integer variables
+            cursor.execute("SELECT * FROM contract_int_variables WHERE user_id = %s", (user_id,))
+            int_results = cursor.fetchall()
+            variables.extend([ContractVariable(**row) for row in int_results])
+
+            # Get string variables
+            cursor.execute("SELECT * FROM contract_str_variables WHERE user_id = %s", (user_id,))
+            str_results = cursor.fetchall()
+            variables.extend([ContractVariable(**row) for row in str_results])
+
+            return variables
 
 class NotificationPermissionModel:
     def __init__(self, db_connection: DatabaseConnection):
@@ -607,3 +652,32 @@ class AllowanceLogModel:
             """,
             (execution_id, owner_id, spender_id, currency_id, amount, int(time()))
         )
+
+class DiscordPermissionModel:
+    def __init__(self, db_connection: DatabaseConnection):
+        self.db = db_connection
+
+    def add(self, guild_id: int, user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "INSERT INTO discord_permissions (guild_id, user_id) VALUES (%s, %s) ON DUPLICATE KEY UPDATE user_id = user_id",
+                (guild_id, user_id)
+            )
+
+    def remove(self, guild_id: int, user_id: int):
+        with self.db as cursor:
+            cursor.execute(
+                "DELETE FROM discord_permissions WHERE guild_id = %s AND user_id = %s",
+                (guild_id, user_id)
+            )
+
+    def check(self, guild_id: int, user_id: int) -> bool:
+        with self.db as cursor:
+            cursor.execute("SELECT 1 FROM discord_permissions WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
+            return cursor.fetchone() is not None
+
+    def get_all(self, guild_id: int) -> List[DiscordPermission]:
+         with self.db as cursor:
+            cursor.execute("SELECT * FROM discord_permissions WHERE guild_id = %s", (guild_id,))
+            results = cursor.fetchall()
+            return [DiscordPermission(**row) for row in results]

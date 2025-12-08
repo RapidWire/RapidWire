@@ -124,9 +124,13 @@ class LiquidityProvider(BaseModel):
 
 class ContractVariable(BaseModel):
     user_id: int
-    key: bytes
-    value: bytes
+    key: str
+    value: int | str
 
 class NotificationPermission(BaseModel):
     user_id: int
     allowed_user_id: int
+
+class DiscordPermission(BaseModel):
+    guild_id: int
+    user_id: int
