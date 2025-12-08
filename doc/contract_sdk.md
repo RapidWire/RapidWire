@@ -1,97 +1,138 @@
 # RapidWire コントラクト SDK ドキュメント
 
-RapidWireでは、Pythonを使用してスマートコントラクトを作成できます。コントラクトはサンドボックス化された環境で実行され、特定の関数や変数にアクセスできます。
+RapidWireでは、Pythonを使用してスマートコントラクトを開発できます。
+開発には `RapidWire/sdk.py` を使用してコードを記述し、`RapidWire/compiler.py` を使用してコンパイルします。
 
-## 概要
+## 開発の準備
 
-コントラクトは、`/execute_contract` コマンドで明示的に呼び出されたとき、またはAPIを通じて実行リクエストが行われたときに実行されます。
-`RapidWire/sdk.py` で定義されている関数や変数を利用して、ロジックを記述します。
+コントラクトコードを作成するファイル（例: `contract.py`）の先頭で、SDKをインポートします。
+これにより、開発環境（IDE）での型ヒントや自動補完が有効になります。
+
+```python
+from RapidWire.sdk import *
+
+def main():
+    # ここにロジックを記述
+    pass
+```
+
+## コントラクトの構造
+
+すべてのコントラクトロジックは `main` 関数内に記述する必要があります。
+コンパイラは `main` 関数内のコードのみを処理し、それ以外のグローバルスコープのコードは無視されます。
+
+## コンパイルと実行
+
+作成したPythonファイルは、以下のコマンドでRapidWire VMが理解できる命令セット（JSON）にコンパイルします。
+
+```bash
+python3 RapidWire/compiler.py contract.py > contract.json
+```
+
+生成されたJSONファイルの内容をコントラクトとしてデプロイします。
 
 ## システム変数
 
-コントラクト実行時に、以下の変数が自動的に設定されます。
+`main` 関数内では、以下のグローバル変数にアクセスできます。
 
-- **`sender`** (`int`): コントラクトの呼び出し元のユーザーID。
-- **`self_id`** (`int`): コントラクト所有者（あなた）のユーザーID。
-- **`input_data`** (`str`): 実行時に渡された入力データ。
-- **`storage_str`** (`Dict[str, str]`): 文字列を保存できる永続ストレージ。辞書としてアクセスします。
-- **`storage_int`** (`Dict[str, int]`): 整数を保存できる永続ストレージ。辞書としてアクセスします。
+| 変数名 | 型 | 説明 |
+| :--- | :--- | :--- |
+| `sender` | `int` | コントラクトを呼び出したユーザーのID |
+| `self_id` | `int` | コントラクト自身の所有者ID |
+| `input_data` | `str` | 実行時に渡された入力データ文字列 |
+| `storage_str` | `Dict[str, str]` | 永続的な文字列ストレージ（キーと値は文字列） |
+| `storage_int` | `Dict[str, int]` | 永続的な整数ストレージ（キーは文字列、値は整数） |
 
-## 利用可能な関数
+### ストレージの使用例
+
+```python
+# データの保存
+storage_str['last_msg'] = input_data
+storage_int['count'] = storage_int['count'] + 1
+
+# データの取得
+msg = storage_str['last_msg']
+```
+
+## データ構造
+
+SDKでは以下のクラスが定義されており、関数の戻り値として使用されます。
+これらのオブジェクトの属性にはドット記法（例: `tx.amount`）でアクセスできます。
+
+### `Currency`
+通貨情報を表します。
+
+- `currency_id` (`int`): 通貨ID
+- `name` (`str`): 通貨名
+- `symbol` (`str`): シンボル
+- `issuer_id` (`int`): 発行者ID
+- `supply` (`int`): 総供給量
+- `minting_renounced` (`bool`): 新規発行権限が放棄されているか
+- `daily_interest_rate` (`int`): 日次金利
+- 他
+
+### `Transaction`
+トランザクション情報を表します。
+
+- `transfer_id` (`int`): 送金ID
+- `source_id` (`int`): 送信元ID
+- `dest_id` (`int`): 送信先ID
+- `currency_id` (`int`): 通貨ID
+- `amount` (`int`): 金額
+- `timestamp` (`int`): タイムスタンプ
+
+### `Claim`
+請求情報を表します。
+
+- `claim_id` (`int`): 請求ID
+- `claimant_id` (`int`): 請求作成者ID
+- `payer_id` (`int`): 請求先ID
+- `currency_id` (`int`): 通貨ID
+- `amount` (`int`): 金額
+- `status` (`str`): ステータス
+- `created_at` (`int`): 作成日時
+- `description` (`str`): 説明
+
+## 関数リファレンス
 
 ### 基本操作
 
-- **`reply(msg: str) -> None`**
-  - 送信者にメッセージを返信します。
+- `reply(msg: str) -> None`: 送信者にメッセージを返信します。
+- `cancel(reason: str) -> None`: 処理をキャンセルし、変更をロールバックします。
+- `exit() -> None`: 処理を正常終了します。
 
-- **`cancel(reason: str) -> None`**
-  - トランザクションをキャンセルし、理由を送信者に通知します。この関数を呼び出すと、送金などの操作はロールバックされます。
+### 通貨・送金
 
-- **`exit() -> None`**
-  - コントラクトの実行を正常に終了します。
+- `transfer(to: int, amount: int, currency: int) -> None`: 通貨を送金します。
+- `get_balance(user: int, currency: int) -> int`: ユーザーの残高を取得します。
+- `get_currency(currency_id: int) -> Currency`: 通貨情報を取得します。
+- `approve(spender: int, amount: int, currency: int) -> None`: 第三者による送金を許可します。
+- `transfer_from(sender: int, recipient: int, amount: int, currency: int) -> Transaction`: 許可された範囲で代理送金を行います。
+- `get_transaction(tx_id: int) -> Transaction`: トランザクション情報を取得します。
 
-### 通貨・送金操作
+### 請求
 
-- **`transfer(to: int, amount: int, currency: int) -> None`**
-  - 指定したユーザーに通貨を送金します。
-  - `to`: 送金先のユーザーID。
-  - `amount`: 金額（最小単位の整数値）。
-  - `currency`: 通貨ID。
+- `create_claim(payer: int, amount: int, currency: int, desc: str = None) -> Claim`: 請求を作成します。
+- `pay_claim(claim_id: int) -> Transaction`: 請求を支払います。
+- `cancel_claim(claim_id: int) -> Claim`: 請求をキャンセルします。
 
-- **`get_balance(user: int, currency: int) -> int`**
-  - 指定したユーザーの残高を取得します。
+### その他
 
-- **`get_currency(currency_id: int) -> Any`**
-  - 通貨情報を取得します。
-
-- **`approve(spender: int, amount: int, currency: int) -> None`**
-  - 指定したユーザー（spender）に対して、あなたの口座から引き出す許可を与えます。
-
-- **`transfer_from(sender: int, recipient: int, amount: int, currency: int) -> Any`**
-  - `approve`で許可された範囲内で、他人の口座から送金を行います。
-
-- **`get_transaction(tx_id: int) -> Any`**
-  - 指定したIDのトランザクション情報を取得します。
-
-### 請求操作
-
-- **`create_claim(payer: int, amount: int, currency: int, desc: str = None) -> Any`**
-  - 指定したユーザーに対して請求を作成します。
-
-- **`pay_claim(claim_id: int) -> Any`**
-  - 指定した請求を支払います。
-
-- **`cancel_claim(claim_id: int) -> Any`**
-  - 指定した請求をキャンセルします。
-
-### コントラクト間連携
-
-- **`execute_contract(destination_id: int, input_data: str = None) -> str`**
-  - 他のユーザーのコントラクトを実行します。実行結果（標準出力など）が文字列として返されます。
-
-### ユーティリティ
-
-- **`sha256(val: str) -> str`**
-  - 文字列のSHA-256ハッシュを計算します。
-
-- **`random(min_val: int, max_val: int) -> int`**
-  - 指定した範囲のランダムな整数を生成します。
-
-- **`concat(a: str, b: str) -> str`**
-  - 2つの文字列を結合します。
+- `sha256(val: str) -> str`: 文字列のSHA-256ハッシュを計算します。
+- `random(min_val: int, max_val: int) -> int`: 範囲内のランダムな整数を生成します。
+- `concat(a: str, b: str) -> str`: 文字列を結合します。
+- `execute_contract(destination_id: int, input_data: str = None) -> str`: 他のコントラクトを実行します。
 
 ### Discord連携 (要権限)
 
-これらの関数を使用するには、サーバー管理者によってDiscord操作権限が付与されている必要があります。
+- `discord_send(guild_id: int, channel_id: int, message: str) -> int`: Discordチャンネルにメッセージを送信します。
+- `discord_role_add(user_id: int, guild_id: int, role_id: int) -> int`: ユーザーにロールを付与します。
 
-- **`discord_send(guild_id: int, channel_id: int, message: str) -> int`**
-  - 指定したDiscordチャンネルにメッセージを送信します。
+## 制限事項
 
-- **`discord_role_add(user_id: int, guild_id: int, role_id: int) -> int`**
-  - 指定したユーザーにDiscordロールを付与します。
+RapidWireのコントラクトはPythonのサブセットで動作します。
 
-## 注意事項
-
-- コントラクトはPythonのサブセットで動作します。`import`文やファイル操作などの危険な操作は制限されています。
-- ループや再帰には制限があり、計算コスト（ガスのようなもの）が上限を超えると実行が強制終了されます。
-- `amount`などの金額は、小数点以下の桁数を考慮した整数値（例: 1.00コインで小数点以下2桁の場合、`100`）で扱われます。
+- **ループ不可**: `for` や `while` などのループ構文はサポートされていません。
+- **構文制限**: `if`、代入、式評価のみがサポートされています。
+- **関数定義不可**: `main` 以外の関数定義はサポートされていません。
+- **インポート不可**: `RapidWire.sdk` 以外のモジュールをインポートしても、コンパイル後のコードには影響しませんが、VM上では利用できません。
