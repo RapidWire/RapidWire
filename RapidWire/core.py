@@ -270,11 +270,24 @@ class RapidWire:
 
     def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> int:
         try:
+            execution_id = None
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
                 contract = self.Contracts.get(contract_owner_id)
                 if not contract or not contract.script:
                     raise ContractError("Contract not found or script is empty.")
+
+                # Gas Fee Estimation
+                gas_token_id = Config.Gas.token_id
+                gas_price = Config.Gas.price
+
+                estimated_fee = 0
+                if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                    estimated_fee = contract.cost * gas_price
+                    caller = self.get_user(caller_id)
+                    balance = caller.get_balance(gas_token_id)
+                    if balance.amount < estimated_fee:
+                         raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {estimated_fee}, Available: {balance.amount}")
 
                 chain_context = ChainContext(
                     total_cost=contract.cost,
@@ -312,6 +325,27 @@ class RapidWire:
                 except Exception as e:
                     self.Executions.update(cursor, execution_id, f"{e.__class__.__name__}: {str(e)}", chain_context.total_cost, 'failed')
                     raise
+                finally:
+                    # Collect Gas Fee
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0 and execution_id is not None:
+                        final_fee = chain_context.total_cost * gas_price
+
+                        # We use transfer to burn the fee.
+                        # Since we are already in a transaction block, this nested call will be part of it.
+                        try:
+                            # Note: We need to check if the user still has enough balance for the final fee.
+                            # Even if they had enough for estimated fee, the final fee might be higher,
+                            # or the contract execution might have spent the gas tokens (if gas token is used in contract).
+                            # However, 'transfer' will check for balance and raise InsufficientFunds if not enough.
+
+                            self.transfer(caller_id, SYSTEM_USER_ID, gas_token_id, final_fee, execution_id=execution_id)
+                        except InsufficientFunds:
+                             # If fee payment fails, we raise the exception to rollback the transaction.
+                             raise
+                        except Exception as e:
+                            # If fee collection fails for other reasons, we should probably still raise it to rollback.
+                            raise e
+
             return execution_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during contract execution: {err}")

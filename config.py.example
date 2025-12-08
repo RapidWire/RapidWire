@@ -30,4 +30,8 @@ class Contract:
 class Swap:
     fee: int = 30 # 0.3%, in basis points
 
+class Gas:
+    token_id: int = 1
+    price: int = 1
+
 decimal_places = 3
