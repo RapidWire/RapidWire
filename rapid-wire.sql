@@ -44,7 +44,7 @@ CREATE TABLE `claims` (
   `amount` decimal(24, 0) NOT NULL,
   `status` enum('pending','paid','canceled') NOT NULL DEFAULT 'pending',
   `created_at` bigint UNSIGNED NOT NULL,
-  `description` varchar(100) DEFAULT NULL,
+  `description` varchar(50) DEFAULT NULL,
   CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -148,7 +148,7 @@ CREATE TABLE `contract_int_variables` (
 CREATE TABLE `contract_str_variables` (
   `user_id` bigint UNSIGNED NOT NULL,
   `key` varchar(31) NOT NULL,
-  `value` varchar(255) NOT NULL
+  `value` varchar(127) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -184,14 +184,14 @@ CREATE TABLE `discord_permissions` (
 --
 
 CREATE TABLE `execution` (
-`execution_id` bigint UNSIGNED NOT NULL,
-`caller_id` bigint UNSIGNED NOT NULL COMMENT '操作を行ったユーザー (Sender)',
-`contract_owner_id` bigint UNSIGNED NOT NULL COMMENT '実行対象 (0=System, その他=User Contract)',
-`input_data` text DEFAULT NULL COMMENT '入力データ または システムコマンド(例: update_contract)',
-`output_data` text DEFAULT NULL COMMENT '返り値 または エラーメッセージ',
-`cost` int UNSIGNED NOT NULL DEFAULT '0',
-`status` enum('pending', 'success', 'failed', 'reverted') NOT NULL,
-`timestamp` bigint UNSIGNED NOT NULL
+  `execution_id` bigint UNSIGNED NOT NULL,
+  `caller_id` bigint UNSIGNED NOT NULL COMMENT '操作を行ったユーザー (Sender)',
+  `contract_owner_id` bigint UNSIGNED NOT NULL COMMENT '実行対象 (0=System, その他=User Contract)',
+  `input_data` text DEFAULT NULL COMMENT '入力データ または システムコマンド(例: update_contract)',
+  `output_data` text DEFAULT NULL COMMENT '返り値 または エラーメッセージ',
+  `cost` int UNSIGNED NOT NULL DEFAULT '0',
+  `status` enum('pending', 'success', 'failed', 'reverted') NOT NULL,
+  `timestamp` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -201,14 +201,14 @@ CREATE TABLE `execution` (
 --
 
 CREATE TABLE `transfer` (
-`transfer_id` bigint UNSIGNED NOT NULL,
-`execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID (直接送金の場合はNULLも可)',
-`source_id` bigint UNSIGNED NOT NULL,
-`dest_id` bigint UNSIGNED NOT NULL,
-`currency_id` bigint UNSIGNED NOT NULL,
-`amount` decimal(24, 0) NOT NULL,
-`timestamp` bigint UNSIGNED NOT NULL,
-CHECK (`amount` >= 0)
+  `transfer_id` bigint UNSIGNED NOT NULL,
+  `execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID (直接送金の場合はNULLも可)',
+  `source_id` bigint UNSIGNED NOT NULL,
+  `dest_id` bigint UNSIGNED NOT NULL,
+  `currency_id` bigint UNSIGNED NOT NULL,
+  `amount` decimal(24, 0) NOT NULL,
+  `timestamp` bigint UNSIGNED NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -218,12 +218,12 @@ CHECK (`amount` >= 0)
 --
 
 CREATE TABLE `contract_history` (
-`history_id` bigint UNSIGNED NOT NULL,
-`execution_id` bigint UNSIGNED NOT NULL COMMENT '親Execution ID',
-`user_id` bigint UNSIGNED NOT NULL COMMENT 'コントラクトの所有者',
-`script_hash` binary(64) NOT NULL COMMENT 'SHA-256 Hash',
-`cost` int UNSIGNED NOT NULL COMMENT '計算されたコスト',
-`created_at` bigint UNSIGNED NOT NULL
+  `history_id` bigint UNSIGNED NOT NULL,
+  `execution_id` bigint UNSIGNED NOT NULL COMMENT '親Execution ID',
+  `user_id` bigint UNSIGNED NOT NULL COMMENT 'コントラクトの所有者',
+  `script_hash` binary(64) NOT NULL COMMENT 'SHA-256 Hash',
+  `cost` int UNSIGNED NOT NULL COMMENT '計算されたコスト',
+  `created_at` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -233,12 +233,12 @@ CREATE TABLE `contract_history` (
 --
 
 CREATE TABLE `allowance` (
-`owner_id` bigint UNSIGNED NOT NULL,
-`spender_id` bigint UNSIGNED NOT NULL,
-`currency_id` bigint UNSIGNED NOT NULL,
-`amount` decimal(24, 0) NOT NULL,
-`last_updated_at` bigint UNSIGNED NOT NULL,
-CHECK (`amount` >= 0)
+  `owner_id` bigint UNSIGNED NOT NULL,
+  `spender_id` bigint UNSIGNED NOT NULL,
+  `currency_id` bigint UNSIGNED NOT NULL,
+  `amount` decimal(24, 0) NOT NULL,
+  `last_updated_at` bigint UNSIGNED NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
@@ -248,14 +248,14 @@ CHECK (`amount` >= 0)
 --
 
 CREATE TABLE `allowance_log` (
-`log_id` bigint UNSIGNED NOT NULL,
-`execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID',
-`owner_id` bigint UNSIGNED NOT NULL,
-`spender_id` bigint UNSIGNED NOT NULL,
-`currency_id` bigint UNSIGNED NOT NULL,
-`amount` decimal(24, 0) NOT NULL COMMENT '設定された許可額',
-`timestamp` bigint UNSIGNED NOT NULL,
-CHECK (`amount` >= 0)
+  `log_id` bigint UNSIGNED NOT NULL,
+  `execution_id` bigint UNSIGNED DEFAULT NULL COMMENT '親Execution ID',
+  `owner_id` bigint UNSIGNED NOT NULL,
+  `spender_id` bigint UNSIGNED NOT NULL,
+  `currency_id` bigint UNSIGNED NOT NULL,
+  `amount` decimal(24, 0) NOT NULL COMMENT '設定された許可額',
+  `timestamp` bigint UNSIGNED NOT NULL,
+  CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --

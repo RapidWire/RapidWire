@@ -1,5 +1,4 @@
 import mysql.connector
-import re
 import json
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
@@ -99,15 +98,14 @@ class ContractAPI:
 
         self.chain_context.total_cost += callee_contract.cost
 
-        execution_id = self.core.execute_contract(
+        execution_id, output_data = self.core.execute_contract(
             caller_id=source_id,
             contract_owner_id=destination_id,
             input_data=input_data,
             discord_client=self.discord_client
         )
 
-        execution = self.core.Executions.get(execution_id)
-        return execution.output_data if execution else None
+        return output_data
 
     def get_variable(self, user_id: int|None, key: str) -> int | str | None:
         if user_id is None:
@@ -118,7 +116,7 @@ class ContractAPI:
     def set_variable(self, key: str, value: int | str):
         if len(key) > 31:
             raise ValueError("Key must be 31 characters or less.")
-        if isinstance(value, str) and len(value) > 255:
+        if isinstance(value, str) and len(value) > 127:
             raise ValueError("String value is too long.")
         if isinstance(value, int) and abs(value) > 10**30:
             raise ValueError("Integer value is too large.")
@@ -268,17 +266,30 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> int:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> Tuple[int, str | None]:
         try:
+            execution_id = None
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
                 contract = self.Contracts.get(contract_owner_id)
                 if not contract or not contract.script:
                     raise ContractError("Contract not found or script is empty.")
 
+                # Gas Fee Estimation
+                gas_currency_id = self.Config.Gas.currency_id
+                gas_price = self.Config.Gas.price
+
+                estimated_fee = 0
+                if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                    estimated_fee = contract.cost * gas_price
+                    caller = self.get_user(caller_id)
+                    balance = caller.get_balance(gas_currency_id)
+                    if balance.amount < estimated_fee:
+                         raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {estimated_fee}, Available: {balance.amount}")
+
                 chain_context = ChainContext(
                     total_cost=contract.cost,
-                    budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
+                    budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost
                 )
 
                 execution_context = ExecutionContext(
@@ -312,7 +323,19 @@ class RapidWire:
                 except Exception as e:
                     self.Executions.update(cursor, execution_id, f"{e.__class__.__name__}: {str(e)}", chain_context.total_cost, 'failed')
                     raise
-            return execution_id
+                finally:
+                    # Collect Gas Fee
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0 and execution_id is not None:
+                        final_fee = chain_context.total_cost * gas_price
+
+                        try:
+                            self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, final_fee, execution_id=execution_id)
+                        except InsufficientFunds:
+                             raise
+                        except Exception as e:
+                            raise e
+
+            return execution_id, output_data
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during contract execution: {err}")
 
@@ -505,7 +528,7 @@ class RapidWire:
         if len(script) > self.Config.Contract.max_script_length:
             raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
         if max_cost is None:
-            max_cost = Config.Contract.max_cost
+            max_cost = self.Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
         script_hash = hashlib.sha256(script.encode()).digest()
 

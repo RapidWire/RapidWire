@@ -8,3 +8,9 @@ class Config:
 
     class Swap:
         fee: int = 30
+
+    class Gas:
+        currency_id: int = 1
+        price: int = 1
+
+    decimal_places: int = 3
