@@ -93,6 +93,12 @@ class ClaimNotificationView(discord.ui.View):
         except Exception as e:
             await interaction.response.send_message(f"通知停止中にエラーが発生しました: {e}", ephemeral=True)
 
+class EmbedField:
+    def __init__(self, name: str, value: str, inline: bool = True):
+        self.name: str = name
+        self.value: str = value
+        self.inline: bool = inline
+
 def create_claim_notification_embed(claim: structs.Claim, claimant: User, currency: structs.Currency) -> Embed:
     embed = Embed(title="請求の通知", color=Color.blue())
     embed.add_field(name="請求者", value=claimant.mention, inline=False)
@@ -102,16 +108,18 @@ def create_claim_notification_embed(claim: structs.Claim, claimant: User, curren
     embed.set_footer(text=f"請求ID: {claim.claim_id}")
     return embed
 
-def create_error_embed(description: str, fields: Optional[list[discord.embeds._EmbedFieldProxy]] = None) -> Embed:
+def create_error_embed(description: str, fields: Optional[list[EmbedField]] = None) -> Embed:
     embed = Embed(title="エラー", description=description, color=Color.red())
     if fields:
-        embed.fields = fields
+        for emfi in fields:
+            embed.add_field(name=emfi.name, value=emfi.value, inline=emfi.inline)
     return embed
 
-def create_success_embed(description: str, title: str = "成功", fields: Optional[list[discord.embeds._EmbedFieldProxy]] = None) -> Embed:
+def create_success_embed(description: str, title: str = "成功", fields: Optional[list[EmbedField]] = None) -> Embed:
     embed = Embed(title=title, description=description, color=Color.green())
     if fields:
-        embed.fields = fields
+        for emfi in fields:
+            embed.add_field(name=emfi.name, value=emfi.value, inline=emfi.inline)
     return embed
 
 def format_amount(amount: int) -> str:
