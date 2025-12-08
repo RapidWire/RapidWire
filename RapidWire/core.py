@@ -152,7 +152,7 @@ class ContractAPI:
                 return False
 
             if channel.guild.id != guild_id:
-                 raise PermissionError("Channel does not belong to the specified guild.")
+                raise PermissionError("Channel does not belong to the specified guild.")
 
             await channel.send(message)
             return True
@@ -172,7 +172,7 @@ class ContractAPI:
         try:
             guild = self.discord_client.get_guild(guild_id)
             if not guild:
-                 guild = await self.discord_client.fetch_guild(guild_id)
+                guild = await self.discord_client.fetch_guild(guild_id)
 
             if not guild:
                 return False
@@ -186,7 +186,7 @@ class ContractAPI:
 
             role = guild.get_role(role_id)
             if not role:
-                 return False
+                return False
 
             await member.add_roles(role)
             return True
@@ -240,7 +240,7 @@ class RapidWire:
         if reward > 0:
             new_amount = stake.amount + reward
             self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
-            # We need to create a transfer for the reward
+            # need to create a transfer for the reward
             self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, reward)
             # Update the supply
             self.Currencies.update_supply(cursor, currency_id, reward)
