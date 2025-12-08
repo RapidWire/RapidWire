@@ -187,8 +187,8 @@ CREATE TABLE `execution` (
   `execution_id` bigint UNSIGNED NOT NULL,
   `caller_id` bigint UNSIGNED NOT NULL COMMENT '操作を行ったユーザー (Sender)',
   `contract_owner_id` bigint UNSIGNED NOT NULL COMMENT '実行対象 (0=System, その他=User Contract)',
-  `input_data` text DEFAULT NULL COMMENT '入力データ または システムコマンド(例: update_contract)',
-  `output_data` text DEFAULT NULL COMMENT '返り値 または エラーメッセージ',
+  `input_data` varchar(127) DEFAULT NULL COMMENT '入力データ または システムコマンド(例: update_contract)',
+  `output_data` varchar(127) DEFAULT NULL COMMENT '返り値 または エラーメッセージ',
   `cost` int UNSIGNED NOT NULL DEFAULT '0',
   `status` enum('pending', 'success', 'failed', 'reverted') NOT NULL,
   `timestamp` bigint UNSIGNED NOT NULL
