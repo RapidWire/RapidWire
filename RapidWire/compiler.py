@@ -84,25 +84,32 @@ class Compiler:
                 if isinstance(target.value, ast.Name):
                     storage_type = target.value.id # storage_str or storage_int
 
-                    # For assignment, we evaluate the RHS value.
-                    val_var, val_instrs = self._process_expr(value_node)
-                    instrs.extend(val_instrs)
+                    # Check if it is storage assignment
+                    if storage_type in ['storage_int', 'storage_str']:
+                        # For assignment, we evaluate the RHS value.
+                        val_var, val_instrs = self._process_expr(value_node)
+                        instrs.extend(val_instrs)
 
-                    op_name = None
-                    if storage_type == 'storage_int':
-                        op_name = 'store_int_set'
-                    elif storage_type == 'storage_str':
-                        op_name = 'store_str_set'
+                        op_name = None
+                        if storage_type == 'storage_int':
+                            op_name = 'store_int_set'
+                        elif storage_type == 'storage_str':
+                            op_name = 'store_str_set'
+
+                        # Extract key value if it's a constant
+                        key_arg = self._extract_key(target)
+
+                        instrs.append({
+                            "op": op_name,
+                            "args": [key_arg, val_var]
+                        })
                     else:
-                         raise ValueError(f"Unsupported storage type for assignment: {storage_type}")
-
-                    # Extract key value if it's a constant
-                    key_arg = self._extract_key(target)
-
-                    instrs.append({
-                        "op": op_name,
-                        "args": [key_arg, val_var]
-                    })
+                        # Generic item assignment? VM op "getitem" is read-only usually?
+                        # There is no "setitem" in VM ops listed in my analysis.
+                        # VM ops: store_str_set, store_int_set. No generic setitem.
+                        raise ValueError(f"Unsupported assignment target: {storage_type}")
+                else:
+                     raise ValueError("Unsupported assignment target structure")
 
         elif isinstance(stmt, ast.Expr):
             # Expression statement
@@ -201,12 +208,30 @@ class Compiler:
                 'random': 'random',
                 'get_balance': 'get_balance',
                 'cancel': 'cancel',
-                'exit': 'exit'
+                'exit': 'exit',
+                'concat': 'concat',
+                'approve': 'approve',
+                'transfer_from': 'transfer_from',
+                'get_currency': 'get_currency',
+                'get_transaction': 'get_transaction',
+                'create_claim': 'create_claim',
+                'pay_claim': 'pay_claim',
+                'cancel_claim': 'cancel_claim',
+                'execute_contract': 'exec',
+                'discord_send': 'discord_send',
+                'discord_role_add': 'discord_role_add'
             }
 
             op_name = call_map.get(func_name, func_name)
 
-            ops_with_out = ['hash', 'random', 'get_balance']
+            # Ops that produce output
+            # Note: discord_send/role_add return int (success), transfer_from returns result.
+            ops_with_out = [
+                'hash', 'random', 'get_balance', 'concat',
+                'transfer_from', 'get_currency', 'get_transaction',
+                'create_claim', 'pay_claim', 'cancel_claim', 'exec',
+                'discord_send', 'discord_role_add'
+            ]
 
             op_obj = {
                 "op": op_name,
@@ -221,27 +246,73 @@ class Compiler:
             instrs.append(op_obj)
             return res_var, instrs
 
-        elif isinstance(node, ast.Subscript):
-            # Storage Get: x = storage_str["key"]
-            if isinstance(node.value, ast.Name):
-                storage_type = node.value.id
+        elif isinstance(node, ast.Attribute):
+            # Attribute access: obj.prop -> attr(obj, prop)
+            obj_var, obj_instrs = self._process_expr(node.value)
+            instrs.extend(obj_instrs)
 
-                # Extract key
+            prop_name = node.attr
+
+            out_var = target_var if target_var else self._get_temp_var()
+            instrs.append({
+                "op": "attr",
+                "args": [obj_var, prop_name],
+                "out": out_var
+            })
+            return out_var, instrs
+
+        elif isinstance(node, ast.Subscript):
+            # Subscript access: obj[key]
+            # First check if it's storage access (special case)
+            is_storage = False
+            if isinstance(node.value, ast.Name):
+                if node.value.id in ['storage_str', 'storage_int']:
+                    is_storage = True
+
+            if is_storage:
+                storage_type = node.value.id
                 key_arg = self._extract_key(node)
 
                 op_name = None
                 if storage_type == 'storage_str':
-                    # Rule E: storage_str["key"] -> store_str_get
                     op_name = 'store_str_get'
                 elif storage_type == 'storage_int':
                     op_name = 'store_int_get'
-                else:
-                    raise ValueError(f"Unsupported storage type for access: {storage_type}")
 
                 out_var = target_var if target_var else self._get_temp_var()
                 instrs.append({
                     "op": op_name,
                     "args": [key_arg],
+                    "out": out_var
+                })
+                return out_var, instrs
+            else:
+                # Generic getitem: obj[index]
+                obj_var, obj_instrs = self._process_expr(node.value)
+                instrs.extend(obj_instrs)
+
+                # For generic getitem, index can be expression
+                idx_var, idx_instrs = self._process_expr(node.slice) # or node.slice.value
+                # Note: node.slice handling differs by Python version.
+                # In 3.9+, slice is the node itself (Constant, Name, etc).
+                # In older, it might be Index(value=...).
+                # self._process_expr handles Constant/Name.
+                # If slice is Index, we need to unpack.
+                # _process_expr assumes standard nodes.
+
+                # Check for Index wrapper (Python < 3.9)
+                idx_node = node.slice
+                if isinstance(idx_node, ast.Index):
+                    idx_node = idx_node.value
+
+                idx_var, idx_instrs = self._process_expr(idx_node)
+
+                instrs.extend(idx_instrs)
+
+                out_var = target_var if target_var else self._get_temp_var()
+                instrs.append({
+                    "op": "getitem",
+                    "args": [obj_var, idx_var],
                     "out": out_var
                 })
                 return out_var, instrs
