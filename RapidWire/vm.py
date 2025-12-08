@@ -84,7 +84,7 @@ class RapidWireVM:
         if op == 'div': return to_num(args[0]) // to_num(args[1])
         if op == 'mod': return to_num(args[0]) % to_num(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
-        if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
+        if op == 'eq': return 1 if args[0] == args[1] else 0
         if op == 'gt': return 1 if to_num(args[0]) > to_num(args[1]) else 0
 
         # B. Flow Control
