@@ -135,8 +135,8 @@ CREATE TABLE `liquidity_provider` (
 
 CREATE TABLE `contract_int_variables` (
   `user_id` bigint UNSIGNED NOT NULL,
-  `key` varchar(255) NOT NULL,
-  `value` decimal(65, 0) NOT NULL
+  `key` varchar(31) NOT NULL,
+  `value` decimal(30, 0) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -147,8 +147,8 @@ CREATE TABLE `contract_int_variables` (
 
 CREATE TABLE `contract_str_variables` (
   `user_id` bigint UNSIGNED NOT NULL,
-  `key` varchar(255) NOT NULL,
-  `value` text NOT NULL
+  `key` varchar(31) NOT NULL,
+  `value` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
