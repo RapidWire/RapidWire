@@ -39,6 +39,7 @@ CONTRACT_OP_COSTS = {
     'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
     'exec': 15,
     'discord_send': 5, 'discord_role_add': 10,
+    'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
 }
 
 
@@ -88,6 +89,32 @@ class ContractAPI:
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.core.cancel_claim(claim_id, user_id)
         return claim
+
+    def swap(self, from_currency_id: int, to_currency_id: int, amount: int) -> int:
+        from_currency = self.core.Currencies.get(from_currency_id)
+        to_currency = self.core.Currencies.get(to_currency_id)
+        if not from_currency or not to_currency:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        amount_out, _ = self.core.swap(from_currency.symbol, to_currency.symbol, amount, self.ctx.contract_owner_id)
+        return amount_out
+
+    def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int:
+        curr_a = self.core.Currencies.get(currency_a_id)
+        curr_b = self.core.Currencies.get(currency_b_id)
+        if not curr_a or not curr_b:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        return self.core.add_liquidity(curr_a.symbol, curr_b.symbol, amount_a, amount_b, self.ctx.contract_owner_id)
+
+    def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> List[int]:
+        curr_a = self.core.Currencies.get(currency_a_id)
+        curr_b = self.core.Currencies.get(currency_b_id)
+        if not curr_a or not curr_b:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        amount_a, amount_b = self.core.remove_liquidity(curr_a.symbol, curr_b.symbol, shares, self.ctx.contract_owner_id)
+        return [amount_a, amount_b]
 
     def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> Optional[str]:
         source_id = self.ctx.contract_owner_id
