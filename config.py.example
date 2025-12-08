@@ -37,3 +37,5 @@ class RapidWireConfig:
     class Gas:
         currency_id: int = 1156171234942402601
         price: int = 1
+
+    decimal_places: int = 3

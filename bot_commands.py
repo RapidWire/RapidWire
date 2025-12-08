@@ -124,7 +124,7 @@ def create_success_embed(description: str, title: str = "成功", fields: Option
     return embed
 
 def format_amount(amount: int) -> str:
-    return f"{Decimal(amount) / Decimal(10**config.decimal_places):,.{config.decimal_places}f}"
+    return f"{Decimal(amount) / Decimal(10**Rapid.Config.decimal_places):,.{Rapid.Config.decimal_places}f}"
 
 async def _get_currency(interaction: discord.Interaction, symbol: Optional[str]) -> Optional[structs.Currency]:
     if symbol:
@@ -175,7 +175,7 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
             await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。サーバー内で実行するか、シンボルを正しく指定してください。"))
             return
 
-        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
 
         tx = Rapid.transfer(
             source_id=interaction.user.id,
@@ -299,9 +299,9 @@ async def history(
             search_params["end_timestamp"] = parse_date(end_date)
 
         if min_amount is not None:
-            search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**config.decimal_places))
+            search_params["min_amount"] = int(Decimal(str(min_amount)) * (10**Rapid.Config.decimal_places))
         if max_amount is not None:
-            search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**config.decimal_places))
+            search_params["max_amount"] = int(Decimal(str(max_amount)) * (10**Rapid.Config.decimal_places))
 
         transfers = Rapid.search_transfers(**search_params)
 
@@ -354,7 +354,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
             await interaction.followup.send(embed=create_error_embed("名前は英数字のみ使用でき、最初の文字はアルファベットである必要があります。"))
             return
 
-        int_supply = int(Decimal(str(supply)) * (10**config.decimal_places))
+        int_supply = int(Decimal(str(supply)) * (10**Rapid.Config.decimal_places))
         rate_bps = int(Decimal(str(daily_interest_rate)) * 100)
         
         new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_bps)
@@ -414,7 +414,7 @@ async def currency_mint(interaction: discord.Interaction, amount: float):
         await interaction.followup.send(embed=create_error_embed("この通貨のMint機能は放棄されています。"))
         return
 
-    int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+    int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
     Rapid.mint_currency(currency.currency_id, int_amount, interaction.user.id)
     await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を追加発行しました。", "Mint成功"))
 
@@ -429,7 +429,7 @@ async def currency_burn(interaction: discord.Interaction, amount: float):
         await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
         return
 
-    int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+    int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
     try:
         Rapid.burn_currency(currency.currency_id, int_amount, interaction.user.id)
         await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を焼却しました。", "Burn成功"))
@@ -545,7 +545,7 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
             await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
             return
 
-        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
         stake = Rapid.stake_deposit(interaction.user.id, currency.currency_id, int_amount)
         desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキング（または追加預け入れ）が完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
         await interaction.followup.send(embed=create_success_embed(desc, "ステーキング完了"))
@@ -564,7 +564,7 @@ async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol
             await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
             return
 
-        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
         tx = Rapid.stake_withdraw(interaction.user.id, currency.currency_id, int_amount)
 
         stake = Rapid.Stakes.get(interaction.user.id, currency.currency_id)
@@ -645,7 +645,7 @@ async def claim_create(interaction: discord.Interaction, user: User, amount: flo
         if not currency:
             raise ValueError("このサーバーには通貨が存在しません。")
         
-        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
         claim = Rapid.Claims.create(interaction.user.id, user.id, currency.currency_id, int_amount, description)
         
         desc = f"{user.mention} への請求を作成しました。"
@@ -730,8 +730,8 @@ async def lp_create(interaction: discord.Interaction, symbol_a: str, amount_a: f
             await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
             return
 
-        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
-        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+        int_amount_a = int(Decimal(str(amount_a)) * (10**Rapid.Config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**Rapid.Config.decimal_places))
 
         pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, int_amount_a, int_amount_b, interaction.user.id)
         embed = await _get_pool_info_embed(pool)
@@ -744,8 +744,8 @@ async def lp_create(interaction: discord.Interaction, symbol_a: str, amount_a: f
 async def lp_add(interaction: discord.Interaction, symbol_a: str, amount_a: float, symbol_b: str, amount_b: float):
     await interaction.response.defer(thinking=True)
     try:
-        int_amount_a = int(Decimal(str(amount_a)) * (10**config.decimal_places))
-        int_amount_b = int(Decimal(str(amount_b)) * (10**config.decimal_places))
+        int_amount_a = int(Decimal(str(amount_a)) * (10**Rapid.Config.decimal_places))
+        int_amount_b = int(Decimal(str(amount_b)) * (10**Rapid.Config.decimal_places))
 
         shares = Rapid.add_liquidity(symbol_a.upper(), symbol_b.upper(), int_amount_a, int_amount_b, interaction.user.id)
         desc = f"`{format_amount(shares)}` シェアを受け取りました。"
@@ -758,7 +758,7 @@ async def lp_add(interaction: discord.Interaction, symbol_a: str, amount_a: floa
 async def lp_remove(interaction: discord.Interaction, symbol_a: str, symbol_b: str, shares: float):
     await interaction.response.defer(thinking=True)
     try:
-        int_shares = int(Decimal(str(shares)) * (10**config.decimal_places))
+        int_shares = int(Decimal(str(shares)) * (10**Rapid.Config.decimal_places))
         amount_a, amount_b = Rapid.remove_liquidity(symbol_a.upper(), symbol_b.upper(), int_shares, interaction.user.id)
 
         currency_a = Rapid.Currencies.get_by_symbol(symbol_a.upper())
@@ -793,7 +793,7 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
             await interaction.response.send_message(embed=create_error_embed("指定された通貨が見つかりませんでした。"), ephemeral=True)
             return
 
-        int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
 
         try:
             route = Rapid.find_swap_route(from_symbol_upper, to_symbol_upper)

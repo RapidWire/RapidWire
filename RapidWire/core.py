@@ -1,5 +1,4 @@
 import mysql.connector
-import re
 import json
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
@@ -277,8 +276,8 @@ class RapidWire:
                     raise ContractError("Contract not found or script is empty.")
 
                 # Gas Fee Estimation
-                gas_currency_id = Config.Gas.currency_id
-                gas_price = Config.Gas.price
+                gas_currency_id = self.Config.Gas.currency_id
+                gas_price = self.Config.Gas.price
 
                 estimated_fee = 0
                 if caller_id != SYSTEM_USER_ID and gas_price > 0:
@@ -290,7 +289,7 @@ class RapidWire:
 
                 chain_context = ChainContext(
                     total_cost=contract.cost,
-                    budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
+                    budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost
                 )
 
                 execution_context = ExecutionContext(
@@ -529,7 +528,7 @@ class RapidWire:
         if len(script) > self.Config.Contract.max_script_length:
             raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
         if max_cost is None:
-            max_cost = Config.Contract.max_cost
+            max_cost = self.Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
         script_hash = hashlib.sha256(script.encode()).digest()
 

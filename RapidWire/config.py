@@ -12,3 +12,5 @@ class Config:
     class Gas:
         currency_id: int = 1
         price: int = 1
+
+    decimal_places: int = 3
