@@ -287,26 +287,36 @@ class Compiler:
                 })
                 return out_var, instrs
             else:
-                # Generic getitem: obj[index]
+                # Generic getitem or attr access
                 obj_var, obj_instrs = self._process_expr(node.value)
                 instrs.extend(obj_instrs)
-
-                # For generic getitem, index can be expression
-                idx_var, idx_instrs = self._process_expr(node.slice) # or node.slice.value
-                # Note: node.slice handling differs by Python version.
-                # In 3.9+, slice is the node itself (Constant, Name, etc).
-                # In older, it might be Index(value=...).
-                # self._process_expr handles Constant/Name.
-                # If slice is Index, we need to unpack.
-                # _process_expr assumes standard nodes.
 
                 # Check for Index wrapper (Python < 3.9)
                 idx_node = node.slice
                 if isinstance(idx_node, ast.Index):
                     idx_node = idx_node.value
 
-                idx_var, idx_instrs = self._process_expr(idx_node)
+                # Check if index is a string constant
+                is_string_const = False
+                if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, str):
+                    is_string_const = True
+                elif isinstance(idx_node, ast.Str): # Python < 3.8
+                    is_string_const = True
 
+                if is_string_const:
+                    # Treat as attribute access: obj['key'] -> attr(obj, 'key')
+                    prop_name = idx_node.value if isinstance(idx_node, ast.Constant) else idx_node.s
+
+                    out_var = target_var if target_var else self._get_temp_var()
+                    instrs.append({
+                        "op": "attr",
+                        "args": [obj_var, prop_name],
+                        "out": out_var
+                    })
+                    return out_var, instrs
+
+                # For generic getitem, index can be expression
+                idx_var, idx_instrs = self._process_expr(idx_node)
                 instrs.extend(idx_instrs)
 
                 out_var = target_var if target_var else self._get_temp_var()
