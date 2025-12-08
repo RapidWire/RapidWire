@@ -213,6 +213,18 @@ class RapidWireVM:
             # args: [claim_id]
             return self.api.cancel_claim(int(args[0]), self.vars['_self'])
 
+        if op == 'swap':
+            # args: [from_currency_id, to_currency_id, amount]
+            return self.api.swap(int(args[0]), int(args[1]), int(args[2]))
+
+        if op == 'add_liquidity':
+            # args: [currency_a_id, currency_b_id, amount_a, amount_b]
+            return self.api.add_liquidity(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+
+        if op == 'remove_liquidity':
+            # args: [currency_a_id, currency_b_id, shares]
+            return self.api.remove_liquidity(int(args[0]), int(args[1]), int(args[2]))
+
         if op == 'exec':
             # args: [dest, input]
             dest = int(args[0])
