@@ -14,6 +14,12 @@ Rapid = RapidWire(db_config=config.MySQL.to_dict())
 Rapid.Config = config.RapidWireConfig
 SYSTEM_USER_ID = 0
 
+class EmbedField:
+    def __init__(self, name: str, value: str, inline: bool = True):
+        self.name: str = name
+        self.value: str = value
+        self.inline: bool = inline
+
 class SwapConfirmationView(discord.ui.View):
     def __init__(self, original_author: User, from_symbol: str, to_symbol: str, amount_in: int, amount_out_est: int):
         super().__init__(timeout=30)
@@ -69,8 +75,9 @@ class ClaimNotificationView(discord.ui.View):
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             tx = self.rapid.pay_claim(self.claim_id, interaction.user.id)
-            desc = f"請求ID `{self.claim_id}` の支払いが完了しました。\n**転送ID:** `{tx.transfer_id}`"
-            await interaction.response.edit_message(embed=create_success_embed(desc, "支払い完了"), view=None)
+            desc = f"請求ID `{self.claim_id}` の支払いが完了しました。"
+            fields = [EmbedField("転送ID", f"`{tx.transfer_id}`", False)]
+            await interaction.response.edit_message(embed=create_success_embed(desc, "支払い完了", fields=fields), view=None)
         except Exception as e:
             await interaction.response.edit_message(embed=create_error_embed(f"支払処理中にエラーが発生しました: {e}"), view=None)
 
@@ -92,12 +99,6 @@ class ClaimNotificationView(discord.ui.View):
                 await interaction.response.send_message("このユーザーからの通知を停止しました。", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"通知停止中にエラーが発生しました: {e}", ephemeral=True)
-
-class EmbedField:
-    def __init__(self, name: str, value: str, inline: bool = True):
-        self.name: str = name
-        self.value: str = value
-        self.inline: bool = inline
 
 def create_claim_notification_embed(claim: structs.Claim, claimant: User, currency: structs.Currency) -> Embed:
     embed = Embed(title="請求の通知", color=Color.blue())
@@ -182,8 +183,9 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
             currency_id=currency.currency_id,
             amount=int_amount
         )
-        desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。\n\n**転送ID:** `{tx.transfer_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, title="送金完了"))
+        desc = f"{user.mention} へ `{format_amount(int_amount)} {currency.symbol}` の送金が完了しました。"
+        fields = [EmbedField("転送ID", f"`{tx.transfer_id}`", False)]
+        await interaction.followup.send(embed=create_success_embed(desc, title="送金完了", fields=fields))
 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
@@ -203,8 +205,9 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
             input_data=input_data,
             discord_client=interaction.client
         )
-        desc = f"{user.mention} のコントラクトを実行しました。\n\n**実行ID:** `{execution_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了"))
+        desc = f"{user.mention} のコントラクトを実行しました。"
+        fields = [EmbedField("実行ID", f"`{execution_id}`", False)]
+        await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了", fields=fields))
     except exceptions.ContractError as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
     except exceptions.TransactionError as e:
@@ -356,13 +359,15 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
         
         new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_bps)
         
-        desc = f"新しい通貨 **{new_currency.name} ({new_currency.symbol})** が発行されました。\n"
-        desc += f"総供給量は `{format_amount(new_currency.supply)}` です。\n"
-        desc += f"ステーキングの日利は `{daily_interest_rate:.4f}%` です。"
+        desc = f"新しい通貨 **{new_currency.name} ({new_currency.symbol})** が発行されました。"
+        fields = [
+            EmbedField("総供給量", f"`{format_amount(new_currency.supply)}`", False),
+            EmbedField("ステーキングの日利", f"`{daily_interest_rate:.4f}%`", False)
+        ]
         if tx:
-            desc += f"\n初期供給の転送ID: `{tx.transfer_id}`"
+            fields.append(EmbedField("初期供給の転送ID", f"`{tx.transfer_id}`", False))
 
-        await interaction.followup.send(embed=create_success_embed(desc, title="通貨発行成功"))
+        await interaction.followup.send(embed=create_success_embed(desc, title="通貨発行成功", fields=fields))
     except exceptions.DuplicateEntryError:
         await interaction.followup.send(embed=create_error_embed("このサーバーには既に通貨が存在するか、そのシンボルは使用済みです。"))
     except Exception as e:
@@ -609,11 +614,12 @@ async def contract_set(interaction: discord.Interaction, script: discord.Attachm
         script_content = (await script.read()).decode('utf-8')
         contract = Rapid.set_contract(interaction.user.id, script_content, max_cost)
 
-        embed = create_success_embed("コントラクトを正常に設定しました。")
-        embed.add_field(name="計算されたコスト", value=f"`{contract.cost}`", inline=False)
-        embed.add_field(name="設定された最大コスト", value=f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", inline=False)
+        fields = [
+            EmbedField("計算されたコスト", f"`{contract.cost}`", False),
+            EmbedField("設定された最大コスト", f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", False)
+        ]
 
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=create_success_embed("コントラクトを正常に設定しました。", fields=fields))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n`{e}`"))
 
@@ -642,8 +648,9 @@ async def claim_create(interaction: discord.Interaction, user: User, amount: flo
         int_amount = int(Decimal(str(amount)) * (10**config.decimal_places))
         claim = Rapid.Claims.create(interaction.user.id, user.id, currency.currency_id, int_amount, description)
         
-        desc = f"{user.mention} への請求を作成しました。\n**請求ID:** `{claim.claim_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, "請求作成完了"))
+        desc = f"{user.mention} への請求を作成しました。"
+        fields = [EmbedField("請求ID", f"`{claim.claim_id}`", False)]
+        await interaction.followup.send(embed=create_success_embed(desc, "請求作成完了", fields=fields))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"請求の作成中にエラーが発生しました: {e}"))
 
@@ -677,8 +684,9 @@ async def claim_pay(interaction: discord.Interaction, claim_id: int):
     await interaction.response.defer(thinking=True)
     try:
         tx = Rapid.pay_claim(claim_id, interaction.user.id)
-        desc = f"請求ID `{claim_id}` の支払いが完了しました。\n**転送ID:** `{tx.transfer_id}`"
-        await interaction.followup.send(embed=create_success_embed(desc, "支払い完了"))
+        desc = f"請求ID `{claim_id}` の支払いが完了しました。"
+        fields = [EmbedField("転送ID", f"`{tx.transfer_id}`", False)]
+        await interaction.followup.send(embed=create_success_embed(desc, "支払い完了", fields=fields))
     except (ValueError, PermissionError) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except exceptions.InsufficientFunds:
