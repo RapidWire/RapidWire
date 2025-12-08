@@ -116,7 +116,7 @@ class ContractAPI:
     def set_variable(self, key: str, value: int | str):
         if len(key) > 31:
             raise ValueError("Key must be 31 characters or less.")
-        if isinstance(value, str) and len(value) > 255:
+        if isinstance(value, str) and len(value) > 127:
             raise ValueError("String value is too long.")
         if isinstance(value, int) and abs(value) > 10**30:
             raise ValueError("Integer value is too large.")
