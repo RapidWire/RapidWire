@@ -104,6 +104,7 @@ class TransferResponse(BaseModel):
 
 class ContractExecutionResponse(BaseModel):
     execution_id: int
+    output_data: Optional[str]
 
 class ClaimCreateRequest(BaseModel):
     payer_id: int = Field(..., description="The Discord user ID of the person to pay the claim.")
@@ -245,12 +246,12 @@ async def execute_contract(request: ContractExecutionRequest, user_id: int = Dep
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found or has no script")
 
     try:
-        execution_id = Rapid.execute_contract(
+        execution_id, output_data = Rapid.execute_contract(
             caller_id=user_id,
             contract_owner_id=request.contract_owner_id,
             input_data=request.input_data
         )
-        return ContractExecutionResponse(execution_id=execution_id)
+        return ContractExecutionResponse(execution_id=execution_id, output_data=output_data)
     except exceptions.TransactionCanceledByContract as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
     except exceptions.TransactionError as e:

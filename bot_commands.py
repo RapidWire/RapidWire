@@ -11,7 +11,7 @@ import config
 from RapidWire import RapidWire, exceptions, structs
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
-Rapid.Config.Contract.max_cost = config.Contract.max_cost
+Rapid.Config = config.RapidWireConfig
 SYSTEM_USER_ID = 0
 
 class SwapConfirmationView(discord.ui.View):
@@ -102,11 +102,17 @@ def create_claim_notification_embed(claim: structs.Claim, claimant: User, curren
     embed.set_footer(text=f"請求ID: {claim.claim_id}")
     return embed
 
-def create_error_embed(description: str) -> Embed:
-    return Embed(title="エラー", description=description, color=Color.red())
+def create_error_embed(description: str, fields: Optional[list[discord.embeds._EmbedFieldProxy]] = None) -> Embed:
+    embed = Embed(title="エラー", description=description, color=Color.red())
+    if fields:
+        embed.fields = fields
+    return embed
 
-def create_success_embed(description: str, title: str = "成功") -> Embed:
-    return Embed(title=title, description=description, color=Color.green())
+def create_success_embed(description: str, title: str = "成功", fields: Optional[list[discord.embeds._EmbedFieldProxy]] = None) -> Embed:
+    embed = Embed(title=title, description=description, color=Color.green())
+    if fields:
+        embed.fields = fields
+    return embed
 
 def format_amount(amount: int) -> str:
     return f"{Decimal(amount) / Decimal(10**config.decimal_places):,.{config.decimal_places}f}"
@@ -173,10 +179,6 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
-    except exceptions.TransactionCanceledByContract as e:
-        await interaction.followup.send(embed=create_error_embed(f"送金は受信者のコントラクトによってキャンセルされました。\n```{e}```"))
-    except exceptions.ContractError as e:
-        await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
     except exceptions.TransactionError as e:
         await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
     except Exception as e:
@@ -187,7 +189,7 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 async def execute_contract(interaction: discord.Interaction, user: User, input_data: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
-        execution_id = Rapid.execute_contract(
+        execution_id, output_data = Rapid.execute_contract(
             caller_id=interaction.user.id,
             contract_owner_id=user.id,
             input_data=input_data,
