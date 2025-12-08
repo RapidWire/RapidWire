@@ -100,8 +100,8 @@ class RapidWireVM:
             raise StopExecution()
 
         if op == 'cancel':
-             message = args[0] if args else "Transaction canceled"
-             raise TransactionCanceledByContract(message)
+            message = args[0] if args else "Transaction canceled"
+            raise TransactionCanceledByContract(message)
 
         # C. RapidWire Actions & Transactions
         if op == 'transfer':
@@ -113,8 +113,8 @@ class RapidWireVM:
             return self.api.transfer(self.vars['_self'], to_id, cur_id, amount)
 
         if op == 'get_balance':
-             # args: [user, cur]
-             return self.api.get_balance(int(args[0]), int(args[1]))
+            # args: [user, cur]
+            return self.api.get_balance(int(args[0]), int(args[1]))
 
         if op == 'reply':
             # args: [message]
@@ -122,32 +122,32 @@ class RapidWireVM:
             return None
 
         if op == 'store_str_get':
-             # args: [key]
-             key = str(args[0])
-             val = self.api.get_variable(None, key) # None user_id defaults to owner in api
-             if val is None: return ""
-             return str(val)
+            # args: [key]
+            key = str(args[0])
+            val = self.api.get_variable(None, key) # None user_id defaults to owner in api
+            if val is None: return ""
+            return str(val)
 
         if op == 'store_int_get':
-             # args: [key]
-             key = str(args[0])
-             val = self.api.get_variable(None, key) # None user_id defaults to owner in api
-             if val is None: return 0
-             return to_num(val)
+            # args: [key]
+            key = str(args[0])
+            val = self.api.get_variable(None, key) # None user_id defaults to owner in api
+            if val is None: return 0
+            return to_num(val)
 
         if op == 'store_str_set':
-             # args: [key, val]
-             key = str(args[0])
-             val = str(args[1])
-             self.api.set_variable(key, val)
-             return None
+            # args: [key, val]
+            key = str(args[0])
+            val = str(args[1])
+            self.api.set_variable(key, val)
+            return None
 
         if op == 'store_int_set':
-             # args: [key, val]
-             key = str(args[0])
-             val = to_num(args[1])
-             self.api.set_variable(key, val)
-             return None
+            # args: [key, val]
+            key = str(args[0])
+            val = to_num(args[1])
+            self.api.set_variable(key, val)
+            return None
 
         if op == 'approve':
             # args: [spender, amount, cur]
@@ -206,12 +206,12 @@ class RapidWireVM:
             return self.api.create_claim(self.vars['_self'], payer, cur, amount, desc)
 
         if op == 'pay_claim':
-             # args: [claim_id]
-             return self.api.pay_claim(int(args[0]), self.vars['_self'])
+            # args: [claim_id]
+            return self.api.pay_claim(int(args[0]), self.vars['_self'])
 
         if op == 'cancel_claim':
-             # args: [claim_id]
-             return self.api.cancel_claim(int(args[0]), self.vars['_self'])
+            # args: [claim_id]
+            return self.api.cancel_claim(int(args[0]), self.vars['_self'])
 
         if op == 'exec':
             # args: [dest, input]
@@ -226,7 +226,7 @@ class RapidWireVM:
                 channel_id = int(args[1])
                 message = str(args[2])
             except (ValueError, IndexError):
-                 raise ContractError("Invalid arguments for discord_send")
+                raise ContractError("Invalid arguments for discord_send")
 
             # We schedule this as a task. Return 1 (success) optimistically.
             self._run_async(self.api.discord_send(guild_id, channel_id, message))

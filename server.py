@@ -94,9 +94,16 @@ class TransferRequest(BaseModel):
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
     input_data: Optional[str] = Field(None, max_length=16, pattern=r"^[a-zA-Z0-9]*$", description="Alphanumeric data for the contract.")
 
+class ContractExecutionRequest(BaseModel):
+    contract_owner_id: int = Field(..., description="The Discord user ID of the contract owner.")
+    input_data: Optional[str] = Field(None, max_length=16, pattern=r"^[a-zA-Z0-9]*$", description="Alphanumeric data for the contract.")
+
 class TransferResponse(BaseModel):
     transfer: Optional[structs.Transfer] = None
     execution_id: Optional[int] = None
+
+class ContractExecutionResponse(BaseModel):
+    execution_id: int
 
 class ClaimCreateRequest(BaseModel):
     payer_id: int = Field(..., description="The Discord user ID of the person to pay the claim.")
@@ -231,6 +238,26 @@ async def get_contract_script(user_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found for this user.")
     return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost)
 
+@app.post("/contract/execute", response_model=ContractExecutionResponse, tags=["Contract"])
+async def execute_contract(request: ContractExecutionRequest, user_id: int = Depends(get_current_user_id)):
+    contract = Rapid.Contracts.get(request.contract_owner_id)
+    if not contract or not contract.script:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found or has no script")
+
+    try:
+        execution_id = Rapid.execute_contract(
+            caller_id=user_id,
+            contract_owner_id=request.contract_owner_id,
+            input_data=request.input_data
+        )
+        return ContractExecutionResponse(execution_id=execution_id)
+    except exceptions.TransactionCanceledByContract as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 @app.get("/currency/{symbol}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info(symbol: str):
     currency = Rapid.Currencies.get_by_symbol(symbol.upper())
@@ -252,26 +279,15 @@ async def transfer_currency(request: TransferRequest, user_id: int = Depends(get
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
 
     try:
-        contract = Rapid.Contracts.get(request.destination_id)
-        if contract and contract.script:
-            execution_id = Rapid.execute_contract(
-                caller_id=user_id,
-                contract_owner_id=request.destination_id,
-                input_data=request.input_data
-            )
-            return TransferResponse(execution_id=execution_id)
-        else:
-            tx = Rapid.transfer(
-                source_id=user_id,
-                destination_id=request.destination_id,
-                currency_id=currency.currency_id,
-                amount=request.amount
-            )
-            return TransferResponse(transfer=tx)
+        tx = Rapid.transfer(
+            source_id=user_id,
+            destination_id=request.destination_id,
+            currency_id=currency.currency_id,
+            amount=request.amount
+        )
+        return TransferResponse(transfer=tx)
     except exceptions.InsufficientFunds:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds")
-    except exceptions.TransactionCanceledByContract as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
     except exceptions.TransactionError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
     except ValueError as e:
