@@ -107,6 +107,7 @@ class AllowanceLog(BaseModel):
 class ChainContext(BaseModel):
     total_cost: int
     budget: int
+    depth: int = 0
 
 class LiquidityPool(BaseModel):
     pool_id: int

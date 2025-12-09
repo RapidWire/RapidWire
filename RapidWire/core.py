@@ -126,11 +126,15 @@ class ContractAPI:
 
         self.chain_context.total_cost += callee_contract.cost
 
+        if self.chain_context.total_cost > self.chain_context.budget:
+            raise ContractError("Execution budget exceeded.")
+
         execution_id, output_data = self.core.execute_contract(
             caller_id=source_id,
             contract_owner_id=destination_id,
             input_data=input_data,
-            discord_client=self.discord_client
+            discord_client=self.discord_client,
+            chain_context=self.chain_context
         )
 
         return output_data
@@ -294,7 +298,7 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None) -> Tuple[int, str | None]:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
         execution_id = None
         gas_currency_id = self.Config.Gas.currency_id
         gas_price = self.Config.Gas.price
@@ -309,7 +313,8 @@ class RapidWire:
                     raise ContractError("Contract not found or script is empty.")
 
                 # Estimate and Deduct Gas Fee Upfront
-                if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                # Only deduct gas for the top-level call. Recursive calls share the budget and cost tracking.
+                if chain_context is None and caller_id != SYSTEM_USER_ID and gas_price > 0:
                     initial_gas_deduction = contract.cost * gas_price
                     caller = self.get_user(caller_id)
                     balance = caller.get_balance(gas_currency_id)
@@ -327,10 +332,19 @@ class RapidWire:
             raise
 
         # Phase 2: Execution
-        chain_context = ChainContext(
-            total_cost=contract.cost,
-            budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost
-        )
+        created_context = False
+        if chain_context is None:
+            chain_context = ChainContext(
+                total_cost=contract.cost,
+                budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost,
+                depth=0
+            )
+            created_context = True
+        else:
+            if chain_context.depth >= self.Config.Contract.max_recursion_depth:
+                raise ContractError(f"Recursion depth limit exceeded ({self.Config.Contract.max_recursion_depth})")
+            chain_context.depth += 1
+            # Note: The caller (ContractAPI) has already added this contract's cost to chain_context.total_cost
 
         try:
             with self.db as cursor:
@@ -358,18 +372,19 @@ class RapidWire:
 
                 self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
 
-                # Refund excess gas if any
-                final_fee = chain_context.total_cost * gas_price
-                if caller_id != SYSTEM_USER_ID and gas_price > 0:
-                    refund = initial_gas_deduction - final_fee
-                    if refund > 0:
-                         self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
-                    elif refund < 0:
-                        # This shouldn't theoretically happen if we charged max cost, but if dynamic costs increased it:
-                        # We might need to charge more? For now let's assume initial deduction was sufficient or we eat the loss/charge remaining.
-                        # If we strictly want to charge more:
-                        additional_charge = abs(refund)
-                        self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+                # Refund excess gas if any - ONLY AT TOP LEVEL
+                if created_context:
+                    final_fee = chain_context.total_cost * gas_price
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                        refund = initial_gas_deduction - final_fee
+                        if refund > 0:
+                             self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                        elif refund < 0:
+                            # This shouldn't theoretically happen if we charged max cost, but if dynamic costs increased it:
+                            # We might need to charge more? For now let's assume initial deduction was sufficient or we eat the loss/charge remaining.
+                            # If we strictly want to charge more:
+                            additional_charge = abs(refund)
+                            self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
 
             return execution_id, output_data
 
@@ -390,20 +405,25 @@ class RapidWire:
                 with self.db as cursor:
                     self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
 
-                    # Refund excess gas (charge only for what was used up to failure)
-                    final_fee = chain_context.total_cost * gas_price
-                    if caller_id != SYSTEM_USER_ID and gas_price > 0:
-                        refund = initial_gas_deduction - final_fee
-                        if refund > 0:
-                             self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
-                        elif refund < 0:
-                            additional_charge = abs(refund)
-                            self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+                    # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
+                    if created_context:
+                        final_fee = chain_context.total_cost * gas_price
+                        if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                            refund = initial_gas_deduction - final_fee
+                            if refund > 0:
+                                 self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                            elif refund < 0:
+                                additional_charge = abs(refund)
+                                self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
             except Exception as update_err:
                 print(f"Error updating execution record after failure: {update_err}")
                 # We still raise the original error
 
             raise e
+
+        finally:
+            if not created_context and chain_context:
+                chain_context.depth -= 1
 
     def transfer(
         self,
