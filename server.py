@@ -383,7 +383,7 @@ async def transfer_from(request: TransferFromRequest, user_id: int = Depends(get
 async def get_allowance(owner_id: int, spender_id: int, currency_id: int):
     allowance = Rapid.Allowances.get(owner_id, spender_id, currency_id)
     if not allowance:
-         # Return zero allowance effectively
+        # Return zero allowance effectively
         return structs.Allowance(owner_id=owner_id, spender_id=spender_id, currency_id=currency_id, amount=0, last_updated_at=0)
     return allowance
 
