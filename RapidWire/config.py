@@ -3,7 +3,7 @@ class Config:
         max_cost: int = 100
         max_script_length: int = 10000
         max_script_size: int = 4096
-        max_recursion_depth: int = 16
+        max_recursion_depth: int = 6
 
     class Staking:
         rate_change_timelock: int = 604800 # 7 days
