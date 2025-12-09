@@ -19,10 +19,14 @@ class UserModel:
         self.user_id = user_id
         self.db = db_connection
 
-    def get_balance(self, currency_id: int) -> Balance:
+    def get_balance(self, currency_id: int, for_update: bool = False) -> Balance:
         with self.db as cursor:
+            query = "SELECT * FROM balance WHERE user_id = %s AND currency_id = %s"
+            if for_update:
+                query += " FOR UPDATE"
+
             cursor.execute(
-                "SELECT * FROM balance WHERE user_id = %s AND currency_id = %s",
+                query,
                 (self.user_id, currency_id)
             )
             result = cursor.fetchone()
