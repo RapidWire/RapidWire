@@ -560,7 +560,7 @@ class RapidWire:
         if max_cost is None:
             max_cost = self.Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
-        script_hash = hashlib.sha256(script.encode()).digest()
+        script_hash = hashlib.sha256(script.encode('utf-8')).digest()
 
         try:
             with self.db as cursor:
