@@ -424,7 +424,7 @@ class RapidWire:
                 destination = self.get_user(destination_id)
 
                 if source_id != SYSTEM_USER_ID:
-                    source_balance = source.get_balance(currency_id)
+                    source_balance = source.get_balance(currency_id, for_update=True)
                     if source_balance.amount < amount:
                         raise InsufficientFunds("Source user has insufficient funds.")
 
