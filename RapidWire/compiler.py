@@ -77,7 +77,15 @@ class Compiler:
                 target_name = self._map_var(target.id)
                 res_var, res_instrs = self._process_expr(value_node, target_var=target_name)
                 instrs.extend(res_instrs)
-                pass
+
+                # If the result of expression is just a variable name (no instruction generated targeting target_name),
+                # we need to add an explicit assignment instruction.
+                if res_var != target_name:
+                     instrs.append({
+                        "op": "set",
+                        "args": [res_var],
+                        "out": target_name
+                     })
 
             elif isinstance(target, ast.Subscript):
                 # Storage assignment: storage_int["key"] = x

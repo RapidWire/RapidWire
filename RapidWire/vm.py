@@ -16,6 +16,8 @@ class RapidWireVM:
         self.api = api
         self.vars = system_vars
         self.return_message = None
+        self.instruction_count = 0
+        self.current_op = None
 
     def _resolve_arg(self, arg: Any) -> Any:
         if isinstance(arg, str):
@@ -29,21 +31,37 @@ class RapidWireVM:
         if name and isinstance(name, str) and name.startswith('_'):
             if isinstance(value, (int, float)):
                 if abs(value) > 10**30:
-                    raise ContractError(f"Variable '{name}' exceeded numeric limit.")
+                    self._raise_error(f"Variable '{name}' exceeded numeric limit.")
             elif isinstance(value, str):
                 if len(value) > 127:
-                    raise ContractError(f"Variable '{name}' exceeded string length limit.")
+                    self._raise_error(f"Variable '{name}' exceeded string length limit.")
             self.vars[name] = value
+
+    def _raise_error(self, message: str):
+        error_msg = f"Error at instruction {self.instruction_count}"
+        if self.current_op:
+            error_msg += f" (op: {self.current_op})"
+        error_msg += f": {message}"
+        raise ContractError(error_msg)
 
     def run(self):
         try:
             self._execute_block(self.script)
         except StopExecution:
             pass
+        except TransactionCanceledByContract:
+            raise
+        except ContractError:
+            raise
+        except Exception as e:
+            self._raise_error(str(e))
 
     def _execute_block(self, block: List[Dict[str, Any]]):
         for cmd in block:
+            self.instruction_count += 1
             op = cmd.get('op')
+            self.current_op = op
+
             raw_args = cmd.get('args', [])
             args = [self._resolve_arg(a) for a in raw_args]
             out = cmd.get('out')
@@ -239,7 +257,7 @@ class RapidWireVM:
                 channel_id = int(args[1])
                 message = str(args[2])
             except (ValueError, IndexError):
-                raise ContractError("Invalid arguments for discord_send")
+                self._raise_error("Invalid arguments for discord_send")
 
             # We schedule this as a task. Return 1 (success) optimistically.
             self._run_async(self.api.discord_send(guild_id, channel_id, message))
@@ -252,7 +270,7 @@ class RapidWireVM:
                 guild_id = int(args[1])
                 role_id = int(args[2])
             except (ValueError, IndexError):
-                raise ContractError("Invalid arguments for discord_role_add")
+                self._raise_error("Invalid arguments for discord_role_add")
 
             # We schedule this as a task. Return 1 (success) optimistically.
             self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
@@ -264,7 +282,7 @@ class RapidWireVM:
                 s = str(args[0])
                 return hashlib.sha256(s.encode('utf-8')).hexdigest()
             except IndexError:
-                raise ContractError("Invalid arguments for hash")
+                self._raise_error("Invalid arguments for hash")
 
         if op == 'random':
             # args: [min, max]
@@ -273,7 +291,7 @@ class RapidWireVM:
                 max_val = int(args[1])
                 return random.randint(min_val, max_val)
             except (ValueError, IndexError):
-                raise ContractError("Invalid arguments for random")
+                self._raise_error("Invalid arguments for random")
 
         # Fallback or Error
-        raise ContractError(f"Unknown operation: {op}")
+        self._raise_error(f"Unknown operation: {op}")
