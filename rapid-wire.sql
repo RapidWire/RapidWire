@@ -56,7 +56,7 @@ CREATE TABLE `claims` (
 
 CREATE TABLE `contract` (
   `user_id` bigint UNSIGNED NOT NULL,
-  `script` mediumblob NOT NULL,
+  `script` blob NOT NULL,
   `cost` int UNSIGNED NOT NULL,
   `max_cost` int UNSIGNED NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
