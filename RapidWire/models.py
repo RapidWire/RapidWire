@@ -3,6 +3,7 @@ from time import time
 import mysql.connector
 import secrets
 import string
+import zlib
 from decimal import Decimal
 
 from .database import DatabaseConnection
@@ -131,9 +132,25 @@ class ContractModel:
         with self.db as cursor:
             cursor.execute("SELECT * FROM contract WHERE user_id = %s", (user_id,))
             result = cursor.fetchone()
-            return Contract(**result) if result else None
+            if result:
+                script = result['script']
+                if isinstance(script, bytes):
+                    try:
+                        result['script'] = zlib.decompress(script).decode('utf-8')
+                    except zlib.error:
+                        # Fallback if decompression fails (maybe not compressed?)
+                        # Or if we want to support legacy uncompressed blobs, but standard text wouldn't be bytes usually from connector unless blob column
+                        # If it was a BLOB column containing uncompressed text, decode might work if it's utf8 bytes.
+                        try:
+                            result['script'] = script.decode('utf-8')
+                        except:
+                            # If neither works, it's corrupt or something else.
+                            pass
+                return Contract(**result)
+            return None
 
     def set(self, user_id: int, script: str, cost: int, max_cost: int) -> Contract:
+        compressed_script = zlib.compress(script.encode('utf-8'))
         with self.db as cursor:
             cursor.execute(
                 """
@@ -141,7 +158,7 @@ class ContractModel:
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE script = VALUES(script), cost = VALUES(cost), max_cost = VALUES(max_cost)
                 """,
-                (user_id, script, cost, max_cost)
+                (user_id, compressed_script, cost, max_cost)
             )
         return self.get(user_id)
 
