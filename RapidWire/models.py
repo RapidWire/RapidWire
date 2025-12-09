@@ -133,19 +133,14 @@ class ContractModel:
             cursor.execute("SELECT * FROM contract WHERE user_id = %s", (user_id,))
             result = cursor.fetchone()
             if result:
-                script = result['script']
-                if isinstance(script, bytes):
+                script = bytes(result['script'])
+                try:
+                    result['script'] = zlib.decompress(script).decode('utf-8')
+                except zlib.error as e:
                     try:
-                        result['script'] = zlib.decompress(script).decode('utf-8')
-                    except zlib.error:
-                        # Fallback if decompression fails (maybe not compressed?)
-                        # Or if we want to support legacy uncompressed blobs, but standard text wouldn't be bytes usually from connector unless blob column
-                        # If it was a BLOB column containing uncompressed text, decode might work if it's utf8 bytes.
-                        try:
-                            result['script'] = script.decode('utf-8')
-                        except:
-                            # If neither works, it's corrupt or something else.
-                            pass
+                        result['script'] = script.decode('utf-8')
+                    except:
+                        raise e
                 return Contract(**result)
             return None
 
