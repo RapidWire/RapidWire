@@ -3,11 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contract Code - RapidWire Explorer</title>
+    <title>Contract Details - RapidWire Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="univ.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        .tab-button.active {
+            border-color: #2563eb;
+            color: #2563eb;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body class="bg-slate-50">
     <div class="container max-w-4xl mx-auto p-4 md:p-8">
@@ -18,20 +25,59 @@
             </a>
         </header>
         
-        <h2 class="text-xl font-semibold mb-4">Contract Code</h2>
-        
         <div class="bg-white p-6 rounded-lg shadow-md border border-slate-200 mb-6">
             <h3 class="text-lg font-semibold text-slate-600 mb-3">Contract for Address:</h3>
             <div id="contract-address-link" class="font-mono text-xl text-blue-600 break-all">Loading...</div>
         </div>
-        
-        <pre class="rounded-lg border border-slate-200 shadow-md"><code id="contract-code" class="language-python bg-white p-6 block overflow-x-auto">
-Loading contract code...
-        </code></pre>
+
+        <div class="bg-white rounded-lg shadow-md border border-slate-200">
+            <div class="flex border-b border-slate-200 overflow-x-auto">
+                <button id="tab-code-btn" class="tab-button active py-3 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800 whitespace-nowrap" onclick="switchTab('code')">
+                    Code
+                </button>
+                <button id="tab-variables-btn" class="tab-button py-3 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800 whitespace-nowrap" onclick="switchTab('variables')">
+                    Variables
+                </button>
+                <button id="tab-history-btn" class="tab-button py-3 px-6 border-b-2 border-transparent text-slate-600 hover:text-slate-800 whitespace-nowrap" onclick="switchTab('history')">
+                    Update History
+                </button>
+            </div>
+
+            <div id="tab-code" class="tab-panel p-6">
+                <pre class="rounded-lg border border-slate-200 bg-gray-50"><code id="contract-code" class="language-json bg-transparent p-4 block overflow-x-auto">Loading...</code></pre>
+                <div class="mt-4 text-sm text-slate-500">
+                    <span class="font-semibold">Cost:</span> <span id="contract-cost">...</span> / <span id="contract-max-cost">...</span>
+                </div>
+            </div>
+
+            <div id="tab-variables" class="tab-panel hidden p-6">
+                <div id="variables-container" class="overflow-x-auto">
+                    <p class="text-slate-500 italic">Loading variables...</p>
+                </div>
+            </div>
+
+            <div id="tab-history" class="tab-panel hidden p-6">
+                <div id="history-container" class="space-y-4">
+                    <p class="text-slate-500 italic">Loading history...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
 <script src="univ.js"></script>
 <script>
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.classList.add('hidden');
+        });
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('active');
+        });
+
+        document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+        document.getElementById(`tab-${tabName}-btn`).classList.add('active');
+    }
+
     async function fetchContractCode(address) {
         const addressLink = document.getElementById('contract-address-link');
         addressLink.innerHTML = await formatUserLink(address);
@@ -43,27 +89,121 @@ Loading contract code...
             if (!response.ok) {
                 if(response.status === 404) {
                     codeElement.textContent = '# No contract script found for this address.';
-                    hljs.highlightElement(codeElement);
+                    document.getElementById('contract-cost').textContent = '0';
+                    document.getElementById('contract-max-cost').textContent = '0';
                     return;
                 }
                 throw new Error('Failed to fetch contract script.');
             }
             const data = await response.json();
             if (data.script) {
-                codeElement.textContent = data.script;
+                try {
+                    // Try to pretty print JSON
+                    const parsed = JSON.parse(data.script);
+                    codeElement.textContent = JSON.stringify(parsed, null, 2);
+                } catch(e) {
+                    codeElement.textContent = data.script;
+                }
             } else {
                 codeElement.textContent = '# No script found for this contract.';
             }
+            document.getElementById('contract-cost').textContent = data.cost;
+            document.getElementById('contract-max-cost').textContent = data.max_cost;
             hljs.highlightElement(codeElement);
         } catch (error) {
             codeElement.innerHTML = `<span class="text-red-600">Error: ${error.message}</span>`;
         }
     }
 
+    async function fetchVariables(address) {
+        const container = document.getElementById('variables-container');
+        try {
+            const response = await fetch(`${API_BASE_URL}/contract/variables/${address}`);
+            if (!response.ok) throw new Error('Failed to fetch variables.');
+            const variables = await response.json();
+
+            if (variables.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 italic">No variables found.</p>';
+                return;
+            }
+
+            let html = `
+                <table class="min-w-full divide-y divide-slate-200">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Key</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-slate-200">
+            `;
+
+            variables.forEach(v => {
+                html += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-600">${v.key}</td>
+                        <td class="px-6 py-4 whitespace-pre-wrap font-mono text-sm text-slate-800 break-all">${v.value}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } catch (error) {
+            container.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+        }
+    }
+
+    async function fetchHistory(address) {
+        const container = document.getElementById('history-container');
+        try {
+            const response = await fetch(`${API_BASE_URL}/contract/history/${address}`);
+            if (!response.ok) throw new Error('Failed to fetch history.');
+            const history = await response.json();
+
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 italic">No update history found.</p>';
+                return;
+            }
+
+            let html = '';
+            // Sort by created_at desc
+            history.sort((a, b) => b.created_at - a.created_at);
+
+            history.forEach(h => {
+                const date = new Date(h.created_at * 1000).toLocaleString();
+                html += `
+                    <div class="border border-slate-200 rounded-md p-4 bg-slate-50">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-sm font-semibold text-slate-700">Update at ${date}</span>
+                            <span class="text-xs font-mono text-slate-500">ID: ${h.history_id}</span>
+                        </div>
+                        <div class="text-sm">
+                            <span class="text-slate-600">Execution ID:</span>
+                            <a href="transaction.html?id=${h.execution_id}" class="text-blue-600 hover:underline font-mono">${h.execution_id}</a>
+                        </div>
+                        <div class="text-sm mt-1">
+                            <span class="text-slate-600">Cost:</span> <span class="font-mono">${h.cost}</span>
+                        </div>
+                         <div class="text-sm mt-1">
+                            <span class="text-slate-600">Hash:</span> <span class="font-mono text-xs bg-slate-200 p-1 rounded">${h.script_hash}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        } catch (error) {
+            container.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const address = new URLSearchParams(window.location.search).get('addr');
         if (address) {
-            getConfig().then(() => fetchContractCode(address));
+            getConfig().then(() => {
+                fetchContractCode(address);
+                fetchVariables(address);
+                fetchHistory(address);
+            });
         } else {
             document.getElementById('contract-address-link').innerHTML = '<span class="text-red-600">No address provided.</span>';
             document.getElementById('contract-code').textContent = '';
