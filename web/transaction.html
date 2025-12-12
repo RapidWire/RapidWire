@@ -18,8 +18,15 @@
         
         <h2 class="text-xl font-semibold mb-4">Transaction Details</h2>
         
-        <div id="tx-details-container" class="bg-white p-6 md:p-8 rounded-lg shadow-md border border-slate-200">
+        <div id="tx-details-container" class="bg-white p-6 md:p-8 rounded-lg shadow-md border border-slate-200 mb-8">
             <p class="text-slate-500 italic">Loading...</p>
+        </div>
+
+        <div id="execution-container" class="hidden">
+            <h2 class="text-xl font-semibold mb-4">Contract Execution</h2>
+            <div id="execution-details" class="bg-white p-6 md:p-8 rounded-lg shadow-md border border-slate-200">
+                <p class="text-slate-500 italic">Loading execution details...</p>
+            </div>
         </div>
     </div>
 
@@ -32,6 +39,14 @@
         }
         const transaction = await response.json();
         return transaction;
+    }
+
+    async function getExecutionById(executionId) {
+        const response = await fetch(`${API_BASE_URL}/executions/${executionId}`);
+        if (!response.ok) {
+            return null;
+        }
+        return await response.json();
     }
 
     async function fetchTransactionDetails(txId) {
@@ -76,11 +91,73 @@
                     <hr class="md:col-span-3 my-2 border-slate-200" />
                     
                     <dt class="text-sm font-medium text-slate-500">Input Data</dt>
-                    <dd class="md:col-span-2 font-mono text-slate-700 bg-slate-100 p-2 rounded-md">${tx.input_data || '(none)'}</dd>
+                    <dd class="md:col-span-2 font-mono text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(tx.input_data) || '(none)'}</dd>
+
+                    ${tx.execution_id ? `
+                        <hr class="md:col-span-3 my-2 border-slate-200" />
+                        <dt class="text-sm font-medium text-slate-500">Execution ID</dt>
+                        <dd class="md:col-span-2 font-mono text-blue-600"><a href="#execution-container">${tx.execution_id}</a></dd>
+                    ` : ''}
+                </dl>
+            `;
+
+            if (tx.execution_id) {
+                document.getElementById('execution-container').classList.remove('hidden');
+                await fetchExecutionDetails(tx.execution_id);
+            }
+
+        } catch (error) {
+            container.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+        }
+    }
+
+    async function fetchExecutionDetails(executionId) {
+        const container = document.getElementById('execution-details');
+        try {
+            const exec = await getExecutionById(executionId);
+            if (!exec) {
+                container.innerHTML = '<p class="text-slate-500 italic">Execution details not found.</p>';
+                return;
+            }
+
+            const callerLink = await formatUserLink(exec.caller_id);
+            const contractLink = await formatUserLink(exec.contract_owner_id);
+
+            let statusColor = 'text-gray-600';
+            if (exec.status === 'success') statusColor = 'text-green-600';
+            else if (exec.status === 'failed') statusColor = 'text-red-600';
+            else if (exec.status === 'reverted') statusColor = 'text-orange-600';
+
+            container.innerHTML = `
+                <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+                    <dt class="text-sm font-medium text-slate-500">Execution ID</dt>
+                    <dd class="md:col-span-2 font-mono text-slate-900">${exec.execution_id}</dd>
+
+                    <dt class="text-sm font-medium text-slate-500">Status</dt>
+                    <dd class="md:col-span-2 font-bold uppercase ${statusColor}">${exec.status}</dd>
+
+                    <dt class="text-sm font-medium text-slate-500">Gas Cost</dt>
+                    <dd class="md:col-span-2 font-mono text-slate-900">${exec.cost}</dd>
+
+                    <hr class="md:col-span-3 my-2 border-slate-200" />
+
+                    <dt class="text-sm font-medium text-slate-500">Caller</dt>
+                    <dd class="md:col-span-2">${callerLink}</dd>
+
+                    <dt class="text-sm font-medium text-slate-500">Contract</dt>
+                    <dd class="md:col-span-2">${contractLink}</dd>
+
+                    <hr class="md:col-span-3 my-2 border-slate-200" />
+
+                    <dt class="text-sm font-medium text-slate-500">Input</dt>
+                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(exec.input_data) || '(none)'}</dd>
+
+                    <dt class="text-sm font-medium text-slate-500">Output</dt>
+                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(exec.output_data) || '(none)'}</dd>
                 </dl>
             `;
         } catch (error) {
-            container.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
+            container.innerHTML = `<p class="text-red-600">Error fetching execution details: ${error.message}</p>`;
         }
     }
 

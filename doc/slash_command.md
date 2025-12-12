@@ -10,16 +10,21 @@
 指定したユーザー（または自分自身）の全通貨の残高を表示します。
 - **user (任意)**: 残高を表示したいユーザーを指定します。
 
-### `/transfer <user> <amount> [symbol] [input_data]`
+### `/transfer <user> <amount> [symbol]`
 指定したユーザーに通貨を送金します。
+**注意:** このコマンドは送金のみを行い、相手のコントラクトを実行しません。コントラクトを実行するには `/execute_contract` コマンドを使用してください。
 - **user**: 通貨を送金する相手のユーザー。
 - **amount**: 送金する通貨の量。
 - **symbol (任意)**: 送金する通貨のシンボル。指定しない場合は、コマンドが実行されたサーバーのデフォルト通貨が使用されます。
-- **input_data (任意)**: 受信者のコントラクトに渡すことができる追加データ。
 
-### `/history [transaction_id] [user] [source] [destination] [currency_symbol] [start_date] [end_date] [min_amount] [max_amount] [input_data] [page]`
-あなた、または指定した条件での取引履歴を表示します。
-- **transaction_id (任意)**: 特定の取引IDを指定すると、その取引の詳細を表示します。
+### `/execute_contract <user> [input_data]`
+指定したユーザーのコントラクトを実行します。
+- **user**: コントラクトの所有者。
+- **input_data (任意)**: コントラクトに渡すデータ。
+
+### `/history [transfer_id] [user] [source] [destination] [currency_symbol] [start_date] [end_date] [min_amount] [max_amount] [input_data] [page]`
+あなた、または指定した条件での転送履歴を表示します。
+- **transfer_id (任意)**: 特定の転送IDを指定すると、その転送の詳細を表示します。
 - **user (任意)**: このユーザーが送金、または受信した取引を検索します。
 - **source (任意)**: 指定した送金元の取引を検索します。
 - **destination (任意)**: 指定した送金先の取引を検索します。
@@ -29,7 +34,7 @@
 - **min_amount (任意)**: 指定した最小金額以上の取引を検索します。
 - **max_amount (任意)**: 指定した最大金額以下の取引を検索します。
 - **input_data (任意)**: 指定したInput Dataを含む取引を検索します。
-- **page (任意)**: 履歴が複数ページにわたる場合にページ番号を指定します。
+- **page (任意)**: 履歴が複数ページにわたる場合にページ番号を指定します（デフォルトは1）。
 
 ---
 
@@ -51,7 +56,7 @@
 - **amount**: 追加発行する量。
 
 ### `/currency burn <amount>`
-**[管理者権限が必要]** あなたが保有する現在のサーバーの通貨の一部を焼却（永久に削除）します。
+あなたが保有する現在のサーバーの通貨の一部を焼却（永久に削除）します。
 - **amount**: 焼却する量。
 
 ### `/currency renounce`
@@ -92,7 +97,7 @@
 
 ### `/contract set <script> [max_cost]`
 あなたのアカウントにスマートコントラクトを設定します。
-- **script**: Pythonで書かれたコントラクトコードのファイル。
+- **script**: Pythonで書かれたコントラクトコードのファイル（`.py`など）。
 - **max_cost (任意)**: このコントラクトの実行を許可する最大のコスト。0を指定すると無制限になります。
 
 ### `/contract get`
@@ -157,3 +162,33 @@
 - **from_symbol**: 交換元の通貨のシンボル。
 - **to_symbol**: 交換先の通貨のシンボル。
 - **amount**: 交換する量。
+
+---
+
+## 通知設定コマンド (`/notification ...`)
+
+### `/notification allow <user>`
+指定したユーザーからの請求通知を許可します。
+- **user**: 許可するユーザー。
+
+### `/notification deny <user>`
+指定したユーザーからの請求通知を拒否します。
+- **user**: 拒否するユーザー。
+
+### `/notification list`
+請求通知を許可しているユーザーの一覧を表示します。
+
+---
+
+## Discord権限管理コマンド (`/discord-permission ...`)
+
+### `/discord_permission allow <user>`
+**[管理者権限が必要]** 指定したユーザーのコントラクトにDiscord操作（メッセージ送信、ロール付与など）を許可します。
+- **user**: 許可するユーザー。
+
+### `/discord_permission deny <user>`
+**[管理者権限が必要]** 指定したユーザーのコントラクトによるDiscord操作を禁止します。
+- **user**: 禁止するユーザー。
+
+### `/discord_permission list`
+**[管理者権限が必要]** Discord操作を許可されているユーザーの一覧を表示します。

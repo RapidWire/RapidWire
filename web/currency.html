@@ -193,7 +193,7 @@
                     
                     
                     <td data-label="Data" class="p-4 font-mono text-sm text-slate-500 md:table-cell">
-                        ${tx.input_data || '—'}
+                        ${escapeHtml(tx.input_data) || '—'}
                     </td>
                 </tr>
             `;
@@ -206,7 +206,7 @@
         pageInfo.textContent = `Page: ${currentPage}`;
         prevButton.disabled = (currentPage === 1);
         try {
-            const txsResponse = await fetch(`${API_BASE_URL}/transactions/search?currency_symbol=${symbol}&page=${currentPage}&limit=${LIMIT}`);
+            const txsResponse = await fetch(`${API_BASE_URL}/transfers/search?currency_symbol=${symbol}&page=${currentPage}&limit=${LIMIT}`);
             if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
             const txsData = await txsResponse.json();
             nextButton.disabled = (txsData.length < LIMIT);

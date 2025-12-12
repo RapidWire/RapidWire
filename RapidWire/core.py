@@ -1,16 +1,24 @@
 import mysql.connector
-import re
-import ast
+import json
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
-import asteval
 from decimal import Decimal
 import hashlib
+import zlib
 
 from .config import Config
+from .vm import RapidWireVM
 from .database import DatabaseConnection
-from .models import UserModel, CurrencyModel, TransactionModel, ContractModel, APIKeyModel, ClaimModel, StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel, NotificationPermissionModel
-from .structs import Currency, Transaction, Claim, Stake, TransactionContext, ChainContext, LiquidityPool, LiquidityProvider
+from .models import (
+    UserModel, CurrencyModel, ContractModel, APIKeyModel, ClaimModel,
+    StakeModel, LiquidityPoolModel, LiquidityProviderModel, ContractVariableModel,
+    NotificationPermissionModel, ExecutionModel, TransferModel, ContractHistoryModel,
+    AllowanceModel, AllowanceLogModel, DiscordPermissionModel
+)
+from .structs import (
+    Currency, Claim, Stake, ExecutionContext, ChainContext, LiquidityPool,
+    LiquidityProvider, Transfer
+)
 from .exceptions import (
     UserNotFound,
     CurrencyNotFound,
@@ -22,44 +30,46 @@ from .exceptions import (
 
 SYSTEM_USER_ID = 0
 SECONDS_IN_A_DAY = 86400
-CONTRACT_METHOD_COSTS = {
-    'get_balance': 1,
-    'get_transaction': 2,
-    'transfer': 10,
-    'search_transactions': 5,
-    'get_currency': 1,
-    'create_claim': 3,
-    'get_claim': 2,
-    'pay_claim': 5,
-    'cancel_claim': 2,
-    'execute_contract': 15,
-    'get_variable': 1,
-    'set_variable': 3,
+CONTRACT_OP_COSTS = {
+    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
+    'if': 1, 'exit': 0, 'cancel': 0,
+    'transfer': 10, 'get_balance': 1, 'reply': 1,
+    'store_str_get': 1, 'store_int_get': 1, 'store_str_set': 3, 'store_int_set': 3,
+    'approve': 3, 'transfer_from': 10,
+    'get_currency': 1, 'get_transaction': 2, 'attr': 0,
+    'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
+    'exec': 15,
+    'discord_send': 5, 'discord_role_add': 10,
+    'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
 }
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', transaction_context: TransactionContext, chain_context: Optional[ChainContext] = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, discord_client: Any = None):
         self.core = rapidwire_instance
-        self.tx = transaction_context
+        self.ctx = execution_context
         self.chain_context = chain_context
+        self.discord_client = discord_client
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
 
-    def get_transaction(self, tx_id: int) -> Optional[Transaction]:
-        tx = self.core.Transactions.get(tx_id)
-        return tx if tx else None
-
-    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transaction:
-        if source != self.tx.dest:
+    def transfer(self, source: int, dest: int, currency: int, amount: int) -> Transfer:
+        if source != self.ctx.contract_owner_id:
             raise PermissionError("Contract can only initiate transfers from its own account.")
-        new_tx, _ = self.core.transfer(source, dest, currency, amount, execute_contract=False)
-        return new_tx
+        return self.core.transfer(source, dest, currency, amount, execution_id=self.ctx.execution_id)
 
-    def search_transactions(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transaction]:
-        txs = self.core.Transactions.search(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
-        return txs
+    def approve(self, spender: int, currency: int, amount: int):
+        self.core.approve(self.ctx.contract_owner_id, spender, currency, amount, execution_id=self.ctx.execution_id)
+
+    def transfer_from(self, sender: int, recipient: int, currency: int, amount: int) -> Transfer:
+        return self.core.transfer_from(sender, recipient, currency, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
+
+    def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
+        return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
+
+    def get_transaction(self, tx_id: int) -> Optional[Transfer]:
+        return self.core.Transfers.get(tx_id)
 
     def get_currency(self, currency_id: int) -> Optional[Currency]:
         curr = self.core.Currencies.get(currency_id=currency_id)
@@ -73,16 +83,42 @@ class ContractAPI:
         claim = self.core.Claims.get(claim_id)
         return claim if claim else None
     
-    def pay_claim(self, claim_id: int, payer_id: int) -> Transaction:
-        tx, _ = self.core.pay_claim(claim_id, payer_id)
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transfer:
+        tx = self.core.pay_claim(claim_id, payer_id)
         return tx
 
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.core.cancel_claim(claim_id, user_id)
         return claim
 
-    def execute_contract(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> Tuple[Transaction, Optional[str]]:
-        source_id = self.tx.dest
+    def swap(self, from_currency_id: int, to_currency_id: int, amount: int) -> int:
+        from_currency = self.core.Currencies.get(from_currency_id)
+        to_currency = self.core.Currencies.get(to_currency_id)
+        if not from_currency or not to_currency:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        amount_out, _ = self.core.swap(from_currency.symbol, to_currency.symbol, amount, self.ctx.contract_owner_id)
+        return amount_out
+
+    def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int:
+        curr_a = self.core.Currencies.get(currency_a_id)
+        curr_b = self.core.Currencies.get(currency_b_id)
+        if not curr_a or not curr_b:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        return self.core.add_liquidity(curr_a.symbol, curr_b.symbol, amount_a, amount_b, self.ctx.contract_owner_id)
+
+    def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> List[int]:
+        curr_a = self.core.Currencies.get(currency_a_id)
+        curr_b = self.core.Currencies.get(currency_b_id)
+        if not curr_a or not curr_b:
+            raise CurrencyNotFound("One of the currencies was not found.")
+
+        amount_a, amount_b = self.core.remove_liquidity(curr_a.symbol, curr_b.symbol, shares, self.ctx.contract_owner_id)
+        return [amount_a, amount_b]
+
+    def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> Optional[str]:
+        source_id = self.ctx.contract_owner_id
 
         callee_contract = self.core.Contracts.get(destination_id)
         if not callee_contract:
@@ -90,38 +126,103 @@ class ContractAPI:
 
         self.chain_context.total_cost += callee_contract.cost
 
-        new_tx, message = self.core.transfer(
-            source_id=source_id,
-            destination_id=destination_id,
-            currency_id=currency_id,
-            amount=amount,
+        if self.chain_context.total_cost > self.chain_context.budget:
+            raise ContractError("Execution budget exceeded.")
+
+        execution_id, output_data = self.core.execute_contract(
+            caller_id=source_id,
+            contract_owner_id=destination_id,
             input_data=input_data,
+            discord_client=self.discord_client,
             chain_context=self.chain_context
         )
-        return new_tx, message
 
-    def get_variable(self, user_id: int|None, key: bytes) -> Optional[bytes]:
+        return output_data
+
+    def get_variable(self, user_id: int|None, key: str) -> int | str | None:
         if user_id is None:
-            user_id = self.tx.dest
+            user_id = self.ctx.contract_owner_id
         variable = self.core.ContractVariables.get(user_id, key)
         return variable.value if variable else None
 
-    def set_variable(self, key: bytes, value: bytes):
-        if len(key) > 8:
-            raise ValueError("Key must be 8 bytes or less.")
-        if len(value) > 16:
-            raise ValueError("Value must be 16 bytes or less.")
+    def set_variable(self, key: str, value: int | str):
+        if len(key) > 31:
+            raise ValueError("Key must be 31 characters or less.")
+        if isinstance(value, str) and len(value) > 127:
+            raise ValueError("String value is too long.")
+        if isinstance(value, int) and abs(value) > 10**30:
+            raise ValueError("Integer value is too large.")
 
-        user_variables = self.core.ContractVariables.get_all_for_user(self.tx.dest)
+        user_variables = self.core.ContractVariables.get_all_for_user(self.ctx.contract_owner_id)
         if len(user_variables) >= 2000:
-             # Check if the key already exists, if so, it's an update, not an insert
+            # Check if the key already exists, if so, it's an update, not an insert
             if not any(v.key == key for v in user_variables):
                 raise ValueError("Maximum of 2000 variables reached for this user.")
 
-        self.core.ContractVariables.set(self.tx.dest, key, value)
+        self.core.ContractVariables.set(self.ctx.contract_owner_id, key, value)
 
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
+
+    async def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
+        if not self.discord_client:
+            return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            channel = self.discord_client.get_channel(channel_id)
+            if not channel:
+                # Try fetching if not in cache
+                channel = await self.discord_client.fetch_channel(channel_id)
+
+            if not channel:
+                return False
+
+            if channel.guild.id != guild_id:
+                raise PermissionError("Channel does not belong to the specified guild.")
+
+            await channel.send(message)
+            return True
+        except Exception as e:
+            # We might want to log this error or return it somehow, but for now just return False
+            print(f"Error sending message: {e}")
+            return False
+
+    async def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.discord_client:
+             return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            guild = self.discord_client.get_guild(guild_id)
+            if not guild:
+                guild = await self.discord_client.fetch_guild(guild_id)
+
+            if not guild:
+                return False
+
+            member = guild.get_member(user_id)
+            if not member:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except:
+                    return False
+
+            role = guild.get_role(role_id)
+            if not role:
+                return False
+
+            await member.add_roles(role)
+            return True
+        except Exception as e:
+            print(f"Error adding role: {e}")
+            return False
 
 
 class RapidWire:
@@ -129,7 +230,6 @@ class RapidWire:
         self.connection = mysql.connector.connect(**db_config)
         self.db = DatabaseConnection(self.connection)
         self.Currencies = CurrencyModel(self.db)
-        self.Transactions = TransactionModel(self.db)
         self.Contracts = ContractModel(self.db)
         self.APIKeys = APIKeyModel(self.db)
         self.Claims = ClaimModel(self.db)
@@ -138,6 +238,12 @@ class RapidWire:
         self.LiquidityProviders = LiquidityProviderModel(self.db)
         self.ContractVariables = ContractVariableModel(self.db)
         self.NotificationPermissions = NotificationPermissionModel(self.db)
+        self.DiscordPermissions = DiscordPermissionModel(self.db)
+        self.Executions = ExecutionModel(self.db)
+        self.Transfers = TransferModel(self.db)
+        self.ContractHistories = ContractHistoryModel(self.db)
+        self.Allowances = AllowanceModel(self.db)
+        self.AllowanceLogs = AllowanceLogModel(self.db)
         self.Config = Config
 
     def get_user(self, user_id: int) -> UserModel:
@@ -164,14 +270,8 @@ class RapidWire:
         if reward > 0:
             new_amount = stake.amount + reward
             self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, current_time)
-            # We need to create a transaction for the reward
-            cursor.execute(
-                """
-                INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (SYSTEM_USER_ID, user_id, currency_id, reward, "stake:reward", current_time)
-            )
+            # need to create a transfer for the reward
+            self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, reward)
             # Update the supply
             self.Currencies.update_supply(cursor, currency_id, reward)
             return self.Stakes.get(user_id, currency_id)
@@ -180,17 +280,150 @@ class RapidWire:
 
     def _calculate_contract_cost(self, script: str) -> int:
         try:
-            tree = ast.parse(script)
-        except SyntaxError:
-            raise ValueError("Invalid syntax in contract script.")
+            ops = json.loads(script)
+            if not isinstance(ops, list):
+                raise ValueError("Contract script must be a JSON list.")
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON in contract script.")
 
-        cost = 0
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                if isinstance(node.func.value, ast.Name) and node.func.value.id == 'api':
-                    method_name = node.func.attr
-                    cost += CONTRACT_METHOD_COSTS.get(method_name, 0)
-        return cost
+        def calculate_block_cost(block):
+            cost = 0
+            for cmd in block:
+                op = cmd.get('op')
+                cost += CONTRACT_OP_COSTS.get(op, 0)
+                if op == 'if':
+                    cost += calculate_block_cost(cmd.get('then', []))
+                    cost += calculate_block_cost(cmd.get('else', []))
+            return cost
+
+        return calculate_block_cost(ops)
+
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+        execution_id = None
+        gas_currency_id = self.Config.Gas.currency_id
+        gas_price = self.Config.Gas.price
+        initial_gas_deduction = 0
+
+        # Phase 1: Setup and Mandatory Gas Deduction
+        try:
+            with self.db as cursor:
+                # Get contract info first
+                contract = self.Contracts.get(contract_owner_id)
+                if not contract or not contract.script:
+                    raise ContractError("Contract not found or script is empty.")
+
+                # Estimate and Deduct Gas Fee Upfront
+                # Only deduct gas for the top-level call. Recursive calls share the budget and cost tracking.
+                if chain_context is None and caller_id != SYSTEM_USER_ID and gas_price > 0:
+                    initial_gas_deduction = contract.cost * gas_price
+                    caller = self.get_user(caller_id)
+                    balance = caller.get_balance(gas_currency_id)
+                    if balance.amount < initial_gas_deduction:
+                         raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {initial_gas_deduction}, Available: {balance.amount}")
+
+                    # Deduct now
+                    self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction)
+
+                # Create Execution Record (Pending)
+                execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during contract preparation: {err}")
+        except Exception:
+            raise
+
+        # Phase 2: Execution
+        created_context = False
+        if chain_context is None:
+            chain_context = ChainContext(
+                total_cost=contract.cost,
+                budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost,
+                depth=0
+            )
+            created_context = True
+        else:
+            if chain_context.depth >= self.Config.Contract.max_recursion_depth:
+                raise ContractError(f"Recursion depth limit exceeded ({self.Config.Contract.max_recursion_depth})")
+            chain_context.depth += 1
+            # Note: The caller (ContractAPI) has already added this contract's cost to chain_context.total_cost
+
+        try:
+            with self.db as cursor:
+                # We need to re-fetch/attach context if necessary, but we are in the same instance
+                # Note: The previous block committed the gas deduction and execution record creation.
+
+                execution_context = ExecutionContext(
+                    caller_id=caller_id,
+                    contract_owner_id=contract_owner_id,
+                    input=input_data,
+                    execution_id=execution_id
+                )
+
+                api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
+
+                system_vars = {
+                    '_sender': caller_id,
+                    '_self': contract_owner_id,
+                    '_input': input_data if input_data else ""
+                }
+
+                vm = RapidWireVM(json.loads(contract.script), api_handler, system_vars)
+                vm.run()
+                output_data = vm.return_message
+
+                self.Executions.update(cursor, execution_id, output_data, chain_context.total_cost, 'success')
+
+                # Refund excess gas if any - ONLY AT TOP LEVEL
+                if created_context:
+                    final_fee = chain_context.total_cost * gas_price
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                        refund = initial_gas_deduction - final_fee
+                        if refund > 0:
+                             self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                        elif refund < 0:
+                            # This shouldn't theoretically happen if we charged max cost, but if dynamic costs increased it:
+                            # We might need to charge more? For now let's assume initial deduction was sufficient or we eat the loss/charge remaining.
+                            # If we strictly want to charge more:
+                            additional_charge = abs(refund)
+                            self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+
+            return execution_id, output_data
+
+        except (TransactionCanceledByContract, ContractError, Exception) as e:
+            # Phase 3: Failure Handling (New Transaction)
+            # The 'with self.db' block above rolled back the VM changes.
+            # Now we update the execution status and handle gas.
+
+            error_status = 'failed'
+            if isinstance(e, TransactionCanceledByContract):
+                error_status = 'reverted'
+
+            error_message = str(e)
+            if not isinstance(e, (TransactionCanceledByContract, ContractError)):
+                error_message = f"{e.__class__.__name__}: {str(e)}"
+
+            try:
+                with self.db as cursor:
+                    self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
+
+                    # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
+                    if created_context:
+                        final_fee = chain_context.total_cost * gas_price
+                        if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                            refund = initial_gas_deduction - final_fee
+                            if refund > 0:
+                                 self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                            elif refund < 0:
+                                additional_charge = abs(refund)
+                                self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+            except Exception as update_err:
+                print(f"Error updating execution record after failure: {update_err}")
+                # We still raise the original error
+
+            raise e
+
+        finally:
+            if not created_context and chain_context:
+                chain_context.depth -= 1
 
     def transfer(
         self,
@@ -198,25 +431,20 @@ class RapidWire:
         destination_id: int,
         currency_id: int,
         amount: int,
-        input_data: Optional[str] = None,
-        execute_contract: bool = True,
-        chain_context: Optional[ChainContext] = None
-    ) -> Tuple[Transaction, Optional[str]]:
+        execution_id: Optional[int] = None
+    ) -> Transfer:
         if source_id == destination_id:
             raise ValueError("Source and destination cannot be the same.")
         if amount <= 0:
             raise ValueError("Transfer amount must be positive.")
-        if input_data and not re.match(r'^[a-zA-Z0-9:]*$', input_data):
-            raise ValueError("input_data must be alphanumeric or colon.")
 
-        contract_message = None
         try:
             with self.db as cursor:
                 source = self.get_user(source_id)
                 destination = self.get_user(destination_id)
 
                 if source_id != SYSTEM_USER_ID:
-                    source_balance = source.get_balance(currency_id)
+                    source_balance = source.get_balance(currency_id, for_update=True)
                     if source_balance.amount < amount:
                         raise InsufficientFunds("Source user has insufficient funds.")
 
@@ -230,143 +458,41 @@ class RapidWire:
                     source._update_balance(cursor, currency_id, -amount)
                     destination._update_balance(cursor, currency_id, amount)
 
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (source_id, destination_id, currency_id, amount, input_data, int(time()))
-                )
-                transaction_id = cursor.lastrowid
+                transfer_id = self.Transfers.create(cursor, source_id, destination_id, currency_id, amount, execution_id)
 
-                if execute_contract:
-                    contract = self.Contracts.get(destination_id)
-                    if contract and contract.script:
-                        if chain_context is None:
-                            # Start of a new chain
-                            chain_context = ChainContext(
-                                total_cost=contract.cost,
-                                budget=contract.max_cost if contract.max_cost > 0 else Config.Contract.max_cost
-                            )
-
-                        if chain_context.total_cost > chain_context.budget:
-                            raise TransactionError(f"Aggregated contract cost ({chain_context.total_cost}) exceeds budget ({chain_context.budget}).")
-
-                        transaction_context = TransactionContext(
-                            source=source_id,
-                            dest=destination_id,
-                            currency=currency_id,
-                            amount=amount,
-                            input_data=input_data,
-                            transaction_id=transaction_id
-                        )
-
-                        api_handler = ContractAPI(self, transaction_context, chain_context)
-
-                        contract_config = {
-                            'augassign': True,
-                            'if': True,
-                            'ifexp': True,
-                            'raise': True,
-                        }
-
-                        network_config = Config
-
-                        symtable = {
-                            'bool': bool, 'int': int, 'float': float, 'str': str, 'bytes': bytes,
-                            'complex': complex, 'list': list, 'tuple': tuple, 'dict': dict,
-                            'abs': abs, 'divmod': divmod, 'max': max, 'min': min, 'round': round,
-                            'all': all, 'any': any, 'enumerate': enumerate, 'filter': filter, 'len': len,
-                            'sha3_256': hashlib.sha3_256, 'sha3_512': hashlib.sha3_512, 'sha256': hashlib.sha256,
-                        }
-
-                        symtable.update({
-                            'get_balance': api_handler.get_balance,
-                            'get_transaction': api_handler.get_transaction,
-                            'transfer': api_handler.transfer,
-                            'search_transactions': api_handler.search_transactions,
-                            'get_currency': api_handler.get_currency,
-                            'create_claim': api_handler.create_claim,
-                            'get_claim': api_handler.get_claim,
-                            'pay_claim': api_handler.pay_claim,
-                            'cancel_claim': api_handler.cancel_claim,
-                            'execute_contract': api_handler.execute_contract,
-                            'get_variable': api_handler.get_variable,
-                            'set_variable': api_handler.set_variable,
-                            'get_transaction': api_handler.get_transaction,
-                            'network_max_cost': network_config.Contract.max_cost,
-
-                            'tx': TransactionContext(
-                                source=source_id,
-                                dest=destination_id,
-                                currency=currency_id,
-                                amount=amount,
-                                input_data=input_data,
-                                transaction_id=transaction_id
-                            ),
-                            'Cancel': TransactionCanceledByContract,
-                        })
-
-                        aeval = asteval.Interpreter(minimal=True, use_numpy=False, symtable=symtable, nested_symtable=True, config=contract_config)
-
-                        try:
-                            aeval.eval(contract.script, show_errors=False)
-                            if 'return_message' in aeval.symtable:
-                                contract_message = str(aeval.symtable['return_message'])
-                            if aeval.error:
-                                err_dict:dict[str,str] = {}
-                                aeval_error:list[asteval.astutils.ExceptionHolder] = aeval.error
-                                for err in aeval_error:
-                                    err_dict[str(err.exc.__name__)] = str(err.msg)
-                                if 'TransactionCanceledByContract' in err_dict:
-                                    raise TransactionCanceledByContract(err_dict['TransactionCanceledByContract'])
-                                raise ContractError(err_dict)
-                            
-                        except TransactionCanceledByContract:
-                            raise
-                        except ContractError:
-                            raise
-                        except Exception as e:
-                            raise TransactionError(f"{e.__class__.__name__}: {str(e)}")
-
-                cursor.execute("SELECT * FROM transaction WHERE transaction_id = %s", (transaction_id,))
-                result = cursor.fetchone()
-                return (Transaction(**result), contract_message)
-
-        except TransactionCanceledByContract:
-            raise
+            transfer = self.Transfers.get(transfer_id)
+            if not transfer:
+                raise TransactionError("Failed to retrieve transfer record after creation.")
+            return transfer
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transaction]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
         
         initial_tx = None
         if supply > 0:
-            initial_tx, _ = self.transfer(
+            initial_tx = self.transfer(
                 source_id=SYSTEM_USER_ID,
                 destination_id=issuer_id,
                 currency_id=guild_id,
-                amount=supply,
-                input_data="create"
+                amount=supply
             )
             
         return self.Currencies.get(guild_id), initial_tx
 
-    def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transaction:
-        tx, _ = self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount, "mint")
-        return tx
+    def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transfer:
+        return self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount)
 
-    def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transaction:
-        tx, _ = self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount, "burn")
-        return tx
+    def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transfer:
+        return self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount)
         
-    def delete_currency(self, currency_id: int) -> List[Transaction]:
+    def delete_currency(self, currency_id: int) -> List[Transfer]:
         holders = self.Currencies.get_all_holders(currency_id)
         transactions = []
         
         for holder in holders:
-            tx, _ = self.transfer(holder.user_id, SYSTEM_USER_ID, currency_id, holder.amount, "delete:burn")
+            tx = self.transfer(holder.user_id, SYSTEM_USER_ID, currency_id, holder.amount)
             transactions.append(tx)
         
         self.Currencies.delete(currency_id)
@@ -375,7 +501,7 @@ class RapidWire:
     def cancel_delete_request(self, currency_id: int):
         self.Currencies.cancel_delete_request(currency_id)
 
-    def pay_claim(self, claim_id: int, payer_id: int) -> Tuple[Transaction, Optional[str]]:
+    def pay_claim(self, claim_id: int, payer_id: int) -> Transfer:
         claim = self.Claims.get(claim_id)
         if not claim:
             raise ValueError("Claim not found.")
@@ -384,16 +510,15 @@ class RapidWire:
         if claim.status != 'pending':
             raise ValueError(f"This claim is not pending (status: {claim.status}).")
 
-        tx, msg = self.transfer(
+        tx = self.transfer(
             source_id=claim.payer_id,
             destination_id=claim.claimant_id,
             currency_id=claim.currency_id,
-            amount=claim.amount,
-            input_data=f"claim:{claim_id}"
+            amount=claim.amount
         )
         
         self.Claims.update_status(claim_id, 'paid')
-        return tx, msg
+        return tx
 
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.Claims.get(claim_id)
@@ -429,19 +554,13 @@ class RapidWire:
                 # Upsert the stake
                 self.Stakes.upsert(cursor, user_id, currency_id, amount, int(time()))
 
-                # Create a transaction for the deposit
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, currency_id, amount, "stake:deposit", int(time()))
-                )
+                # Create a transfer for the deposit
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, currency_id, amount)
             return self.Stakes.get(user_id, currency_id)
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake deposit: {err}")
 
-    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transaction:
+    def stake_withdraw(self, user_id: int, currency_id: int, amount: int) -> Transfer:
         if amount <= 0:
             raise ValueError("Withdrawal amount must be positive.")
 
@@ -461,16 +580,9 @@ class RapidWire:
                 # Transfer funds back to the user
                 self.get_user(user_id)._update_balance(cursor, currency_id, amount)
 
-                # Create a transaction for the withdrawal
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (SYSTEM_USER_ID, user_id, currency_id, amount, "stake:withdraw", int(time()))
-                )
-                tx_id = cursor.lastrowid
-            return self.Transactions.get(tx_id)
+                # Create a transfer for the withdrawal
+                transfer_id = self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, amount)
+            return self.Transfers.get(transfer_id)
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during stake withdrawal: {err}")
 
@@ -501,12 +613,48 @@ class RapidWire:
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
         if len(script) > self.Config.Contract.max_script_length:
             raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
+        if len(zlib.compress(script.encode('utf-8'))) > self.Config.Contract.max_script_size:
+            raise ValueError(f"The compressed script size exceeds the maximum of {self.Config.Contract.max_script_size} bytes.")
         if max_cost is None:
-            max_cost = Config.Contract.max_cost
+            max_cost = self.Config.Contract.max_cost
         cost = self._calculate_contract_cost(script)
-        return self.Contracts.set(user_id, script, cost, max_cost)
+        script_hash = hashlib.sha256(script.encode('utf-8')).digest()
+
+        try:
+            with self.db as cursor:
+                execution_id = self.Executions.create(cursor, user_id, 0, 'update_contract', 'pending')
+                contract = self.Contracts.set(user_id, script, cost, max_cost)
+                self.ContractHistories.create(cursor, execution_id, user_id, script_hash, cost)
+                self.Executions.update(cursor, execution_id, None, 0, 'success')
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during contract update: {err}")
+        
+        return contract
+
+    def approve(self, owner_id: int, spender_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None):
+        try:
+            with self.db as cursor:
+                self.Allowances.upsert(cursor, owner_id, spender_id, currency_id, amount)
+                self.AllowanceLogs.create(cursor, owner_id, spender_id, currency_id, amount, execution_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during approval: {err}")
+
+    def transfer_from(self, source_id: int, destination_id: int, currency_id: int, amount: int, spender_id: int, execution_id: Optional[int] = None) -> Transfer:
+        allowance = self.Allowances.get(source_id, spender_id, currency_id)
+        if not allowance or allowance.amount < amount:
+            raise InsufficientFunds("Spender does not have sufficient allowance.")
+
+        try:
+            with self.db as cursor:
+                self.Allowances.spend(cursor, source_id, spender_id, currency_id, amount)
+                return self.transfer(source_id, destination_id, currency_id, amount, execution_id)
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during transfer_from: {err}")
 
     def create_liquidity_pool(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int, user_id: int) -> LiquidityPool:
+        if amount_a <= 0 or amount_b <= 0:
+            raise ValueError("Amounts must be positive.")
+
         if self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id):
             raise ValueError("Liquidity pool already exists for this currency pair.")
 
@@ -523,37 +671,46 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during liquidity pool creation: {err}")
 
-    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a: int, amount_b: int, user_id: int) -> Tuple[int, int]:
+    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a_desired: int, amount_b_desired: int, user_id: int) -> Tuple[int, int]:
         pool = self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
         if not pool:
             raise ValueError("Liquidity pool not found.")
 
-        if pool.reserve_a == 0 or pool.reserve_b == 0:
-            shares_a = amount_a
-            shares_b = amount_b
-        else:
-            shares_a = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
-            shares_b = int(Decimal(amount_b) * Decimal(pool.total_shares) / Decimal(pool.reserve_b))
+        if amount_a_desired <= 0 or amount_b_desired <= 0:
+            raise ValueError("Amounts must be positive.")
 
-        shares_to_mint = min(shares_a, shares_b)
+        if pool.reserve_a == 0 or pool.reserve_b == 0:
+            amount_a = amount_a_desired
+            amount_b = amount_b_desired
+            shares_to_mint = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
+        else:
+            amount_b_optimal = int(Decimal(amount_a_desired) * Decimal(pool.reserve_b) / Decimal(pool.reserve_a))
+            if amount_b_optimal <= amount_b_desired:
+                amount_a = amount_a_desired
+                amount_b = amount_b_optimal
+            else:
+                amount_a_optimal = int(Decimal(amount_b_desired) * Decimal(pool.reserve_a) / Decimal(pool.reserve_b))
+                amount_a = amount_a_optimal
+                amount_b = amount_b_desired
+
+            shares_to_mint = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
 
         try:
             with self.db as cursor:
                 user = self.get_user(user_id)
+                source_balance_a = user.get_balance(pool.currency_a_id)
+                source_balance_b = user.get_balance(pool.currency_b_id)
+
+                if source_balance_a.amount < amount_a or source_balance_b.amount < amount_b:
+                    raise InsufficientFunds("Insufficient funds to add liquidity.")
+
                 user._update_balance(cursor, pool.currency_a_id, -amount_a)
                 user._update_balance(cursor, pool.currency_b_id, -amount_b)
                 self.LiquidityPools.update_reserves(cursor, pool.pool_id, amount_a, amount_b, shares_to_mint)
                 self.LiquidityProviders.add_shares(cursor, pool.pool_id, user_id, shares_to_mint)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a, "lp:add", current_time,
-                     user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b, "lp:add", current_time)
-                )
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, pool.currency_a_id, amount_a)
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, pool.currency_b_id, amount_b)
             return shares_to_mint
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
@@ -583,18 +740,14 @@ class RapidWire:
                 else:
                     self.LiquidityProviders.delete(cursor, pool.pool_id, user_id)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a, "lp:remove", current_time,
-                     SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b, "lp:remove", current_time)
-                )
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, pool.currency_a_id, amount_a)
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, pool.currency_b_id, amount_b)
             return amount_a, amount_b
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
+
+    def search_transfers(self, **kwargs) -> List[Transfer]:
+        return self.Transfers.search(**kwargs)
 
     def find_swap_route(self, from_symbol: str, to_symbol: str) -> List[LiquidityPool]:
         from_currency = self.Currencies.get_by_symbol(from_symbol)
@@ -694,15 +847,8 @@ class RapidWire:
 
                 user._update_balance(cursor, current_currency_id, amount_out)
 
-                current_time = int(time())
-                cursor.execute(
-                    """
-                    INSERT INTO transaction (source_id, dest_id, currency_id, amount, input_data, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s), (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, "swap", current_time,
-                     SYSTEM_USER_ID, user_id, current_currency_id, amount_out, "swap", current_time)
-                )
+                self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency.currency_id, amount)
+                self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, current_currency_id, amount_out)
             return amount_out, current_currency_id
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during swap: {err}")
