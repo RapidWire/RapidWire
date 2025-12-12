@@ -200,7 +200,7 @@ async def get_version():
 
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
-    return ConfigResponse(decimal_places=config.decimal_places)
+    return ConfigResponse(decimal_places=config.RapidWireConfig.decimal_places)
 
 @app.get("/user/{user_id}/name", response_model=UserNameResponse, tags=["User"])
 async def get_user_name(user_id: int):
