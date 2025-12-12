@@ -35,6 +35,10 @@ class Contract(BaseModel):
     cost: int
     max_cost: int
 
+    @field_serializer('user_id', 'cost', 'max_cost')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class Claim(BaseModel):
     claim_id: int
     claimant_id: int
@@ -55,6 +59,10 @@ class Stake(BaseModel):
     amount: int
     last_updated_at: int
 
+    @field_serializer('user_id', 'currency_id', 'amount', 'last_updated_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class ExecutionContext(BaseModel):
     caller_id: int
     contract_owner_id: int
@@ -71,6 +79,10 @@ class Execution(BaseModel):
     status: Literal['pending', 'success', 'failed', 'reverted']
     timestamp: int
 
+    @field_serializer('execution_id', 'caller_id', 'contract_owner_id', 'cost', 'timestamp')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class Transfer(BaseModel):
     transfer_id: int
     execution_id: Optional[int]
@@ -80,6 +92,12 @@ class Transfer(BaseModel):
     amount: int
     timestamp: int
 
+    @field_serializer('transfer_id', 'execution_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int | None, _info):
+        if value is None:
+            return value
+        return str(value)
+
 class ContractHistory(BaseModel):
     history_id: int
     execution_id: int
@@ -88,12 +106,20 @@ class ContractHistory(BaseModel):
     cost: int
     created_at: int
 
+    @field_serializer('history_id', 'execution_id', 'user_id', 'cost', 'created_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class Allowance(BaseModel):
     owner_id: int
     spender_id: int
     currency_id: int
     amount: int
     last_updated_at: int
+
+    @field_serializer('owner_id', 'spender_id', 'currency_id', 'amount', 'last_updated_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class AllowanceLog(BaseModel):
     log_id: int
@@ -103,6 +129,12 @@ class AllowanceLog(BaseModel):
     currency_id: int
     amount: int
     timestamp: int
+
+    @field_serializer('log_id', 'execution_id', 'owner_id', 'spender_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int | None, _info):
+        if value is None:
+            return value
+        return str(value)
 
 class ChainContext(BaseModel):
     total_cost: int
@@ -117,11 +149,19 @@ class LiquidityPool(BaseModel):
     reserve_b: int
     total_shares: int
 
+    @field_serializer('pool_id', 'currency_a_id', 'currency_b_id', 'reserve_a', 'reserve_b', 'total_shares')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class LiquidityProvider(BaseModel):
     provider_id: int
     pool_id: int
     user_id: int
     shares: int
+
+    @field_serializer('provider_id', 'pool_id', 'user_id', 'shares')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class ContractVariable(BaseModel):
     user_id: int

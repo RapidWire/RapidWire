@@ -3,10 +3,29 @@ let networkDecimals = 3;
 
 const pendingRequests = new Map();
 
-async function fetchWithCache(url) {
-    const cached = sessionStorage.getItem(url);
-    if (cached) {
-        return JSON.parse(cached);
+function escapeHtml(text) {
+    if (!text) return text;
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+async function fetchWithCache(url, ttl = 60000) { // Default TTL: 60 seconds
+    const cachedString = sessionStorage.getItem(url);
+    if (cachedString) {
+        try {
+            const cached = JSON.parse(cachedString);
+            if (Date.now() < cached.expiry) {
+                return cached.data;
+            } else {
+                sessionStorage.removeItem(url);
+            }
+        } catch (e) {
+            sessionStorage.removeItem(url);
+        }
     }
 
     if (pendingRequests.has(url)) {
@@ -18,7 +37,13 @@ async function fetchWithCache(url) {
             throw new Error(`Failed to fetch: ${url} (Status: ${response.status})`);
         }
         const data = await response.json();
-        sessionStorage.setItem(url, JSON.stringify(data));
+
+        const cacheEntry = {
+            expiry: Date.now() + ttl,
+            data: data
+        };
+        sessionStorage.setItem(url, JSON.stringify(cacheEntry));
+
         pendingRequests.delete(url);
         return data;
     }).catch(error => {
@@ -51,7 +76,8 @@ async function getUserName(userId) {
 
 async function formatUserLink(userId) {
     const username = await getUserName(userId);
-    const displayName = username ? `👤 ${username}` : userId;
+    const safeUsername = escapeHtml(username);
+    const displayName = username ? `👤 ${safeUsername}` : userId;
     const fallbackName = username ? `(${userId})` : '';
     
     return `
