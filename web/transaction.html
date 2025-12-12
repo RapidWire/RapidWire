@@ -91,7 +91,7 @@
                     <hr class="md:col-span-3 my-2 border-slate-200" />
                     
                     <dt class="text-sm font-medium text-slate-500">Input Data</dt>
-                    <dd class="md:col-span-2 font-mono text-slate-700 bg-slate-100 p-2 rounded-md break-all">${tx.input_data || '(none)'}</dd>
+                    <dd class="md:col-span-2 font-mono text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(tx.input_data) || '(none)'}</dd>
 
                     ${tx.execution_id ? `
                         <hr class="md:col-span-3 my-2 border-slate-200" />
@@ -150,10 +150,10 @@
                     <hr class="md:col-span-3 my-2 border-slate-200" />
 
                     <dt class="text-sm font-medium text-slate-500">Input</dt>
-                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${exec.input_data || '(none)'}</dd>
+                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(exec.input_data) || '(none)'}</dd>
 
                     <dt class="text-sm font-medium text-slate-500">Output</dt>
-                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${exec.output_data || '(none)'}</dd>
+                    <dd class="md:col-span-2 font-mono text-sm text-slate-700 bg-slate-100 p-2 rounded-md break-all">${escapeHtml(exec.output_data) || '(none)'}</dd>
                 </dl>
             `;
         } catch (error) {

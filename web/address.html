@@ -284,7 +284,7 @@
                     
                     
                     <td data-label="Data" class="p-4 font-mono text-sm text-slate-500 md:table-cell">
-                        ${tx.input_data || '—'}
+                        ${escapeHtml(tx.input_data) || '—'}
                     </td>
                 </tr>
             `;
@@ -407,7 +407,7 @@
 
             const [statsResponse, txsResponse] = await Promise.all([
                 fetch(`${API_BASE_URL}/user/${userId}/stats`),
-                fetch(`${API_BASE_URL}/transactions/search?user_id=${userId}&page=${currentPage}&limit=${LIMIT}`)
+                fetch(`${API_BASE_URL}/transfers/search?user_id=${userId}&page=${currentPage}&limit=${LIMIT}`)
             ]);
 
             if (!statsResponse.ok) throw new Error('Failed to fetch address stats.');

@@ -133,7 +133,7 @@
                 </div>
                 <div class="bg-slate-50 px-6 py-3 border-t border-slate-200 rounded-b-lg">
                     <span class="text-xs font-semibold text-slate-500 mr-2">DATA:</span>
-                    <code class="text-sm font-mono text-slate-700">${tx.input_data || '—'}</code>
+                    <code class="text-sm font-mono text-slate-700">${escapeHtml(tx.input_data) || '—'}</code>
                 </div>
             </div>
             `;
@@ -149,13 +149,39 @@
         const sortBy = document.getElementById('sort_by').value;
         const sortOrder = document.getElementById('sort_order').value;
 
-        let url = `${API_BASE_URL}/transactions/search?page=${currentPage}&limit=${LIMIT}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+        cardContainer.innerHTML = `<div class="text-center p-12 text-slate-500 italic">Loading...</div>`;
 
+        // Search logic
         if (currentSearchQuery) {
-            url += `&user_id=${currentSearchQuery}`;
+            // If query is a number, try to fetch as Transaction ID first
+            if (page === 1 && /^\d+$/.test(currentSearchQuery)) {
+                try {
+                    const txResponse = await fetch(`${API_BASE_URL}/transaction/${currentSearchQuery}`);
+                    if (txResponse.ok) {
+                        const tx = await txResponse.json();
+                        await displayTransactions([tx]);
+                        nextButton.disabled = true;
+                        return; // Found as transaction ID, stop here
+                    }
+                } catch (e) {
+                    // Continue to search as User ID
+                }
+            }
         }
 
-        cardContainer.innerHTML = `<div class="text-center p-12 text-slate-500 italic">Loading...</div>`;
+        let url = `${API_BASE_URL}/transfers/search?page=${currentPage}&limit=${LIMIT}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+
+        if (currentSearchQuery) {
+            // Only add user_id if query is a number (Discord IDs are integers)
+            if (/^\d+$/.test(currentSearchQuery)) {
+                url += `&user_id=${currentSearchQuery}`;
+            } else {
+                // If it's not a number, it can't be a user_id search based on server specs.
+                // We could alert or just return empty, or try input_data if supported.
+                // server.py supports input_data, let's try searching that?
+                url += `&input_data=${encodeURIComponent(currentSearchQuery)}`;
+            }
+        }
 
         try {
             const response = await fetch(url);
