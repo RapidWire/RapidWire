@@ -627,6 +627,12 @@ class ContractHistoryModel:
             (execution_id, user_id, script_hash, cost, int(time()))
         )
 
+    def get_for_user(self, user_id: int) -> List[ContractHistory]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM contract_history WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+            results = cursor.fetchall()
+            return [ContractHistory(**row) for row in results]
+
 class AllowanceModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
