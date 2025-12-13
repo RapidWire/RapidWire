@@ -594,9 +594,9 @@ class TransferModel:
     def get_user_stats(self, user_id: int) -> dict:
         query = """
             SELECT
-                COUNT(*) as total_transactions,
-                MIN(timestamp) as first_transaction_timestamp,
-                MAX(timestamp) as last_transaction_timestamp
+                COUNT(*) as total_transfers,
+                MIN(timestamp) as first_transfer_timestamp,
+                MAX(timestamp) as last_transfer_timestamp
             FROM transfer
             WHERE source_id = %s OR dest_id = %s
         """
@@ -604,8 +604,8 @@ class TransferModel:
         with self.db as cursor:
             cursor.execute(query, params)
             result = cursor.fetchone()
-            if not result or result['total_transactions'] == 0:
-                return {"total_transactions": 0, "first_transaction_timestamp": None, "last_transaction_timestamp": None}
+            if not result or result['total_transfers'] == 0:
+                return {"total_transfers": 0, "first_transfer_timestamp": None, "last_transfer_timestamp": None}
             return result
 
 class ContractHistoryModel:
