@@ -221,7 +221,7 @@ CREATE TABLE `contract_history` (
   `history_id` bigint UNSIGNED NOT NULL,
   `execution_id` bigint UNSIGNED NOT NULL COMMENT '親Execution ID',
   `user_id` bigint UNSIGNED NOT NULL COMMENT 'コントラクトの所有者',
-  `script_hash` binary(64) NOT NULL COMMENT 'SHA-256 Hash',
+  `script_hash` binary(32) NOT NULL COMMENT 'SHA-256 Hash',
   `cost` int UNSIGNED NOT NULL COMMENT '計算されたコスト',
   `created_at` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
