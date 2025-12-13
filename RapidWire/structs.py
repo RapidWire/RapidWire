@@ -110,6 +110,10 @@ class ContractHistory(BaseModel):
     def serialize_integers(self, value: int, _info):
         return str(value)
 
+    @field_serializer('script_hash')
+    def serialize_bytes(self, value: bytes, _info):
+        return value.hex()
+
 class Allowance(BaseModel):
     owner_id: int
     spender_id: int
