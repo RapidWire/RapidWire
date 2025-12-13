@@ -125,11 +125,11 @@ class ContractScriptResponse(BaseModel):
     max_cost: Optional[int] = None
 
 class UserStatsResponse(BaseModel):
-    total_transactions: int
-    first_transaction_timestamp: Optional[int] = None
-    last_transaction_timestamp: Optional[int] = None
+    total_transfers: int
+    first_transfer_timestamp: Optional[int] = None
+    last_transfer_timestamp: Optional[int] = None
 
-    @field_serializer('total_transactions', 'first_transaction_timestamp', 'last_transaction_timestamp')
+    @field_serializer('total_transfers', 'first_transfer_timestamp', 'last_transfer_timestamp')
     def serialize_integers(self, value: int, _info):
         return str(value) if value is not None else None
 
@@ -442,7 +442,7 @@ async def search_transfers(
     input_data: Optional[str] = None,
     page: int = 1,
     limit: int = 10,
-    sort_by: Literal["transaction_id", "timestamp", "amount"] = "transaction_id",
+    sort_by: Literal["transfer_id", "timestamp", "amount"] = "transfer_id",
     sort_order: Literal["ASC", "DESC", "asc", "desc"] = "desc"
 ):
     if limit >= 20: limit = 20
@@ -470,11 +470,11 @@ async def search_transfers(
 
     return Rapid.search_transfers(**search_params)
 
-@app.get("/transaction/{transaction_id}", response_model=structs.Transfer, tags=["Transfers"])
-async def get_transaction(transaction_id: int):
-    tx = Rapid.Transfers.get(transaction_id)
+@app.get("/transfer/{transfer_id}", response_model=structs.Transfer, tags=["Transfers"])
+async def get_transfer(transfer_id: int):
+    tx = Rapid.Transfers.get(transfer_id)
     if not tx:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer not found")
     return tx
 
 @app.post("/pools/create", response_model=structs.LiquidityPool, tags=["DEX"])

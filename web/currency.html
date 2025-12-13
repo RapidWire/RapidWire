@@ -85,9 +85,9 @@
 
             
             <div class="lg:col-span-2 mt-8 lg:mt-0">
-                <h2 class="text-xl font-semibold mb-4">Transaction History</h2>
+                <h2 class="text-xl font-semibold mb-4">Transfer History</h2>
                 <div id="tx-history-container" class="bg-white rounded-lg shadow-md border border-slate-200 overflow-x-auto md:overflow-x-visible">
-                    <p class="text-slate-500 italic p-6">Loading transaction history...</p>
+                    <p class="text-slate-500 italic p-6">Loading transfer history...</p>
                 </div>
                  <div class="flex justify-between items-center mt-10">
                     <button id="prevButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -112,15 +112,15 @@
     const prevButton = document.getElementById('prevButton');
     const nextButton = document.getElementById('nextButton');
     const pageInfo = document.getElementById('pageInfo');
-    async function displayTransactions(transactionsData, currency) {
+    async function displayTransfers(transfersData, currency) {
         const container = document.getElementById('tx-history-container');
-        if (!transactionsData || transactionsData.length === 0) {
-            container.innerHTML = '<p class="text-slate-500 italic p-6">No transaction history found for this currency.</p>';
+        if (!transfersData || transfersData.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 italic p-6">No transfer history found for this currency.</p>';
             return;
         }
 
-        const sourceLinkPromises = transactionsData.map(tx => formatUserLink(tx.source_id));
-        const destLinkPromises = transactionsData.map(tx => formatUserLink(tx.dest_id));
+        const sourceLinkPromises = transfersData.map(tx => formatUserLink(tx.source_id));
+        const destLinkPromises = transfersData.map(tx => formatUserLink(tx.dest_id));
         
         const sourceLinks = await Promise.all(sourceLinkPromises);
         const destLinks = await Promise.all(destLinkPromises);
@@ -129,7 +129,7 @@
             <table class="w-full">
                 <thead class="bg-slate-50">
                     <tr>
-                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tx ID</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Transfer ID</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Timestamp</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">From</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">To</th>
@@ -140,7 +140,7 @@
                 <tbody class="md:divide-y md:divide-slate-200">
         `;
         
-        transactionsData.forEach((tx, index) => {
+        transfersData.forEach((tx, index) => {
             const sourceLink = sourceLinks[index];
             const destLink = destLinks[index];
             
@@ -150,14 +150,14 @@
             tableHTML += `
                 <tr class="md:table-row">
                     
-                    <td data-label="Tx ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
+                    <td data-label="Transfer ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
                         
                         <div class="md:hidden flex justify-between items-center w-full">
-                            <a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a>
+                            <a href="transfer.html?id=${tx.transfer_id}">${tx.transfer_id}</a>
                             <span class="text-sm text-slate-600 whitespace-nowrap font-sans">${timestampStr}</span>
                         </div>
                         
-                        <a href="transaction.html?id=${tx.transaction_id}" class="hidden md:inline">${tx.transaction_id}</a>
+                        <a href="transfer.html?id=${tx.transfer_id}" class="hidden md:inline">${tx.transfer_id}</a>
                     </td>
                     
                     
@@ -201,13 +201,13 @@
         container.innerHTML = tableHTML + '</tbody></table>';
     }
 
-    async function fetchTransactions(symbol, page = 1) {
+    async function fetchTransfers(symbol, page = 1) {
         currentPage = page;
         pageInfo.textContent = `Page: ${currentPage}`;
         prevButton.disabled = (currentPage === 1);
         try {
             const txsResponse = await fetch(`${API_BASE_URL}/transfers/search?currency_symbol=${symbol}&page=${currentPage}&limit=${LIMIT}`);
-            if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+            if (!txsResponse.ok) throw new Error('Failed to fetch transfer history.');
             const txsData = await txsResponse.json();
             nextButton.disabled = (txsData.length < LIMIT);
             return txsData;
@@ -263,12 +263,12 @@
             }
             
             
-            const transactions = await fetchTransactions(symbol, page);
-            await displayTransactions(transactions, currency);
+            const transfers = await fetchTransfers(symbol, page);
+            await displayTransfers(transfers, currency);
 
         } catch (error) {
             container.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
-            document.getElementById('tx-history-container').innerHTML = `<p class="text-red-600 p-6">Error fetching transactions: ${error.message}</p>`;
+            document.getElementById('tx-history-container').innerHTML = `<p class="text-red-600 p-6">Error fetching transfers: ${error.message}</p>`;
         }
     }
 
