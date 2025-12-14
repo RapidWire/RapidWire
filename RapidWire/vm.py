@@ -15,7 +15,7 @@ class RapidWireVM:
         self.script = script
         self.api = api
         self.vars = system_vars
-        self.return_message = None
+        self.output = None
         self.instruction_count = 0
         self.current_op = None
 
@@ -135,9 +135,9 @@ class RapidWireVM:
             # args: [user, cur]
             return self.api.get_balance(int(args[0]), int(args[1]))
 
-        if op == 'reply':
+        if op == 'output':
             # args: [message]
-            self.return_message = str(args[0])
+            self.output = str(args[0])
             return None
 
         if op == 'store_str_get':

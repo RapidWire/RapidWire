@@ -60,16 +60,16 @@ class TestRapidWireVM(unittest.TestCase):
                 "op": "if",
                 "args": ["_is_match"],
                 "then": [
-                    {"op": "reply", "args": ["Matched"]}
+                    {"op": "output", "args": ["Matched"]}
                 ],
                 "else": [
-                    {"op": "reply", "args": ["Not Matched"]}
+                    {"op": "output", "args": ["Not Matched"]}
                 ]
             }
         ]
         vm = RapidWireVM(script, self.api, self.system_vars)
         vm.run()
-        self.assertEqual(vm.return_message, "Matched")
+        self.assertEqual(vm.output, "Matched")
 
     def test_transfer(self):
         script = [
@@ -90,11 +90,11 @@ class TestRapidWireVM(unittest.TestCase):
     def test_stop_execution(self):
         script = [
             {"op": "exit"},
-            {"op": "reply", "args": ["Should not run"]}
+            {"op": "output", "args": ["Should not run"]}
         ]
         vm = RapidWireVM(script, self.api, self.system_vars)
         vm.run()
-        self.assertIsNone(vm.return_message)
+        self.assertIsNone(vm.output)
 
     def test_store_ops_str(self):
         script = [

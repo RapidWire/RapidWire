@@ -210,7 +210,7 @@ class Compiler:
 
             # Mapping function names to ops
             call_map = {
-                'reply': 'reply',
+                'output': 'output',
                 'transfer': 'transfer',
                 'sha256': 'hash',
                 'random': 'random',
