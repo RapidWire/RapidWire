@@ -502,23 +502,27 @@ class RapidWire:
         self.Currencies.cancel_delete_request(currency_id)
 
     def pay_claim(self, claim_id: int, payer_id: int) -> Transfer:
-        claim = self.Claims.get(claim_id)
-        if not claim:
-            raise ValueError("Claim not found.")
-        if claim.payer_id != payer_id:
-            raise PermissionError("You are not the designated payer for this claim.")
-        if claim.status != 'pending':
-            raise ValueError(f"This claim is not pending (status: {claim.status}).")
+        try:
+            with self.db as cursor:
+                claim = self.Claims.get(claim_id)
+                if not claim:
+                    raise ValueError("Claim not found.")
+                if claim.payer_id != payer_id:
+                    raise PermissionError("You are not the designated payer for this claim.")
+                if claim.status != 'pending':
+                    raise ValueError(f"This claim is not pending (status: {claim.status}).")
 
-        tx = self.transfer(
-            source_id=claim.payer_id,
-            destination_id=claim.claimant_id,
-            currency_id=claim.currency_id,
-            amount=claim.amount
-        )
-        
-        self.Claims.update_status(claim_id, 'paid')
-        return tx
+                tx = self.transfer(
+                    source_id=claim.payer_id,
+                    destination_id=claim.claimant_id,
+                    currency_id=claim.currency_id,
+                    amount=claim.amount
+                )
+
+                self.Claims.update_status(claim_id, 'paid')
+            return tx
+        except mysql.connector.Error as err:
+            raise TransactionError(f"Database error during claim payment: {err}")
 
     def cancel_claim(self, claim_id: int, user_id: int) -> Claim:
         claim = self.Claims.get(claim_id)
@@ -814,23 +818,33 @@ class RapidWire:
         return current_amount
 
     def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
-        route = self.find_swap_route(from_symbol, to_symbol)
+        # Initial route finding (optimistic)
+        initial_route = self.find_swap_route(from_symbol, to_symbol)
         from_currency = self.Currencies.get_by_symbol(from_symbol)
-
-        amount_out = self.get_swap_rate(amount, route, from_currency.currency_id)
-
-        current_currency_id = from_currency.currency_id
-        amount_in = amount
 
         try:
             with self.db as cursor:
+                # Re-fetch route pools with locks to ensure atomicity
+                locked_route = []
+                for pool in initial_route:
+                    locked_pool = self.LiquidityPools.get(pool.pool_id, for_update=True)
+                    if not locked_pool:
+                        raise TransactionError("Liquidity pool changed or disappeared during swap.")
+                    locked_route.append(locked_pool)
+
+                # Recalculate amount_out with locked values
+                amount_out = self.get_swap_rate(amount, locked_route, from_currency.currency_id)
+
+                current_currency_id = from_currency.currency_id
+                amount_in = amount
+
                 user = self.get_user(user_id)
-                source_balance = user.get_balance(current_currency_id)
+                source_balance = user.get_balance(current_currency_id, for_update=True)
                 if source_balance.amount < amount:
                     raise InsufficientFunds("Insufficient funds for swap.")
                 user._update_balance(cursor, current_currency_id, -amount)
 
-                for i, pool in enumerate(route):
+                for i, pool in enumerate(locked_route):
                     if current_currency_id == pool.currency_a_id:
                         next_currency_id = pool.currency_b_id
                         reserve_a_change = amount_in
