@@ -128,9 +128,16 @@ class Compiler:
 
     def _extract_key(self, subscript_node):
         slice_node = subscript_node.slice
+
+        # Python < 3.9
+        if hasattr(ast, 'Index') and isinstance(slice_node, ast.Index):
+            slice_node = slice_node.value
+
         if isinstance(slice_node, ast.Constant):
             return slice_node.value
-        # Python < 3.9 compat
+        elif isinstance(slice_node, ast.Name):
+            return self._map_var(slice_node.id)
+
         return str(slice_node)
 
     def _process_expr(self, node, target_var=None):
@@ -390,7 +397,7 @@ class Compiler:
 
 def main():
     if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r') as f:
+        with open(sys.argv[1], 'r', encoding="utf-8") as f:
             code = f.read()
     else:
         # Read from stdin
