@@ -131,7 +131,7 @@
             container.innerHTML = `
                 <dl class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
                     <dt class="text-sm font-medium text-slate-500">Execution ID</dt>
-                    <dd class="md:col-span-2 font-mono text-slate-900">${exec.execution_id}</dd>
+                    <dd class="md:col-span-2 font-mono text-blue-600"><a href="execution.html?id=${exec.execution_id}" class="hover:underline">${exec.execution_id}</a></dd>
 
                     <dt class="text-sm font-medium text-slate-500">Status</dt>
                     <dd class="md:col-span-2 font-bold uppercase ${statusColor}">${exec.status}</dd>
