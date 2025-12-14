@@ -514,14 +514,18 @@ class TransferModel:
             return Transfer(**result) if result else None
 
     def create(self, cursor, source_id: int, dest_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None) -> int:
+        cursor.execute("SELECT id FROM transfer_sequence WHERE id = 1 FOR UPDATE")
+        cursor.execute("SELECT COALESCE(MAX(transfer_id), 0) + 1 AS next_id FROM transfer")
+        next_id = cursor.fetchone()['next_id']
+
         cursor.execute(
             """
-            INSERT INTO transfer (execution_id, source_id, dest_id, currency_id, amount, timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO transfer (transfer_id, execution_id, source_id, dest_id, currency_id, amount, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (execution_id, source_id, dest_id, currency_id, amount, int(time()))
+            (next_id, execution_id, source_id, dest_id, currency_id, amount, int(time()))
         )
-        return cursor.lastrowid
+        return next_id
 
     def search(
         self,
