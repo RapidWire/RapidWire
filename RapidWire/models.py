@@ -279,9 +279,13 @@ class LiquidityPoolModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    def get(self, pool_id: int) -> Optional[LiquidityPool]:
+    def get(self, pool_id: int, for_update: bool = False) -> Optional[LiquidityPool]:
         with self.db as cursor:
-            cursor.execute("SELECT * FROM liquidity_pool WHERE pool_id = %s", (pool_id,))
+            query = "SELECT * FROM liquidity_pool WHERE pool_id = %s"
+            if for_update:
+                query += " FOR UPDATE"
+
+            cursor.execute(query, (pool_id,))
             result = cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
