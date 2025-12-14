@@ -212,7 +212,7 @@ class Compiler:
             call_map = {
                 'output': 'output',
                 'transfer': 'transfer',
-                'sha256': 'hash',
+                'sha256': 'sha256',
                 'random': 'random',
                 'get_balance': 'get_balance',
                 'cancel': 'cancel',
@@ -225,7 +225,7 @@ class Compiler:
                 'create_claim': 'create_claim',
                 'pay_claim': 'pay_claim',
                 'cancel_claim': 'cancel_claim',
-                'execute_contract': 'exec',
+                'execute': 'execute',
                 'discord_send': 'discord_send',
                 'discord_role_add': 'discord_role_add'
             }
@@ -235,9 +235,9 @@ class Compiler:
             # Ops that produce output
             # Note: discord_send/role_add return int (success), transfer_from returns result.
             ops_with_out = [
-                'hash', 'random', 'get_balance', 'concat',
+                'sha256', 'random', 'get_balance', 'concat',
                 'transfer_from', 'get_currency', 'get_transaction',
-                'create_claim', 'pay_claim', 'cancel_claim', 'exec',
+                'create_claim', 'pay_claim', 'cancel_claim', 'execute',
                 'discord_send', 'discord_role_add'
             ]
 

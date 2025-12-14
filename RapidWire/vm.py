@@ -244,7 +244,7 @@ class RapidWireVM:
             # args: [currency_a_id, currency_b_id, shares]
             return self.api.remove_liquidity(int(args[0]), int(args[1]), int(args[2]))
 
-        if op == 'exec':
+        if op == 'execute':
             # args: [dest, input]
             dest = int(args[0])
             input_data = str(args[1]) if len(args) > 1 else None
@@ -276,13 +276,13 @@ class RapidWireVM:
             self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
             return 1
 
-        if op == 'hash':
+        if op == 'sha256':
             # args: [string]
             try:
                 s = str(args[0])
                 return hashlib.sha256(s.encode('utf-8')).hexdigest()
             except IndexError:
-                self._raise_error("Invalid arguments for hash")
+                self._raise_error("Invalid arguments for sha256")
 
         if op == 'random':
             # args: [min, max]

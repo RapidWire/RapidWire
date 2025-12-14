@@ -139,9 +139,9 @@ class TestRapidWireVM(unittest.TestCase):
         self.assertEqual(vm.vars['_val'], 123)
         self.assertIsInstance(vm.vars['_val'], int)
 
-    def test_hash(self):
+    def test_sha256(self):
         script = [
-            {"op": "hash", "args": ["hello"], "out": "_res"}
+            {"op": "sha256", "args": ["hello"], "out": "_res"}
         ]
         vm = RapidWireVM(script, self.api, self.system_vars)
         vm.run()
