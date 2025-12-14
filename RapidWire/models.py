@@ -515,6 +515,7 @@ class TransferModel:
 
     def create(self, cursor, source_id: int, dest_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None) -> int:
         cursor.execute("SELECT id FROM transfer_sequence WHERE id = 1 FOR UPDATE")
+        cursor.fetchone()
         cursor.execute("SELECT COALESCE(MAX(transfer_id), 0) + 1 AS next_id FROM transfer")
         next_id = cursor.fetchone()['next_id']
 
