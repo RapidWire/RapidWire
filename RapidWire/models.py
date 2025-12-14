@@ -514,14 +514,19 @@ class TransferModel:
             return Transfer(**result) if result else None
 
     def create(self, cursor, source_id: int, dest_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None) -> int:
+        cursor.execute("SELECT id FROM transfer_sequence WHERE id = 1 FOR UPDATE")
+        cursor.fetchone()
+        cursor.execute("SELECT COALESCE(MAX(transfer_id), 0) + 1 AS next_id FROM transfer")
+        next_id = cursor.fetchone()['next_id']
+
         cursor.execute(
             """
-            INSERT INTO transfer (execution_id, source_id, dest_id, currency_id, amount, timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO transfer (transfer_id, execution_id, source_id, dest_id, currency_id, amount, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (execution_id, source_id, dest_id, currency_id, amount, int(time()))
+            (next_id, execution_id, source_id, dest_id, currency_id, amount, int(time()))
         )
-        return cursor.lastrowid
+        return next_id
 
     def search(
         self,
@@ -594,9 +599,9 @@ class TransferModel:
     def get_user_stats(self, user_id: int) -> dict:
         query = """
             SELECT
-                COUNT(*) as total_transactions,
-                MIN(timestamp) as first_transaction_timestamp,
-                MAX(timestamp) as last_transaction_timestamp
+                COUNT(*) as total_transfers,
+                MIN(timestamp) as first_transfer_timestamp,
+                MAX(timestamp) as last_transfer_timestamp
             FROM transfer
             WHERE source_id = %s OR dest_id = %s
         """
@@ -604,8 +609,8 @@ class TransferModel:
         with self.db as cursor:
             cursor.execute(query, params)
             result = cursor.fetchone()
-            if not result or result['total_transactions'] == 0:
-                return {"total_transactions": 0, "first_transaction_timestamp": None, "last_transaction_timestamp": None}
+            if not result or result['total_transfers'] == 0:
+                return {"total_transfers": 0, "first_transfer_timestamp": None, "last_transfer_timestamp": None}
             return result
 
 class ContractHistoryModel:
@@ -626,6 +631,12 @@ class ContractHistoryModel:
             """,
             (execution_id, user_id, script_hash, cost, int(time()))
         )
+
+    def get_for_user(self, user_id: int) -> List[ContractHistory]:
+        with self.db as cursor:
+            cursor.execute("SELECT * FROM contract_history WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+            results = cursor.fetchall()
+            return [ContractHistory(**row) for row in results]
 
 class AllowanceModel:
     def __init__(self, db_connection: DatabaseConnection):

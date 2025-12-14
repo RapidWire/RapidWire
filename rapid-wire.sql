@@ -221,7 +221,7 @@ CREATE TABLE `contract_history` (
   `history_id` bigint UNSIGNED NOT NULL,
   `execution_id` bigint UNSIGNED NOT NULL COMMENT '親Execution ID',
   `user_id` bigint UNSIGNED NOT NULL COMMENT 'コントラクトの所有者',
-  `script_hash` binary(64) NOT NULL COMMENT 'SHA-256 Hash',
+  `script_hash` binary(32) NOT NULL COMMENT 'SHA-256 Hash',
   `cost` int UNSIGNED NOT NULL COMMENT '計算されたコスト',
   `created_at` bigint UNSIGNED NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -257,6 +257,18 @@ CREATE TABLE `allowance_log` (
   `timestamp` bigint UNSIGNED NOT NULL,
   CHECK (`amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `transfer_sequence`
+--
+
+CREATE TABLE `transfer_sequence` (
+  `id` int UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `transfer_sequence` (`id`) VALUES (1);
 
 --
 -- Indexes for dumped tables
@@ -416,12 +428,6 @@ ALTER TABLE `liquidity_provider`
 --
 ALTER TABLE `execution`
   MODIFY `execution_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `transfer`
---
-ALTER TABLE `transfer`
-  MODIFY `transfer_id` bigint UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `contract_history`

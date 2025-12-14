@@ -139,9 +139,9 @@
         </div> 
 
         <div class="mt-12">
-            <h3 class="text-2xl font-semibold mb-4 text-slate-800">Transaction History</h3>
+            <h3 class="text-2xl font-semibold mb-4 text-slate-800">Transfer History</h3>
             <div id="tx-history-container" class="bg-white rounded-lg shadow-md border border-slate-200 overflow-x-auto md:overflow-x-visible">
-                <p class="text-slate-500 italic p-6">Loading transaction history...</p>
+                <p class="text-slate-500 italic p-6">Loading transfer history...</p>
             </div>
             <div class="flex justify-between items-center mt-10">
             <button id="prevButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -192,31 +192,31 @@
 
         container.innerHTML = `
             <div class="flex justify-between items-center">
-                <span class="text-slate-500 font-medium">Transactions</span>
-                <span class="font-mono font-semibold text-slate-800">${stats.total_transactions}</span>
+                <span class="text-slate-500 font-medium">Transfers</span>
+                <span class="font-mono font-semibold text-slate-800">${stats.total_transfers}</span>
             </div>
             <div class="flex justify-between items-center">
-                <span class="text-slate-500 font-medium">First transaction</span>
-                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.first_transaction_timestamp)}</span>
+                <span class="text-slate-500 font-medium">First transfer</span>
+                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.first_transfer_timestamp)}</span>
             </div>
             <div class="flex justify-between items-center">
-                <span class="text-slate-500 font-medium">Last transaction</span>
-                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.last_transaction_timestamp)}</span>
+                <span class="text-slate-500 font-medium">Last transfer</span>
+                <span class="font-mono text-slate-800 text-sm text-right">${formatDt(stats.last_transfer_timestamp)}</span>
             </div>
         `;
     }
 
-    async function displayTransactions(transactionsData, userId) {
+    async function displayTransfers(transfersData, userId) {
         const container = document.getElementById('tx-history-container');
-        if (transactionsData.length === 0) {
-            container.innerHTML = '<p class="text-slate-500 italic p-6">No transaction history found for this address.</p>';
+        if (transfersData.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 italic p-6">No transfer history found for this address.</p>';
             return;
         }
 
-        const currencyPromises = transactionsData.map(tx => getCurrency(tx.currency_id));
+        const currencyPromises = transfersData.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
-        const otherPartyLinks = await Promise.all(transactionsData.map(tx => {
+        const otherPartyLinks = await Promise.all(transfersData.map(tx => {
             const otherPartyId = tx.source_id == userId ? tx.dest_id : tx.source_id;
             return formatUserLink(otherPartyId);
         }));
@@ -225,7 +225,7 @@
             <table class="w-full">
                 <thead class="bg-slate-50">
                     <tr>
-                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Tx ID</th>
+                        <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Transfer ID</th>
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Timestamp</th>
                         
                         <th class="p-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">From / To</th>
@@ -236,7 +236,7 @@
                 <tbody class="divide-y divide-slate-200 md:divide-y-0">
         `;
         
-        transactionsData.forEach((tx, index) => {
+        transfersData.forEach((tx, index) => {
             const currency = currencies[index];
             const isOut = tx.source_id == userId;
             const otherPartyLink = otherPartyLinks[index];
@@ -249,14 +249,14 @@
             tableHTML += `
                 <tr class="md:table-row">
                     
-                    <td data-label="Tx ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
+                    <td data-label="Transfer ID" class="p-4 font-mono text-sm text-blue-600 hover:underline md:table-cell">
                         
                         <div class="md:hidden flex justify-between items-center w-full">
-                            <a href="transaction.html?id=${tx.transaction_id}">${tx.transaction_id}</a>
+                            <a href="transfer.html?id=${tx.transfer_id}">${tx.transfer_id}</a>
                             <span class="text-sm text-slate-600 whitespace-nowrap font-sans">${timestampStr}</span>
                         </div>
                         
-                        <a href="transaction.html?id=${tx.transaction_id}" class="hidden md:inline">${tx.transaction_id}</a>
+                        <a href="transfer.html?id=${tx.transfer_id}" class="hidden md:inline">${tx.transfer_id}</a>
                     </td>
                     
                     
@@ -414,14 +414,14 @@
             const statsData = await statsResponse.json();
             displayOverview(statsData);
 
-            if (!txsResponse.ok) throw new Error('Failed to fetch transaction history.');
+            if (!txsResponse.ok) throw new Error('Failed to fetch transfer history.');
             const txsData = await txsResponse.json();
             
             if(currentPage == 1) {
                 displayBalances(userId);
                 displayStakes(userId);
             }
-            await displayTransactions(txsData, userId);
+            await displayTransfers(txsData, userId);
             nextButton.disabled = (txsData.length < LIMIT);
 
         } catch (error) {
