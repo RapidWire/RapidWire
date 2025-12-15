@@ -207,6 +207,8 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
         )
         desc = f"{user.mention} のコントラクトを実行しました。"
         fields = [EmbedField("実行ID", f"`{execution_id}`", False)]
+        if output_data:
+            fields.append(EmbedField("Output", f"```{output_data.replace('`', '')}```", False))
         await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了", fields=fields))
     except exceptions.ContractError as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
@@ -264,7 +266,7 @@ async def history(
             if tx.execution_id:
                 execution = Rapid.Executions.get(tx.execution_id)
                 if execution and execution.input_data:
-                     embed.add_field(name="メモ (Input Data)", value=f"```{execution.input_data}```", inline=False)
+                    embed.add_field(name="メモ (Input Data)", value=f"```{execution.input_data.replace('`', '')}```", inline=False)
 
             await interaction.followup.send(embed=embed)
             return
