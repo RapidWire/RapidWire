@@ -2,7 +2,6 @@ import discord
 from discord import app_commands, Embed, Color, User, File
 from typing import Optional, Literal
 import io
-import re
 from decimal import Decimal
 from time import time
 from datetime import datetime
@@ -348,14 +347,6 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
     try:
-        if not re.match(r'^[a-zA-Z]+$', symbol):
-            await interaction.followup.send(embed=create_error_embed("シンボルはアルファベット(a-z, A-Z)のみ使用できます。"))
-            return
-        
-        if not re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', name):
-            await interaction.followup.send(embed=create_error_embed("名前は英数字のみ使用でき、最初の文字はアルファベットである必要があります。"))
-            return
-
         int_supply = int(Decimal(str(supply)) * (10**Rapid.Config.decimal_places))
         rate_bps = int(Decimal(str(daily_interest_rate)) * 100)
         

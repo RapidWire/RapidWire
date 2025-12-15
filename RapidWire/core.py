@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple, Literal
 from decimal import Decimal
 import hashlib
 import zlib
+import re
 
 from .config import Config
 from .vm import RapidWireVM
@@ -468,8 +469,13 @@ class RapidWire:
             raise TransactionError(f"Database error during transfer: {err}")
 
     def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', name):
+            raise ValueError("Names must be alphanumeric and start with a letter.")
+        if not re.match(r'^[a-zA-Z]+$', symbol):
+            raise ValueError("Symbols must contain only letters (a-z, A-Z).")
+
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
-        
+
         initial_tx = None
         if supply > 0:
             initial_tx = self.transfer(
@@ -478,7 +484,7 @@ class RapidWire:
                 currency_id=guild_id,
                 amount=supply
             )
-            
+
         return self.Currencies.get(guild_id), initial_tx
 
     def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transfer:
@@ -490,11 +496,11 @@ class RapidWire:
     def delete_currency(self, currency_id: int) -> List[Transfer]:
         holders = self.Currencies.get_all_holders(currency_id)
         transactions = []
-        
+
         for holder in holders:
             tx = self.transfer(holder.user_id, SYSTEM_USER_ID, currency_id, holder.amount)
             transactions.append(tx)
-        
+
         self.Currencies.delete(currency_id)
         return transactions
 
@@ -532,7 +538,7 @@ class RapidWire:
             raise PermissionError("You are not authorized to cancel this claim.")
         if claim.status != 'pending':
             raise ValueError(f"Only pending claims can be canceled (status: {claim.status}).")
-        
+
         return self.Claims.update_status(claim_id, 'canceled')
 
     def stake_deposit(self, user_id: int, currency_id: int, amount: int) -> Stake:
