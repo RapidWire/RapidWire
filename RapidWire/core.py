@@ -394,8 +394,6 @@ class RapidWire:
 
         except (TransactionCanceledByContract, ContractError, Exception) as e:
             # Phase 3: Failure Handling (New Transaction)
-            # The 'with self.db' block above rolled back the VM changes.
-            # Now we update the execution status and handle gas.
 
             error_status = 'failed'
             if isinstance(e, TransactionCanceledByContract):
@@ -421,7 +419,6 @@ class RapidWire:
                                 self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
             except Exception as update_err:
                 print(f"Error updating execution record after failure: {update_err}")
-                # We still raise the original error
 
             raise e
 

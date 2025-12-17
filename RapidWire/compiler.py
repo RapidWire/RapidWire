@@ -10,7 +10,7 @@ class Compiler:
         self.var_map = {
             'sender': '_sender',
             'self_id': '_self',
-            'input_data': '_input',  # Inferred from example output
+            'input_data': '_input',
         }
 
     def _get_temp_var(self):
@@ -112,9 +112,6 @@ class Compiler:
                             "args": [key_arg, val_var]
                         })
                     else:
-                        # Generic item assignment? VM op "getitem" is read-only usually?
-                        # There is no "setitem" in VM ops listed in my analysis.
-                        # VM ops: store_str_set, store_int_set. No generic setitem.
                         raise ValueError(f"Unsupported assignment target: {storage_type}")
                 else:
                      raise ValueError("Unsupported assignment target structure")
