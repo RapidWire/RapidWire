@@ -300,6 +300,9 @@ class RapidWire:
         return calculate_block_cost(ops)
 
     def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+        if input_data and "\\" in input_data:
+            raise ValueError("Input data cannot contain backslashes.")
+
         execution_id = None
         gas_currency_id = self.Config.Gas.currency_id
         gas_price = self.Config.Gas.price
@@ -621,6 +624,8 @@ class RapidWire:
         return self.Currencies.apply_rate_change(currency)
 
     def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
+        if "\\" in script:
+            raise ValueError("Contract script cannot contain backslashes.")
         if len(script) > self.Config.Contract.max_script_length:
             raise ValueError(f"Script length exceeds the maximum of {self.Config.Contract.max_script_length} characters.")
         if len(zlib.compress(script.encode('utf-8'))) > self.Config.Contract.max_script_size:
