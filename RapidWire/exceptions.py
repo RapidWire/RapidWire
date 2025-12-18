@@ -20,8 +20,11 @@ class TransactionError(RapidWireError):
 
 class ContractError(RapidWireError):
     """Raised for general contract failures."""
-    def __init__(self, exc_info: dict[str, str]):
-        self.exc_info = exc_info
+    def __init__(self, exc_info: dict[str, str] | str):
+        if isinstance(exc_info, str):
+            self.exc_info = {"message": exc_info}
+        else:
+            self.exc_info = exc_info
 
     def __str__(self):
         return str(self.exc_info)
@@ -35,4 +38,16 @@ class DuplicateEntryError(RapidWireError):
 
 class TransactionCanceledByContract(RapidWireError):
     """Raised when a contract explicitly cancels a transaction."""
+    pass
+
+class TimeLockNotExpired(RapidWireError):
+    """Raised when a time-locked action is attempted before the lock expires."""
+    pass
+
+class RequestExpired(RapidWireError):
+    """Raised when a request has expired."""
+    pass
+
+class RenouncedError(RapidWireError):
+    """Raised when an action is attempted on a renounced feature."""
     pass

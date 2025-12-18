@@ -89,6 +89,13 @@ class CurrencyModel:
         cursor.execute("UPDATE currency SET supply = supply + %s WHERE currency_id = %s", (amount_change, currency_id))
 
     def renounce_minting(self, currency_id: int) -> Optional[Currency]:
+        from .exceptions import RenouncedError
+        currency = self.get(currency_id)
+        if not currency:
+            return None
+        if currency.minting_renounced:
+            raise RenouncedError("Minting and rate changes have already been renounced.")
+
         with self.db as cursor:
             cursor.execute("UPDATE currency SET minting_renounced = 1 WHERE currency_id = %s", (currency_id,))
             if cursor.rowcount == 0: return None

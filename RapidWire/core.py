@@ -27,6 +27,9 @@ from .exceptions import (
     TransactionError,
     ContractError,
     TransactionCanceledByContract,
+    RenouncedError,
+    TimeLockNotExpired,
+    RequestExpired
 )
 
 SYSTEM_USER_ID = 0
@@ -488,11 +491,51 @@ class RapidWire:
         return self.Currencies.get(guild_id), initial_tx
 
     def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transfer:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if currency.minting_renounced:
+            raise RenouncedError("Minting capability has been renounced for this currency.")
+
+        if currency.issuer_id != minter_id:
+            raise PermissionError("Only the issuer can mint this currency.")
+
         return self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount)
 
     def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transfer:
         return self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount)
+
+    def finalize_delete_currency(self, currency_id: int) -> List[Transfer]:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if not currency.delete_requested_at:
+            raise ValueError("Delete request has not been initiated.")
+
+        now = int(time())
+        seven_days = 7 * SECONDS_IN_A_DAY
+        ten_days = 10 * SECONDS_IN_A_DAY
         
+        time_since_request = now - currency.delete_requested_at
+
+        if time_since_request < seven_days:
+            raise TimeLockNotExpired(f"Time lock not expired. {seven_days - time_since_request} seconds remaining.")
+
+        if time_since_request > ten_days:
+            # Optionally cancel request here or expect caller to handle it?
+            # User instruction says: "If conditions not met, raise exception"
+            # It also said: "Rapid.cancel_delete_request" is called in bot_commands.
+            # I will just raise RequestExpired and let caller handle cleanup if they want,
+            # or I can clean it up myself. The bot command cleaned it up.
+            # To be safe and atomic, I'll auto-cancel here or just raise.
+            # Given user asked for "Validation logic", raising exception is key.
+            # The interface layer can decide to cancel it.
+            raise RequestExpired("Delete request expired.")
+
+        return self.delete_currency(currency_id)
+
     def delete_currency(self, currency_id: int) -> List[Transfer]:
         holders = self.Currencies.get_all_holders(currency_id)
         transactions = []

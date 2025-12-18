@@ -262,10 +262,6 @@ async def get_contract_script(user_id: int):
 
 @app.post("/contract/execute", response_model=ContractExecutionResponse, tags=["Contract"])
 async def execute_contract(request: ContractExecutionRequest, user_id: int = Depends(get_current_user_id)):
-    contract = Rapid.Contracts.get(request.contract_owner_id)
-    if not contract or not contract.script:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found or has no script")
-
     try:
         execution_id, output_data = Rapid.execute_contract(
             caller_id=user_id,
@@ -273,6 +269,12 @@ async def execute_contract(request: ContractExecutionRequest, user_id: int = Dep
             input_data=request.input_data
         )
         return ContractExecutionResponse(execution_id=execution_id, output_data=output_data)
+    except exceptions.ContractError as e:
+        # Check if the error is "Contract not found" to return 404, otherwise 400 or 500
+        error_msg = str(e)
+        if "Contract not found" in error_msg:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Contract execution error: {e}")
     except exceptions.TransactionCanceledByContract as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
     except exceptions.TransactionError as e:

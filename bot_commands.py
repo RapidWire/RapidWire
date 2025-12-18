@@ -403,13 +403,14 @@ async def currency_mint(interaction: discord.Interaction, amount: float):
     if not currency:
         await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
         return
-    if currency.minting_renounced:
-        await interaction.followup.send(embed=create_error_embed("この通貨のMint機能は放棄されています。"))
-        return
-
     int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
-    Rapid.mint_currency(currency.currency_id, int_amount, interaction.user.id)
-    await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を追加発行しました。", "Mint成功"))
+    try:
+        Rapid.mint_currency(currency.currency_id, int_amount, interaction.user.id)
+        await interaction.followup.send(embed=create_success_embed(f"`{format_amount(int_amount)} {currency.symbol}` を追加発行しました。", "Mint成功"))
+    except exceptions.RenouncedError as e:
+        await interaction.followup.send(embed=create_error_embed("この通貨のMint機能は放棄されています。"))
+    except PermissionError as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
 
 @currency_group.command(name="burn", description="保有する通貨を焼却します。")
 @app_commands.describe(amount="焼却する量")
@@ -439,12 +440,12 @@ async def currency_renounce(interaction: discord.Interaction):
     if not currency:
         await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
         return
-    if currency.minting_renounced:
-        await interaction.followup.send(embed=create_error_embed("この通貨の機能は既に放棄されています。"))
-        return
     
-    Rapid.Currencies.renounce_minting(currency.currency_id)
-    await interaction.followup.send(embed=create_success_embed(f"**{currency.symbol}** のMint機能と利率変更機能を永久に放棄しました。この操作は取り消せません。", "機能放棄"))
+    try:
+        Rapid.Currencies.renounce_minting(currency.currency_id)
+        await interaction.followup.send(embed=create_success_embed(f"**{currency.symbol}** のMint機能と利率変更機能を永久に放棄しました。この操作は取り消せません。", "機能放棄"))
+    except exceptions.RenouncedError as e:
+        await interaction.followup.send(embed=create_error_embed("この通貨の機能は既に放棄されています。"))
 
 @currency_group.command(name="delete", description="[管理者] このサーバーの通貨を削除します。")
 @app_commands.checks.has_permissions(administrator=True)
@@ -469,24 +470,24 @@ async def currency_delete(interaction: discord.Interaction):
             "削除要請完了"
         ))
     else:
-        time_since_request = now - currency.delete_requested_at
-        if time_since_request < seven_days:
-            await interaction.followup.send(embed=create_error_embed(
-                f"削除の確定には、削除要請から7日間が経過している必要があります。\n"
-                f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
-            ))
-        elif time_since_request > ten_days:
-            Rapid.cancel_delete_request(currency.currency_id)
-            await interaction.followup.send(embed=create_error_embed(
-                "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
-                "再度削除を要請してください。"
-            ))
-        else:
-            txs = Rapid.delete_currency(currency.currency_id)
+        try:
+            txs = Rapid.finalize_delete_currency(currency.currency_id)
             await interaction.followup.send(embed=create_success_embed(
                 f"通貨 **{currency.symbol}** を完全に削除しました。\n"
                 f"{len(txs)}件の残高焼却トランザクションが作成されました。",
                 "通貨削除完了"
+            ))
+        except exceptions.TimeLockNotExpired:
+            seven_days = 7 * 24 * 60 * 60
+            await interaction.followup.send(embed=create_error_embed(
+                f"削除の確定には、削除要請から7日間が経過している必要があります。\n"
+                f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
+            ))
+        except exceptions.RequestExpired:
+            Rapid.cancel_delete_request(currency.currency_id)
+            await interaction.followup.send(embed=create_error_embed(
+                "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
+                "再度削除を要請してください。"
             ))
 
 @currency_group.command(name="request-interest-change", description="[管理者] ステーキングの日利変更を予約します。")
