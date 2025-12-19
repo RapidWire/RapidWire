@@ -454,21 +454,6 @@ async def get_transfer(transfer_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer not found")
     return tx
 
-@app.post("/pools/create", response_model=structs.LiquidityPool, tags=["DEX"])
-async def create_liquidity_pool(request: CreatePoolRequest, user_id: int = Depends(get_current_user_id)):
-    currency_a = Rapid.Currencies.get_by_symbol(request.symbol_a.upper())
-    currency_b = Rapid.Currencies.get_by_symbol(request.symbol_b.upper())
-    if not currency_a or not currency_b:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both currencies not found")
-
-    try:
-        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, request.amount_a, request.amount_b, user_id)
-        return pool
-    except (exceptions.InsufficientFunds, ValueError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except exceptions.TransactionError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
 @app.post("/pools/add_liquidity", response_model=AddLiquidityResponse, tags=["DEX"])
 async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get_current_user_id)):
     try:
