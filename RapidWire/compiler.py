@@ -397,22 +397,27 @@ def main():
     parser = argparse.ArgumentParser(description='RapidWire Compiler')
     parser.add_argument('filename', help='Input source file')
     args = parser.parse_args()
+    input_filename = str(args.filename)
 
     try:
-        with open(args.filename, 'r', encoding="utf-8") as f:
+        with open(input_filename, 'r', encoding="utf-8") as f:
             code = f.read()
     except FileNotFoundError:
-        sys.stderr.write(f"Error: File '{args.filename}' not found.\n")
+        sys.stderr.write(f"Error: File '{input_filename}' not found.\n")
         sys.exit(1)
 
     compiler = Compiler()
+
     try:
         result = compiler.compile(code)
-        output_filename = f"{args.filename}.json"
+        split_filename = input_filename.split(".")
+        output_filename = f"{".".join(split_filename[:-1])}.json" if len(split_filename) >= 2 else f"{input_filename}.json"
         with open(output_filename, 'w', encoding="utf-8") as f:
             json.dump(result, f, indent=2)
+        print(f"{input_filename} -> {output_filename}")
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
         sys.exit(1)
+
 if __name__ == '__main__':
     main()
