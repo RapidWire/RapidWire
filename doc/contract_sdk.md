@@ -13,7 +13,7 @@ from RapidWire.sdk import *
 
 def main():
     # ここにロジックを記述
-    pass
+    ...
 ```
 
 ## コントラクトの構造
