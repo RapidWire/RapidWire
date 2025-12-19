@@ -155,16 +155,16 @@ class ContractModel:
                 return Contract(**result)
             return None
 
-    def set(self, user_id: int, script: str, cost: int, max_cost: int) -> Contract:
+    def set(self, user_id: int, script: str, cost: int, max_cost: int, locked_until: int = 0) -> Contract:
         compressed_script = zlib.compress(script.encode('utf-8'))
         with self.db as cursor:
             cursor.execute(
                 """
-                INSERT INTO contract (user_id, script, cost, max_cost)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE script = VALUES(script), cost = VALUES(cost), max_cost = VALUES(max_cost)
+                INSERT INTO contract (user_id, script, cost, max_cost, locked_until)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE script = VALUES(script), cost = VALUES(cost), max_cost = VALUES(max_cost), locked_until = VALUES(locked_until)
                 """,
-                (user_id, compressed_script, cost, max_cost)
+                (user_id, compressed_script, cost, max_cost, locked_until)
             )
         return self.get(user_id)
 

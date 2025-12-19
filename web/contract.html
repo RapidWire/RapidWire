@@ -48,6 +48,9 @@
                 <div class="mt-4 text-sm text-slate-500">
                     <span class="font-semibold">Cost:</span> <span id="contract-cost">...</span> / <span id="contract-max-cost">...</span>
                 </div>
+                <div class="mt-1 text-sm text-slate-500">
+                    <span class="font-semibold">Locked Until:</span> <span id="contract-locked-until">...</span>
+                </div>
             </div>
 
             <div id="tab-variables" class="tab-panel hidden p-6">
@@ -91,6 +94,7 @@
                     codeElement.textContent = '# No contract script found for this address.';
                     document.getElementById('contract-cost').textContent = '0';
                     document.getElementById('contract-max-cost').textContent = '0';
+                    document.getElementById('contract-locked-until').textContent = 'N/A';
                     return;
                 }
                 throw new Error('Failed to fetch contract script.');
@@ -109,6 +113,15 @@
             }
             document.getElementById('contract-cost').textContent = data.cost;
             document.getElementById('contract-max-cost').textContent = data.max_cost;
+
+            const now = Math.floor(Date.now() / 1000);
+            if (data.locked_until > now) {
+                const date = new Date(data.locked_until * 1000).toLocaleString();
+                document.getElementById('contract-locked-until').textContent = date;
+            } else {
+                document.getElementById('contract-locked-until').textContent = 'Unlocked';
+            }
+
             hljs.highlightElement(codeElement);
         } catch (error) {
             codeElement.innerHTML = `<span class="text-red-600">Error: ${error.message}</span>`;
