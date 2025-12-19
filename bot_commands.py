@@ -595,20 +595,26 @@ contract_group = app_commands.Group(name="contract", description="あなたの�
 @contract_group.command(name="set", description="あなたのアカウントにコントラクトを設定します。")
 @app_commands.describe(
     script="コントラクトとして実行するPythonコードが書かれたファイル",
-    max_cost="このコントラクトの実行を許可する最大コスト (0で無制限)"
+    max_cost="このコントラクトの実行を許可する最大コスト (0で無制限)",
+    lock_hours="コントラクトの更新を禁止する期間（時間単位）。0でロックなし。"
 )
-async def contract_set(interaction: discord.Interaction, script: discord.Attachment, max_cost: Optional[int] = 0):
+async def contract_set(interaction: discord.Interaction, script: discord.Attachment, max_cost: Optional[int] = 0, lock_hours: Optional[int] = 0):
     await interaction.response.defer(thinking=True)
     try:
         script_content = (await script.read()).decode('utf-8')
-        contract = Rapid.set_contract(interaction.user.id, script_content, max_cost)
+        contract = Rapid.set_contract(interaction.user.id, script_content, max_cost, lock_hours)
 
         fields = [
             EmbedField("計算されたコスト", f"`{contract.cost}`", False),
             EmbedField("設定された最大コスト", f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", False)
         ]
 
+        if contract.locked_until > time():
+            fields.append(EmbedField("ロック期限", f"<t:{contract.locked_until}:F>", False))
+
         await interaction.followup.send(embed=create_success_embed("コントラクトを正常に設定しました。", fields=fields))
+    except PermissionError as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n`{e}`"))
 

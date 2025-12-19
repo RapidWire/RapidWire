@@ -34,8 +34,9 @@ class Contract(BaseModel):
     script: str
     cost: int
     max_cost: int
+    locked_until: int
 
-    @field_serializer('user_id', 'cost', 'max_cost')
+    @field_serializer('user_id', 'cost', 'max_cost', 'locked_until')
     def serialize_integers(self, value: int, _info):
         return str(value)
 

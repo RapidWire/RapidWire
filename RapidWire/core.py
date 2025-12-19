@@ -683,7 +683,7 @@ class RapidWire:
 
         return self.Currencies.apply_rate_change(currency)
 
-    def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None):
+    def set_contract(self, user_id: int, script: str, max_cost: Optional[int] = None, lock_hours: Optional[int] = None):
         if "\\" in script:
             raise ValueError("Contract script cannot contain backslashes.")
         if len(script) > self.Config.Contract.max_script_length:
@@ -695,10 +695,39 @@ class RapidWire:
         cost = self._calculate_contract_cost(script)
         script_hash = hashlib.sha256(script.encode('utf-8')).digest()
 
+        current_contract = self.Contracts.get(user_id)
+        current_time = int(time())
+        new_locked_until = 0
+
+        if current_contract and current_contract.locked_until > current_time:
+            # Contract is locked
+            # Check if script is different (using hash or direct string comparison)
+            # Since we re-calculated script_hash from input, we can compare with history or just content if available.
+            # But here we have the full script string for both.
+            if current_contract.script != script:
+                raise PermissionError(f"Contract is locked until <t:{current_contract.locked_until}:F>.")
+
+            # Script is same, check if extending lock
+            if lock_hours is not None and lock_hours > 0:
+                proposed_locked_until = current_time + (lock_hours * 3600)
+                if proposed_locked_until > current_contract.locked_until:
+                    new_locked_until = proposed_locked_until
+                else:
+                    raise PermissionError("New lock duration must be longer than the current remaining duration.")
+            else:
+                 # If just setting same script without lock extension, we can allow it (idempotent) or raise error.
+                 # Let's keep existing lock.
+                 new_locked_until = current_contract.locked_until
+
+        else:
+            # Not locked
+            if lock_hours is not None and lock_hours > 0:
+                new_locked_until = current_time + (lock_hours * 3600)
+
         try:
             with self.db as cursor:
                 execution_id = self.Executions.create(cursor, user_id, 0, 'update_contract', 'pending')
-                contract = self.Contracts.set(user_id, script, cost, max_cost)
+                contract = self.Contracts.set(user_id, script, cost, max_cost, new_locked_until)
                 self.ContractHistories.create(cursor, execution_id, user_id, script_hash, cost)
                 self.Executions.update(cursor, execution_id, None, 0, 'success')
         except mysql.connector.Error as err:
