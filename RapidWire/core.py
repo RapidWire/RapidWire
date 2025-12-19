@@ -27,6 +27,9 @@ from .exceptions import (
     TransactionError,
     ContractError,
     TransactionCanceledByContract,
+    RenouncedError,
+    TimeLockNotExpired,
+    RequestExpired
 )
 
 SYSTEM_USER_ID = 0
@@ -487,12 +490,68 @@ class RapidWire:
 
         return self.Currencies.get(guild_id), initial_tx
 
+    def renounce_currency(self, currency_id: int, user_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the issuer can renounce this currency.")
+
+        return self.Currencies.renounce_minting(currency_id)
+
     def mint_currency(self, currency_id: int, amount: int, minter_id: int) -> Transfer:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if currency.minting_renounced:
+            raise RenouncedError("Minting capability has been renounced for this currency.")
+
+        if currency.issuer_id != minter_id:
+            raise PermissionError("Only the issuer can mint this currency.")
+
         return self.transfer(SYSTEM_USER_ID, minter_id, currency_id, amount)
 
     def burn_currency(self, currency_id: int, amount: int, burner_id: int) -> Transfer:
         return self.transfer(burner_id, SYSTEM_USER_ID, currency_id, amount)
+
+    def request_delete_currency(self, currency_id: int, user_id: int) -> Currency:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the issuer can delete this currency.")
+
+        return self.Currencies.request_delete(currency_id)
+
+    def finalize_delete_currency(self, currency_id: int, user_id: int) -> List[Transfer]:
+        currency = self.Currencies.get(currency_id)
+        if not currency:
+            raise CurrencyNotFound("Currency not found.")
+
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the issuer can finalize the deletion of this currency.")
+
+        if not currency.delete_requested_at:
+            raise ValueError("Delete request has not been initiated.")
+
+        now = int(time())
+        seven_days = 7 * SECONDS_IN_A_DAY
+        ten_days = 10 * SECONDS_IN_A_DAY
         
+        time_since_request = now - currency.delete_requested_at
+
+        if time_since_request < seven_days:
+            raise TimeLockNotExpired(f"Time lock not expired. {seven_days - time_since_request} seconds remaining.")
+
+        if time_since_request > ten_days:
+            self.cancel_delete_request(currency_id)
+            raise RequestExpired("Delete request expired.")
+
+        return self.delete_currency(currency_id)
+
     def delete_currency(self, currency_id: int) -> List[Transfer]:
         holders = self.Currencies.get_all_holders(currency_id)
         transactions = []
@@ -607,10 +666,14 @@ class RapidWire:
 
         return self.Currencies.request_rate_change(currency_id, new_rate)
 
-    def apply_interest_rate_change(self, currency_id: int) -> Currency:
+    def apply_interest_rate_change(self, currency_id: int, user_id: int) -> Currency:
         currency = self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency not found.")
+
+        if currency.issuer_id != user_id:
+            raise PermissionError("Only the issuer can apply interest rate changes.")
+
         if currency.rate_change_requested_at is None or currency.new_daily_interest_rate is None:
             raise ValueError("No interest rate change is pending.")
 
