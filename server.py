@@ -123,6 +123,7 @@ class ContractScriptResponse(BaseModel):
     script: Optional[str] = None
     cost: Optional[int] = None
     max_cost: Optional[int] = None
+    locked_until: Optional[int] = None
 
 class UserStatsResponse(BaseModel):
     total_transfers: int
@@ -258,7 +259,7 @@ async def get_contract_script(user_id: int):
         # But if the endpoint implies fetching "the contract", 404 is appropriate if not found.
         # The previous implementation returned 404. I will keep it but return clearer detail.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found for this user.")
-    return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost)
+    return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost, locked_until=contract.locked_until)
 
 @app.post("/contract/execute", response_model=ContractExecutionResponse, tags=["Contract"])
 async def execute_contract(request: ContractExecutionRequest, user_id: int = Depends(get_current_user_id)):

@@ -619,14 +619,29 @@ async def contract_set(interaction: discord.Interaction, script: discord.Attachm
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n`{e}`"))
 
 @contract_group.command(name="get", description="現在設定されているコントラクトを取得します。")
-async def contract_get(interaction: discord.Interaction):
+@app_commands.describe(user="コントラクトを取得するユーザー (任意)")
+async def contract_get(interaction: discord.Interaction, user: Optional[User] = None):
     await interaction.response.defer(thinking=True)
-    contract = Rapid.Contracts.get(interaction.user.id)
+    target_user = user or interaction.user
+    contract = Rapid.Contracts.get(target_user.id)
     if contract and contract.script:
         file = File(io.BytesIO(contract.script.encode('utf-8')), filename="contract.py")
-        await interaction.followup.send("現在設定されているコントラクト:", file=file)
+
+        desc = f"{target_user.mention} のコントラクト:"
+        fields = [
+            EmbedField("計算されたコスト", f"`{contract.cost}`", False),
+            EmbedField("設定された最大コスト", f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", False)
+        ]
+
+        if contract.locked_until > time():
+            fields.append(EmbedField("ロック期限", f"<t:{contract.locked_until}:F>", False))
+        else:
+             fields.append(EmbedField("ロック期限", "ロックされていません", False))
+
+        await interaction.followup.send(content=desc, file=file, embed=create_success_embed("", title="コントラクト詳細", fields=fields))
     else:
-        await interaction.followup.send(embed=create_success_embed("現在、コントラクトは設定されていません。", title="コントラクト情報"))
+        msg = "現在、コントラクトは設定されていません。" if target_user.id == interaction.user.id else f"{target_user.mention} はコントラクトを設定していません。"
+        await interaction.followup.send(embed=create_success_embed(msg, title="コントラクト情報"))
 
 claim_group = app_commands.Group(name="claim", description="請求に関連するコマンド")
 
