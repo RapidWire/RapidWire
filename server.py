@@ -277,16 +277,6 @@ async def execute_contract(request: ContractExecutionRequest, user_id: int = Dep
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@app.post("/contract/update", response_model=ContractUpdateResponse, tags=["Contract"])
-async def update_contract(request: ContractUpdateRequest, user_id: int = Depends(get_current_user_id)):
-    try:
-        contract = Rapid.set_contract(user_id, request.script, request.max_cost)
-        return ContractUpdateResponse(contract=contract)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except exceptions.TransactionError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
-
 @app.get("/contract/variables/{user_id}", response_model=List[structs.ContractVariable], tags=["Contract"])
 async def get_contract_variables(user_id: int):
     return Rapid.ContractVariables.get_all_for_user(user_id)
