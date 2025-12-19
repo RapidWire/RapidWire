@@ -319,6 +319,9 @@ class RapidWire:
                 if not contract or not contract.script:
                     raise ContractError("Contract not found or script is empty.")
 
+                # Create Execution Record (Pending)
+                execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
+
                 # Estimate and Deduct Gas Fee Upfront
                 # Only deduct gas for the top-level call. Recursive calls share the budget and cost tracking.
                 if chain_context is None and caller_id != SYSTEM_USER_ID and gas_price > 0:
@@ -329,10 +332,7 @@ class RapidWire:
                          raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {initial_gas_deduction}, Available: {balance.amount}")
 
                     # Deduct now
-                    self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction)
-
-                # Create Execution Record (Pending)
-                execution_id = self.Executions.create(cursor, caller_id, contract_owner_id, input_data, 'pending')
+                    self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction, execution_id=execution_id)
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during contract preparation: {err}")
         except Exception:
