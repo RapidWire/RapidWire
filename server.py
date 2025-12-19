@@ -189,12 +189,6 @@ class ApproveRequest(BaseModel):
     symbol: str
     amount: int = Field(..., ge=0)
 
-class TransferFromRequest(BaseModel):
-    source_id: int
-    destination_id: int
-    symbol: str
-    amount: int = Field(..., gt=0)
-
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
@@ -359,26 +353,6 @@ async def approve_allowance(request: ApproveRequest, user_id: int = Depends(get_
     try:
         Rapid.approve(user_id, request.spender_id, currency.currency_id, request.amount)
         return SuccessResponse(message="Allowance updated successfully.")
-    except exceptions.TransactionError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
-
-@app.post("/currency/transfer_from", response_model=TransferResponse, tags=["Currency"])
-async def transfer_from(request: TransferFromRequest, user_id: int = Depends(get_current_user_id)):
-    currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
-    if not currency:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
-
-    try:
-        tx = Rapid.transfer_from(
-            source_id=request.source_id,
-            destination_id=request.destination_id,
-            currency_id=currency.currency_id,
-            amount=request.amount,
-            spender_id=user_id
-        )
-        return TransferResponse(transfer=tx)
-    except exceptions.InsufficientFunds as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
 
