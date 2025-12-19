@@ -1,6 +1,7 @@
 import ast
 import json
 import sys
+import argparse
 
 class Compiler:
     def __init__(self):
@@ -393,20 +394,25 @@ class Compiler:
              raise ValueError(f"Unsupported expression type: {type(node)}")
 
 def main():
-    if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r', encoding="utf-8") as f:
+    parser = argparse.ArgumentParser(description='RapidWire Compiler')
+    parser.add_argument('filename', help='Input source file')
+    args = parser.parse_args()
+
+    try:
+        with open(args.filename, 'r', encoding="utf-8") as f:
             code = f.read()
-    else:
-        # Read from stdin
-        code = sys.stdin.read()
+    except FileNotFoundError:
+        sys.stderr.write(f"Error: File '{args.filename}' not found.\n")
+        sys.exit(1)
 
     compiler = Compiler()
     try:
         result = compiler.compile(code)
-        print(json.dumps(result, indent=2))
+        output_filename = f"{args.filename}.json"
+        with open(output_filename, 'w', encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
         sys.exit(1)
-
 if __name__ == '__main__':
     main()

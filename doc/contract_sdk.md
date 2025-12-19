@@ -5,7 +5,7 @@ RapidWireでは、Pythonを使用してスマートコントラクトを開発�
 
 ## 開発の準備
 
-コントラクトコードを作成するファイル（例: `contract.py`）の先頭で、SDKをインポートします。
+コントラクトコードを作成するファイル（例: `my_contract.py`）の先頭で、SDKをインポートします。
 これにより、開発環境（IDE）での型ヒントや自動補完が有効になります。
 
 ```python
@@ -26,7 +26,7 @@ def main():
 作成したPythonファイルは、以下のコマンドでRapidWire VMが理解できる命令セット（JSON）にコンパイルします。
 
 ```bash
-python3 RapidWire/compiler.py contract.py > contract.json
+python3 RapidWire/compiler.py my_contract.py
 ```
 
 生成されたJSONファイルの内容をコントラクトとしてデプロイします。
