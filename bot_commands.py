@@ -394,7 +394,6 @@ async def currency_info(interaction: discord.Interaction, symbol: Optional[str] 
 
 @currency_group.command(name="mint", description="[管理者] 通貨を追加発行します。")
 @app_commands.describe(amount="追加発行する量")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_mint(interaction: discord.Interaction, amount: float):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -431,7 +430,6 @@ async def currency_burn(interaction: discord.Interaction, amount: float):
         await interaction.followup.send(embed=create_error_embed("焼却するための残高が不足しています。"))
 
 @currency_group.command(name="renounce", description="[管理者] Mintと利率変更機能を永久に放棄します。")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_renounce(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -442,13 +440,14 @@ async def currency_renounce(interaction: discord.Interaction):
         return
     
     try:
-        Rapid.Currencies.renounce_minting(currency.currency_id)
+        Rapid.renounce_currency(currency.currency_id, interaction.user.id)
         await interaction.followup.send(embed=create_success_embed(f"**{currency.symbol}** のMint機能と利率変更機能を永久に放棄しました。この操作は取り消せません。", "機能放棄"))
     except exceptions.RenouncedError as e:
         await interaction.followup.send(embed=create_error_embed("この通貨の機能は既に放棄されています。"))
+    except PermissionError as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
 
 @currency_group.command(name="delete", description="[管理者] このサーバーの通貨を削除します。")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_delete(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -458,41 +457,38 @@ async def currency_delete(interaction: discord.Interaction):
         await interaction.followup.send(embed=create_error_embed("このサーバーには通貨が存在しません。"))
         return
     
-    now = int(time())
-    seven_days = 7 * 24 * 60 * 60
-    ten_days = 10 * 24 * 60 * 60
-
-    if not currency.delete_requested_at:
-        Rapid.Currencies.request_delete(currency.currency_id)
-        await interaction.followup.send(embed=create_success_embed(
-            f"通貨 **{currency.symbol}** の削除要請を受け付けました。\n"
-            f"**7日後から10日後まで**の間に再度このコマンドを実行すると、削除が確定します。",
-            "削除要請完了"
-        ))
-    else:
-        try:
-            txs = Rapid.finalize_delete_currency(currency.currency_id)
+    try:
+        if not currency.delete_requested_at:
+            Rapid.request_delete_currency(currency.currency_id, interaction.user.id)
+            await interaction.followup.send(embed=create_success_embed(
+                f"通貨 **{currency.symbol}** の削除要請を受け付けました。\n"
+                f"**7日後から10日後まで**の間に再度このコマンドを実行すると、削除が確定します。",
+                "削除要請完了"
+            ))
+        else:
+            txs = Rapid.finalize_delete_currency(currency.currency_id, interaction.user.id)
             await interaction.followup.send(embed=create_success_embed(
                 f"通貨 **{currency.symbol}** を完全に削除しました。\n"
                 f"{len(txs)}件の残高焼却トランザクションが作成されました。",
                 "通貨削除完了"
             ))
-        except exceptions.TimeLockNotExpired:
-            seven_days = 7 * 24 * 60 * 60
-            await interaction.followup.send(embed=create_error_embed(
-                f"削除の確定には、削除要請から7日間が経過している必要があります。\n"
-                f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
-            ))
-        except exceptions.RequestExpired:
-            Rapid.cancel_delete_request(currency.currency_id)
-            await interaction.followup.send(embed=create_error_embed(
-                "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
-                "再度削除を要請してください。"
-            ))
+    except exceptions.TimeLockNotExpired:
+        seven_days = 7 * 24 * 60 * 60
+        await interaction.followup.send(embed=create_error_embed(
+            f"削除の確定には、削除要請から7日間が経過している必要があります。\n"
+            f"確定可能になる日時: <t:{currency.delete_requested_at + seven_days}:F>"
+        ))
+    except exceptions.RequestExpired:
+        Rapid.cancel_delete_request(currency.currency_id)
+        await interaction.followup.send(embed=create_error_embed(
+            "削除要請から10日以上が経過したため、この削除要請は無効になりました。\n"
+            "再度削除を要請してください。"
+        ))
+    except PermissionError as e:
+        await interaction.followup.send(embed=create_error_embed(str(e)))
 
 @currency_group.command(name="request-interest-change", description="[管理者] ステーキングの日利変更を予約します。")
 @app_commands.describe(rate="新しい日利 (%)")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_request_interest_change(interaction: discord.Interaction, rate: float):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -513,13 +509,12 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
 
 @currency_group.command(name="apply-interest-change", description="[管理者] 予約されている利率変更を適用します。")
-@app_commands.checks.has_permissions(administrator=True)
 async def currency_apply_interest_change(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
 
     try:
-        currency = Rapid.apply_interest_rate_change(interaction.guild.id)
+        currency = Rapid.apply_interest_rate_change(interaction.guild.id, interaction.user.id)
         desc = f"ステーキングの日利が `{Decimal(currency.daily_interest_rate) / Decimal(100):.4f}%` に正常に更新されました。"
         await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
