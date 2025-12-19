@@ -524,14 +524,7 @@ class RapidWire:
             raise TimeLockNotExpired(f"Time lock not expired. {seven_days - time_since_request} seconds remaining.")
 
         if time_since_request > ten_days:
-            # Optionally cancel request here or expect caller to handle it?
-            # User instruction says: "If conditions not met, raise exception"
-            # It also said: "Rapid.cancel_delete_request" is called in bot_commands.
-            # I will just raise RequestExpired and let caller handle cleanup if they want,
-            # or I can clean it up myself. The bot command cleaned it up.
-            # To be safe and atomic, I'll auto-cancel here or just raise.
-            # Given user asked for "Validation logic", raising exception is key.
-            # The interface layer can decide to cancel it.
+            self.cancel_delete_request(currency_id)
             raise RequestExpired("Delete request expired.")
 
         return self.delete_currency(currency_id)
