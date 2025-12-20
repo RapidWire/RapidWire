@@ -1,5 +1,5 @@
 from .core import RapidWire
-from .structs import Currency, Balance, Transaction, APIKey, Contract, Claim
+from .structs import Currency, Balance, APIKey, Contract, Claim
 from .exceptions import (
     RapidWireError,
     UserNotFound,

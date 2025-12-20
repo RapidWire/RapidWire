@@ -23,11 +23,21 @@ class APIServer:
     host: str = "0.0.0.0"
     port: int = 8000
 
-class Contract:
-    max_cost: int = 100
-    max_script_length: int = 2000
+class RapidWireConfig:
+    class Contract:
+        max_cost: int = 100
+        max_script_length: int = 10000
+        max_script_size: int = 4096
+        max_recursion_depth: int = 6
 
-class Swap:
-    fee: int = 30 # 0.3%, in basis points
+    class Staking:
+        rate_change_timelock: int = 604800 # 7 days
 
-decimal_places = 3
+    class Swap:
+        fee: int = 30 # 0.3%, in basis points
+
+    class Gas:
+        currency_id: int = 1156171234942402601
+        price: int = 1
+
+    decimal_places: int = 3

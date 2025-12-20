@@ -3,59 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RapidWire Explorer</title>
+    <title>RapidWire Explorer - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="univ.css">
+    <style>
+        /* Custom Scrollbar for Table (Desktop) */
+        @media (min-width: 768px) {
+            .table-container::-webkit-scrollbar {
+                height: 8px;
+            }
+            .table-container::-webkit-scrollbar-track {
+                background: #f1f5f9;
+            }
+            .table-container::-webkit-scrollbar-thumb {
+                background-color: #cbd5e1;
+                border-radius: 4px;
+            }
+        }
+        .glass-header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50 text-slate-800 font-sans">
 
-    <div class="container max-w-6xl mx-auto p-4 md:p-8">
+    <!-- Top Navigation -->
+    <nav class="glass-header sticky top-0 z-30 border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg">
+                        <i class="fa-solid fa-bolt text-xl"></i>
+                    </div>
+                    <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                        RapidWire Explorer
+                    </span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="./" class="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
+                        <i class="fa-solid fa-house mr-1"></i> Home
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container max-w-7xl mx-auto p-4 md:p-8">
         
-        <header class="mb-8 pb-4 border-b border-slate-200">
-            <h1 class="text-3xl font-bold text-blue-600">RapidWire Explorer</h1>
-            <p class="text-slate-600 mt-2">
-                リアルタイムのトランザクション、アドレス、コントラクトを探索します。
-                <a href="index.html" class="text-sm font-medium text-blue-600 hover:underline ml-4">&larr; Home</a>
-            </p>
-        </header>
+        <!-- Hero / Search Section -->
+        <div class="mb-8">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2">Blockchain Explorer</h1>
+            <p class="text-slate-500 mb-6">Search transactions, addresses, and contracts on the RapidWire network.</p>
+            
+            <div class="bg-white p-2 rounded-xl shadow-lg border border-slate-100 flex flex-col md:flex-row gap-2 items-center">
+                <div class="relative flex-grow w-full">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+                    </div>
+                    <input type="text" id="searchInput" 
+                        class="block w-full pl-10 pr-3 py-3 border-none rounded-lg bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-mono" 
+                        placeholder="Search by Address, Transfer ID, or Data...">
+                </div>
+                
+                <div class="flex gap-2 w-full md:w-auto">
+                    <div class="relative w-full md:w-40">
+                        <select id="sort_by" class="block w-full pl-3 pr-10 py-3 text-base border-none bg-slate-50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm appearance-none cursor-pointer hover:bg-slate-100 transition-colors">
+                            <option value="transfer_id">Transfer ID</option>
+                            <option value="timestamp">Timestamp</option>
+                            <option value="amount">Amount</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
 
-        <div class="bg-white p-4 rounded-lg shadow-md border border-slate-200 mb-8">
-            <div class="flex flex-col md:flex-row gap-4">
-                <input type="text" id="searchInput" placeholder="Search by User ID (Address), Tx ID..." class="flex-grow p-3 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono">
-                <select id="sort_by" class="p-3 border border-slate-300 rounded-md">
-                    <option value="transaction_id">Transaction ID</option>
-                    <option value="timestamp">Timestamp</option>
-                    <option value="amount">Amount</option>
-                </select>
-                <select id="sort_order" class="p-3 border border-slate-300 rounded-md">
-                    <option value="desc">Descending</option>
-                    <option value="asc">Ascending</option>
-                </select>
-                <button id="searchButton" class="bg-blue-600 text-white font-semibold px-6 py-3 rounded-md hover:bg-blue-700 transition-colors">
-                    Search
-                </button>
-                <button id="resetButton" class="bg-slate-200 text-slate-700 font-semibold px-6 py-3 rounded-md hover:bg-slate-300 transition-colors">
-                    Reset
-                </button>
+                    <div class="relative w-full md:w-32">
+                        <select id="sort_order" class="block w-full pl-3 pr-10 py-3 text-base border-none bg-slate-50 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm appearance-none cursor-pointer hover:bg-slate-100 transition-colors">
+                            <option value="desc">Desc</option>
+                            <option value="asc">Asc</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                    
+                    <button id="searchButton" class="w-full md:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-transform transform active:scale-95 flex items-center justify-center gap-2">
+                        <span>Search</span>
+                    </button>
+                    <button id="resetButton" class="w-auto px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors" title="Reset">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <h2 class="text-xl font-semibold mb-6">Recent Transactions</h2>
-        <div id="tx-card-container" class="space-y-6">
+        <!-- Transactions Table -->
+        <div class="bg-white md:rounded-xl md:shadow-md md:border md:border-slate-200 overflow-hidden bg-transparent shadow-none border-none">
+            <div class="px-6 py-4 border-b border-slate-100 hidden md:flex justify-between items-center bg-slate-50/50">
+                <h2 class="text-lg font-bold text-slate-700">Latest Transactions</h2>
+                <div class="text-xs font-medium text-slate-500 bg-slate-200 px-2 py-1 rounded">Live Data</div>
+            </div>
+            
+            <div class="table-container">
+                <table class="min-w-full md:divide-y md:divide-slate-200 block md:table">
+                    <thead class="bg-slate-50 hidden md:table-header-group">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Tx ID</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Timestamp</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">From</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap"></th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">To</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Value</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">Data</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tx-table-body" class="bg-transparent md:bg-white divide-y divide-slate-100 block md:table-row-group">
+                        <!-- Content will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Empty/Loading State -->
+            <div id="status-message" class="hidden p-12 text-center bg-white rounded-xl shadow-sm md:shadow-none md:rounded-none">
+                <div class="inline-block p-4 rounded-full bg-slate-100 mb-3 text-slate-400">
+                    <i class="fa-solid fa-inbox text-3xl"></i>
+                </div>
+                <p class="text-slate-500 font-medium">No transactions found.</p>
+            </div>
+            <div id="loading-indicator" class="p-12 text-center bg-white rounded-xl shadow-sm md:shadow-none md:rounded-none">
+                <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl mb-2"></i>
+                <p class="text-slate-500 text-sm">Loading transactions...</p>
+            </div>
         </div>
 
-        <div class="flex justify-between items-center mt-10">
-            <button id="prevButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                &larr; Previous
+        <!-- Pagination -->
+        <div class="flex justify-between items-center mt-6">
+            <button id="prevButton" class="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+                <i class="fa-solid fa-arrow-left text-sm"></i> Previous
             </button>
-            <div id="pageInfo" class="text-sm text-slate-600">
+            <span id="pageInfo" class="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
                 Page 1
-            </div>
-            <button id="nextButton" class="bg-white text-slate-700 font-semibold px-5 py-2 rounded-md border border-slate-300 hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                Next &rarr;
+            </span>
+            <button id="nextButton" class="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-medium rounded-lg hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+                Next <i class="fa-solid fa-arrow-right text-sm"></i>
             </button>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="mt-12 py-8 bg-white border-t border-slate-200">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-slate-500 text-sm">&copy; 2024 RapidWire Explorer. All rights reserved.</p>
+        </div>
+    </footer>
 
 <script src="univ.js"></script>
 <script>
@@ -64,7 +166,9 @@
     let currentSearchQuery = null;
 
     const searchInput = document.getElementById('searchInput');
-    const cardContainer = document.getElementById('tx-card-container');
+    const tableBody = document.getElementById('tx-table-body');
+    const statusMessage = document.getElementById('status-message');
+    const loadingIndicator = document.getElementById('loading-indicator');
     const prevButton = document.getElementById('prevButton');
     const nextButton = document.getElementById('nextButton');
     const pageInfo = document.getElementById('pageInfo');
@@ -73,89 +177,153 @@
         return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
     }
 
-    async function displayTransactions(transactions) {
-        cardContainer.innerHTML = '';
-        if (transactions.length === 0) {
-            cardContainer.innerHTML = `<div class="text-center p-12 text-slate-500 italic bg-white rounded-lg shadow-md border border-slate-200">No transactions found.</div>`;
+    async function displayTransfers(transfers) {
+        loadingIndicator.classList.add('hidden');
+        tableBody.innerHTML = '';
+
+        if (transfers.length === 0) {
+            statusMessage.classList.remove('hidden');
+            statusMessage.querySelector('p').textContent = 'No transactions found matching your criteria.';
             return;
         }
+        statusMessage.classList.add('hidden');
 
-        const currencyPromises = transactions.map(tx => getCurrency(tx.currency_id));
+        const currencyPromises = transfers.map(tx => getCurrency(tx.currency_id));
         const currencies = await Promise.all(currencyPromises);
 
-        const sourceLinkPromises = transactions.map(tx => formatUserLink(tx.source_id));
-        const destLinkPromises = transactions.map(tx => formatUserLink(tx.dest_id));
+        const sourceLinkPromises = transfers.map(tx => formatUserLink(tx.source_id));
+        const destLinkPromises = transfers.map(tx => formatUserLink(tx.dest_id));
         
         const sourceLinks = await Promise.all(sourceLinkPromises);
         const destLinks = await Promise.all(destLinkPromises);
 
-        transactions.forEach((tx, index) => {
+        transfers.forEach((tx, index) => {
             const currency = currencies[index];
             const timestamp = new Date(tx.timestamp * 1000).toLocaleString();
-            
             const sourceLink = sourceLinks[index];
             const destLink = destLinks[index];
+            const hasInputData = tx.input_data && tx.input_data.length > 0;
+            const inputDataDisplay = hasInputData 
+                ? `<div class="group relative inline-block">
+                     <i class="fa-regular fa-file-code text-slate-400 mr-1"></i>
+                     <span class="font-mono text-slate-700 text-xs truncate max-w-[150px] inline-block align-bottom">${escapeHtml(tx.input_data)}</span>
+                     <div class="absolute bottom-full left-0 mb-2 w-max max-w-xs bg-slate-800 text-white text-xs rounded p-2 hidden md:group-hover:block z-10 shadow-lg break-all">
+                        ${escapeHtml(tx.input_data)}
+                     </div>
+                   </div>`
+                : '<span class="text-slate-300">-</span>';
 
-            const cardHTML = `
-            <div class="bg-white rounded-lg shadow-md border border-slate-200 hover:shadow-lg transition-shadow">
-                <div class="p-6">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between">
-                        <div class="mb-4 md:mb-0">
-                            <a href="transaction.html?id=${tx.transaction_id}" class="font-mono text-lg font-medium text-blue-600 hover:underline">
-                                Tx #${tx.transaction_id}
+            const row = document.createElement('tr');
+            // Mobile: Card style, Desktop: Table row style
+            row.className = 'md:hover:bg-slate-50 transition-colors group block md:table-row bg-white rounded-xl shadow-sm mb-4 md:mb-0 md:shadow-none md:rounded-none border border-slate-200 md:border-none p-4 md:p-0';
+            
+            row.innerHTML = `
+                <!-- Tx ID and Timestamp (Mobile combined, Desktop Tx ID only) -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap block md:table-cell border-b border-slate-50 md:border-none">
+                    <div class="flex justify-between items-center md:block">
+                        <div class="flex items-center gap-2">
+                            <a href="transfer.html?id=${tx.transfer_id}" class="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-mono font-medium">
+                                <i class="fa-solid fa-hashtag text-slate-300 text-xs group-hover:text-blue-400 hidden md:inline"></i> 
+                                <span class="md:hidden">#</span>${tx.transfer_id}
                             </a>
-                            <div class="text-sm text-slate-500 mt-1">
-                                ${timestamp}
-                            </div>
                         </div>
-                        
-                        <div class="flex items-center">
-                            <div class="flex-1 text-right md:text-left">
-                                <div class="text-sm text-slate-500">From</div>
-                                ${sourceLink}
-                            </div>
-                            <span class="mx-4 text-2xl text-slate-400">→</span>
-                            <div class="flex-1">
-                                <div class="text-sm text-slate-500">To</div>
-                                ${destLink}
-                            </div>
-                        </div>
-
-                        <div class="mt-4 md:mt-0 md:text-right">
-                            <div class="text-xl font-bold font-mono text-slate-800">
-                                ${formatAmount(tx.amount, networkDecimals)}
-                            </div>
-                            <div class="text-sm font-semibold text-slate-500">
-                                ${currency.symbol}
-                            </div>
+                        <!-- Mobile Timestamp -->
+                        <div class="text-xs text-slate-400 md:hidden">
+                            ${timestamp}
                         </div>
                     </div>
-                </div>
-                <div class="bg-slate-50 px-6 py-3 border-t border-slate-200 rounded-b-lg">
-                    <span class="text-xs font-semibold text-slate-500 mr-2">DATA:</span>
-                    <code class="text-sm font-mono text-slate-700">${tx.input_data || '—'}</code>
-                </div>
-            </div>
+                </td>
+
+                <!-- Timestamp (Desktop Only) -->
+                <td class="hidden md:table-cell px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm text-slate-500 border-b border-slate-50 md:border-none">
+                     <div class="text-right md:text-left">
+                        ${timestamp}
+                        <div class="text-xs text-slate-400">${tx.timestamp}</div>
+                    </div>
+                </td>
+
+                <!-- From -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm block md:table-cell border-b border-slate-50 md:border-none flex justify-between md:table-cell items-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase md:hidden">From</span>
+                    <div class="text-right md:text-left w-full md:w-auto truncate ml-4 md:ml-0">
+                        ${sourceLink}
+                    </div>
+                </td>
+
+                <!-- Arrow Icon (Desktop Only) -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-center block md:table-cell border-b border-slate-50 md:border-none hidden md:table-cell">
+                    <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+                        <i class="fa-solid fa-arrow-right text-xs"></i>
+                    </div>
+                </td>
+
+                <!-- To -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm block md:table-cell border-b border-slate-50 md:border-none flex justify-between md:table-cell items-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase md:hidden">To</span>
+                    <div class="text-right md:text-left w-full md:w-auto truncate ml-4 md:ml-0">
+                        ${destLink}
+                    </div>
+                </td>
+
+                <!-- Amount -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-right block md:table-cell border-b border-slate-50 md:border-none flex justify-between md:table-cell items-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase md:hidden">Amount</span>
+                    <div class="flex justify-end items-baseline gap-1 w-full md:w-auto">
+                        <div class="font-mono font-bold text-slate-800 whitespace-nowrap">${formatAmount(tx.amount, networkDecimals)}</div>
+                        <div class="text-xs font-bold text-slate-500 whitespace-nowrap">${currency.symbol}</div>
+                    </div>
+                </td>
+
+                <!-- Data -->
+                <td class="px-2 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm block md:table-cell flex justify-between md:table-cell items-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase md:hidden">Data</span>
+                    <div class="text-right md:text-left">
+                        ${inputDataDisplay}
+                    </div>
+                </td>
             `;
-            cardContainer.innerHTML += cardHTML;
+            tableBody.appendChild(row);
         });
     }
 
     async function fetchAndDisplay(page = 1) {
         currentPage = page;
-        pageInfo.textContent = `Page: ${currentPage}`;
+        pageInfo.textContent = `Page ${currentPage}`;
         prevButton.disabled = (currentPage === 1);
+        
+        loadingIndicator.classList.remove('hidden');
+        statusMessage.classList.add('hidden');
+        tableBody.innerHTML = ''; // Clear current
 
         const sortBy = document.getElementById('sort_by').value;
         const sortOrder = document.getElementById('sort_order').value;
 
-        let url = `${API_BASE_URL}/transactions/search?page=${currentPage}&limit=${LIMIT}&sort_by=${sortBy}&sort_order=${sortOrder}`;
-
+        // Search logic
         if (currentSearchQuery) {
-            url += `&user_id=${currentSearchQuery}`;
+            if (page === 1 && /^\d+$/.test(currentSearchQuery)) {
+                try {
+                    const txResponse = await fetch(`${API_BASE_URL}/transfer/${currentSearchQuery}`);
+                    if (txResponse.ok) {
+                        const tx = await txResponse.json();
+                        await displayTransfers([tx]);
+                        nextButton.disabled = true;
+                        return;
+                    }
+                } catch (e) {
+                    // Continue
+                }
+            }
         }
 
-        cardContainer.innerHTML = `<div class="text-center p-12 text-slate-500 italic">Loading...</div>`;
+        let url = `${API_BASE_URL}/transfers/search?page=${currentPage}&limit=${LIMIT}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+
+        if (currentSearchQuery) {
+            if (/^\d+$/.test(currentSearchQuery)) {
+                url += `&user_id=${currentSearchQuery}`;
+            } else {
+                url += `&input_data=${encodeURIComponent(currentSearchQuery)}`;
+            }
+        }
 
         try {
             const response = await fetch(url);
@@ -163,12 +331,14 @@
                 const errorData = await response.json();
                 throw new Error(errorData.detail || `Request failed: ${response.status}`);
             }
-            const transactions = await response.json();
+            const transfers = await response.json();
 
-            await displayTransactions(transactions);
-            nextButton.disabled = (transactions.length < LIMIT);
+            await displayTransfers(transfers);
+            nextButton.disabled = (transfers.length < LIMIT);
         } catch (error) {
-            cardContainer.innerHTML = `<div class="p-4 text-red-700 bg-red-100 border border-red-300 rounded-md">Failed to fetch transactions: ${error.message}</div>`;
+            loadingIndicator.classList.add('hidden');
+            statusMessage.classList.remove('hidden');
+            statusMessage.innerHTML = `<p class="text-red-600 bg-red-50 p-4 rounded-lg border border-red-200">Error: ${error.message}</p>`;
             nextButton.disabled = true;
         }
     }
@@ -188,6 +358,10 @@
             searchInput.value = '';
             fetchAndDisplay(1);
         });
+        
+        // Auto-refresh sort when changed
+        document.getElementById('sort_by').addEventListener('change', () => fetchAndDisplay(1));
+        document.getElementById('sort_order').addEventListener('change', () => fetchAndDisplay(1));
     });
 </script>
 </body>

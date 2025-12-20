@@ -25,19 +25,6 @@ class Balance(BaseModel):
     currency_id: int
     amount: int
 
-class Transaction(BaseModel):
-    transaction_id: int
-    source_id: int
-    dest_id: int
-    currency_id: int
-    amount: int
-    input_data: Optional[str]
-    timestamp: int
-
-    @field_serializer('transaction_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class APIKey(BaseModel):
     user_id: int
     api_key: str
@@ -47,6 +34,11 @@ class Contract(BaseModel):
     script: str
     cost: int
     max_cost: int
+    locked_until: int
+
+    @field_serializer('user_id', 'cost', 'max_cost', 'locked_until')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
 
 class Claim(BaseModel):
     claim_id: int
@@ -68,17 +60,91 @@ class Stake(BaseModel):
     amount: int
     last_updated_at: int
 
-class TransactionContext(BaseModel):
-    source: int
-    dest: int
-    currency: int
+    @field_serializer('user_id', 'currency_id', 'amount', 'last_updated_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
+class ExecutionContext(BaseModel):
+    caller_id: int
+    contract_owner_id: int
+    input: Optional[str] = None
+    execution_id: Optional[int] = None
+
+class Execution(BaseModel):
+    execution_id: int
+    caller_id: int
+    contract_owner_id: int
+    input_data: Optional[str]
+    output_data: Optional[str]
+    cost: int
+    status: Literal['pending', 'success', 'failed', 'reverted']
+    timestamp: int
+
+    @field_serializer('execution_id', 'caller_id', 'contract_owner_id', 'cost', 'timestamp')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
+class Transfer(BaseModel):
+    transfer_id: int
+    execution_id: Optional[int]
+    source_id: int
+    dest_id: int
+    currency_id: int
     amount: int
-    input_data: Optional[str] = None
-    transaction_id: int
+    timestamp: int
+
+    @field_serializer('transfer_id', 'execution_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int | None, _info):
+        if value is None:
+            return value
+        return str(value)
+
+class ContractHistory(BaseModel):
+    history_id: int
+    execution_id: int
+    user_id: int
+    script_hash: bytes
+    cost: int
+    created_at: int
+
+    @field_serializer('history_id', 'execution_id', 'user_id', 'cost', 'created_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
+    @field_serializer('script_hash')
+    def serialize_bytes(self, value: bytes, _info):
+        return value.hex()
+
+class Allowance(BaseModel):
+    owner_id: int
+    spender_id: int
+    currency_id: int
+    amount: int
+    last_updated_at: int
+
+    @field_serializer('owner_id', 'spender_id', 'currency_id', 'amount', 'last_updated_at')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
+class AllowanceLog(BaseModel):
+    log_id: int
+    execution_id: Optional[int]
+    owner_id: int
+    spender_id: int
+    currency_id: int
+    amount: int
+    timestamp: int
+
+    @field_serializer('log_id', 'execution_id', 'owner_id', 'spender_id', 'currency_id', 'amount', 'timestamp')
+    def serialize_integers(self, value: int | None, _info):
+        if value is None:
+            return value
+        return str(value)
 
 class ChainContext(BaseModel):
     total_cost: int
     budget: int
+    depth: int = 0
 
 class LiquidityPool(BaseModel):
     pool_id: int
@@ -88,13 +154,29 @@ class LiquidityPool(BaseModel):
     reserve_b: int
     total_shares: int
 
+    @field_serializer('pool_id', 'currency_a_id', 'currency_b_id', 'reserve_a', 'reserve_b', 'total_shares')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class LiquidityProvider(BaseModel):
     provider_id: int
     pool_id: int
     user_id: int
     shares: int
 
+    @field_serializer('provider_id', 'pool_id', 'user_id', 'shares')
+    def serialize_integers(self, value: int, _info):
+        return str(value)
+
 class ContractVariable(BaseModel):
     user_id: int
-    key: bytes
-    value: bytes
+    key: str
+    value: int | str
+
+class NotificationPermission(BaseModel):
+    user_id: int
+    allowed_user_id: int
+
+class DiscordPermission(BaseModel):
+    guild_id: int
+    user_id: int

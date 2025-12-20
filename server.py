@@ -11,7 +11,7 @@ import time
 import config
 from RapidWire import RapidWire, exceptions, structs
 
-API_SERVER_VERSION = "1.0.0"
+API_SERVER_VERSION = "1.0.1"
 
 app = FastAPI(
     title="RapidWire API",
@@ -20,6 +20,7 @@ app = FastAPI(
 )
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
+Rapid.Config = config.RapidWireConfig
 API_KEY_HEADER = APIKeyHeader(name="API-Key", auto_error=False)
 
 class DiscordUserCache:
@@ -81,7 +82,27 @@ async def get_current_user_id(api_key: str = Security(API_KEY_HEADER)) -> int:
         )
     return key_data.user_id
 
+class ConfigResponseContract(BaseModel):
+    max_cost: int
+    max_script_length: int
+    max_script_size: int
+    max_recursion_depth: int
+
+class ConfigResponseStaking(BaseModel):
+    rate_change_timelock: int
+
+class ConfigResponseSwap(BaseModel):
+    fee: int
+
+class ConfigResponseGas(BaseModel):
+    currency_id: int
+    price: int
+
 class ConfigResponse(BaseModel):
+    contract: ConfigResponseContract
+    staking: ConfigResponseStaking
+    swap: ConfigResponseSwap
+    gas: ConfigResponseGas
     decimal_places: int
 
 class BalanceResponse(BaseModel):
@@ -92,7 +113,19 @@ class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
     symbol: str = Field(..., description="The symbol of the currency to transfer.")
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
-    input_data: Optional[str] = Field(None, max_length=16, pattern=r"^[a-zA-Z0-9]*$", description="Alphanumeric data for the contract.")
+    input_data: Optional[str] = Field(None, max_length=127, description="Alphanumeric data for the contract.")
+
+class ContractExecutionRequest(BaseModel):
+    contract_owner_id: int = Field(..., description="The Discord user ID of the contract owner.")
+    input_data: Optional[str] = Field(None, max_length=127, description="Alphanumeric data for the contract.")
+
+class TransferResponse(BaseModel):
+    transfer: Optional[structs.Transfer] = None
+    execution_id: Optional[int] = None
+
+class ContractExecutionResponse(BaseModel):
+    execution_id: int
+    output_data: Optional[str]
 
 class ClaimCreateRequest(BaseModel):
     payer_id: int = Field(..., description="The Discord user ID of the person to pay the claim.")
@@ -111,25 +144,20 @@ class ContractScriptResponse(BaseModel):
     script: Optional[str] = None
     cost: Optional[int] = None
     max_cost: Optional[int] = None
+    locked_until: Optional[int] = None
 
 class UserStatsResponse(BaseModel):
-    total_transactions: int
-    first_transaction_timestamp: Optional[int] = None
-    last_transaction_timestamp: Optional[int] = None
+    total_transfers: int
+    first_transfer_timestamp: Optional[int] = None
+    last_transfer_timestamp: Optional[int] = None
 
-    @field_serializer('total_transactions', 'first_transaction_timestamp', 'last_transaction_timestamp')
+    @field_serializer('total_transfers', 'first_transfer_timestamp', 'last_transfer_timestamp')
     def serialize_integers(self, value: int, _info):
         return str(value) if value is not None else None
 
 class StakeResponse(BaseModel):
     currency: structs.Currency
     stake: structs.Stake
-
-class CreatePoolRequest(BaseModel):
-    symbol_a: str
-    symbol_b: str
-    amount_a: int = Field(..., gt=0)
-    amount_b: int = Field(..., gt=0)
 
 class AddLiquidityRequest(BaseModel):
     symbol_a: str
@@ -164,13 +192,43 @@ class SwapResponse(BaseModel):
 class RouteResponse(BaseModel):
     route: List[structs.LiquidityPool]
 
+class ContractUpdateRequest(BaseModel):
+    script: str
+    max_cost: Optional[int] = None
+
+class ContractUpdateResponse(BaseModel):
+    contract: structs.Contract
+
+class ApproveRequest(BaseModel):
+    spender_id: int
+    symbol: str
+    amount: int = Field(..., ge=0)
+
 @app.get("/version", response_model=SuccessResponse, tags=["Info"])
 async def get_version():
     return SuccessResponse(message="RapidWire API", details={"version": API_SERVER_VERSION})
 
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
-    return ConfigResponse(decimal_places=config.decimal_places)
+    return ConfigResponse(
+        contract=ConfigResponseContract(
+            max_cost=Rapid.Config.Contract.max_cost,
+            max_script_length=Rapid.Config.Contract.max_script_length,
+            max_script_size=Rapid.Config.Contract.max_script_size,
+            max_recursion_depth=Rapid.Config.Contract.max_recursion_depth
+        ),
+        staking=ConfigResponseStaking(
+            rate_change_timelock=Rapid.Config.Staking.rate_change_timelock
+        ),
+        swap=ConfigResponseSwap(
+            fee=Rapid.Config.Swap.fee
+        ),
+        gas=ConfigResponseGas(
+            currency_id=Rapid.Config.Gas.currency_id,
+            price=Rapid.Config.Gas.price
+        ),
+        decimal_places=Rapid.Config.decimal_places
+    )
 
 @app.get("/user/{user_id}/name", response_model=UserNameResponse, tags=["User"])
 async def get_user_name(user_id: int):
@@ -182,7 +240,7 @@ async def get_user_name(user_id: int):
 
 @app.get("/user/{user_id}/stats", response_model=UserStatsResponse, tags=["User"])
 async def get_user_stats(user_id: int):
-    stats = Rapid.Transactions.get_user_stats(user_id)
+    stats = Rapid.Transfers.get_user_stats(user_id)
     return UserStatsResponse(**stats)
 
 @app.get("/balance/{user_id}", response_model=List[BalanceResponse], tags=["Account"])
@@ -216,16 +274,63 @@ async def get_user_stakes(user_id: int):
             )
     return response
 
-@app.get("/account/history", response_model=List[structs.Transaction], tags=["Account"])
+@app.get("/account/history", response_model=List[structs.Transfer], tags=["Account"])
 async def get_my_history(user_id: int = Depends(get_current_user_id), page: int = 1):
-    return Rapid.Transactions.get_user_history(user_id, page=page)
+    return Rapid.search_transfers(user_id=user_id, page=page)
 
 @app.get("/script/{user_id}", response_model=ContractScriptResponse, tags=["Contract"])
 async def get_contract_script(user_id: int):
     contract = Rapid.Contracts.get(user_id)
     if not contract or not contract.script:
+        # Instead of 404, we return empty script if user has no contract, to be safe.
+        # But if the endpoint implies fetching "the contract", 404 is appropriate if not found.
+        # The previous implementation returned 404. I will keep it but return clearer detail.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found for this user.")
-    return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost)
+    return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost, locked_until=contract.locked_until)
+
+@app.post("/contract/execute", response_model=ContractExecutionResponse, tags=["Contract"])
+async def execute_contract(request: ContractExecutionRequest, user_id: int = Depends(get_current_user_id)):
+    try:
+        execution_id, output_data = Rapid.execute_contract(
+            caller_id=user_id,
+            contract_owner_id=request.contract_owner_id,
+            input_data=request.input_data
+        )
+        return ContractExecutionResponse(execution_id=execution_id, output_data=output_data)
+    except exceptions.ContractError as e:
+        # Check if the error is "Contract not found" to return 404, otherwise 400 or 500
+        error_msg = str(e)
+        if "Contract not found" in error_msg:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Contract execution error: {e}")
+    except exceptions.TransactionCanceledByContract as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.get("/contract/variables/{user_id}", response_model=List[structs.ContractVariable], tags=["Contract"])
+async def get_contract_variables(user_id: int):
+    return Rapid.ContractVariables.get_all_for_user(user_id)
+
+@app.get("/contract/variable/{user_id}/{key}", response_model=structs.ContractVariable, tags=["Contract"])
+async def get_contract_variable(user_id: int, key: str):
+    variable = Rapid.ContractVariables.get(user_id, key)
+    if not variable:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variable not found")
+    return variable
+
+@app.get("/contract/history/{user_id}", response_model=List[structs.ContractHistory], tags=["Contract"])
+async def get_contract_history(user_id: int):
+    return Rapid.ContractHistories.get_for_user(user_id)
+
+@app.get("/executions/{execution_id}", response_model=structs.Execution, tags=["Contract"])
+async def get_execution(execution_id: int):
+    execution = Rapid.Executions.get(execution_id)
+    if not execution:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found")
+    return execution
 
 @app.get("/currency/{symbol}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info(symbol: str):
@@ -241,29 +346,46 @@ async def get_currency_info_by_id(currency_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     return currency
 
-@app.post("/currency/transfer", response_model=structs.Transaction, tags=["Currency"])
+@app.post("/currency/transfer", response_model=TransferResponse, tags=["Currency"])
 async def transfer_currency(request: TransferRequest, user_id: int = Depends(get_current_user_id)):
     currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
 
     try:
-        tx, _ = Rapid.transfer(
+        tx = Rapid.transfer(
             source_id=user_id,
             destination_id=request.destination_id,
             currency_id=currency.currency_id,
-            amount=request.amount,
-            input_data=request.input_data
+            amount=request.amount
         )
-        return tx
+        return TransferResponse(transfer=tx)
     except exceptions.InsufficientFunds:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds")
-    except exceptions.TransactionCanceledByContract as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Transaction canceled by contract: {e}")
     except exceptions.TransactionError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/currency/approve", response_model=SuccessResponse, tags=["Currency"])
+async def approve_allowance(request: ApproveRequest, user_id: int = Depends(get_current_user_id)):
+    currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
+    if not currency:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
+
+    try:
+        Rapid.approve(user_id, request.spender_id, currency.currency_id, request.amount)
+        return SuccessResponse(message="Allowance updated successfully.")
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
+
+@app.get("/currency/allowance/{owner_id}/{spender_id}/{currency_id}", response_model=structs.Allowance, tags=["Currency"])
+async def get_allowance(owner_id: int, spender_id: int, currency_id: int):
+    allowance = Rapid.Allowances.get(owner_id, spender_id, currency_id)
+    if not allowance:
+        # Return zero allowance effectively
+        return structs.Allowance(owner_id=owner_id, spender_id=spender_id, currency_id=currency_id, amount=0, last_updated_at=0)
+    return allowance
 
 @app.post("/claims/create", response_model=structs.Claim, tags=["Claims"])
 async def create_claim(request: ClaimCreateRequest, user_id: int = Depends(get_current_user_id)):
@@ -285,10 +407,10 @@ async def get_claim_details(claim_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
     return claim
 
-@app.post("/claims/{claim_id}/pay", response_model=structs.Transaction, tags=["Claims"])
+@app.post("/claims/{claim_id}/pay", response_model=structs.Transfer, tags=["Claims"])
 async def pay_claim(claim_id: int, user_id: int = Depends(get_current_user_id)):
     try:
-        tx, _ = Rapid.pay_claim(claim_id, user_id)
+        tx = Rapid.pay_claim(claim_id, user_id)
         return tx
     except (ValueError, PermissionError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -307,16 +429,8 @@ async def cancel_claim(claim_id: int, user_id: int = Depends(get_current_user_id
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error during cancellation: {e}")
 
-@app.get("/transaction/{transaction_id}", response_model=structs.Transaction, tags=["Transactions"])
-async def search_transactions(transaction_id: int):
-    if transaction_id <= 0: transaction_id = 0
-    tx = Rapid.Transactions.get(transaction_id)
-    if not tx:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
-    return tx
-
-@app.get("/transactions/search", response_model=List[structs.Transaction], tags=["Transactions"])
-async def search_transactions(
+@app.get("/transfers/search", response_model=List[structs.Transfer], tags=["Transfers"])
+async def search_transfers(
     source_id: Optional[int] = None,
     dest_id: Optional[int] = None,
     user_id: Optional[int] = None,
@@ -328,7 +442,7 @@ async def search_transactions(
     input_data: Optional[str] = None,
     page: int = 1,
     limit: int = 10,
-    sort_by: Literal["transaction_id", "timestamp", "amount"] = "transaction_id",
+    sort_by: Literal["transfer_id", "timestamp", "amount"] = "transfer_id",
     sort_order: Literal["ASC", "DESC", "asc", "desc"] = "desc"
 ):
     if limit >= 20: limit = 20
@@ -354,22 +468,14 @@ async def search_transactions(
     search_params["min_amount"] = min_amount
     search_params["max_amount"] = max_amount
 
-    return Rapid.Transactions.search(**search_params)
+    return Rapid.search_transfers(**search_params)
 
-@app.post("/pools/create", response_model=structs.LiquidityPool, tags=["DEX"])
-async def create_liquidity_pool(request: CreatePoolRequest, user_id: int = Depends(get_current_user_id)):
-    currency_a = Rapid.Currencies.get_by_symbol(request.symbol_a.upper())
-    currency_b = Rapid.Currencies.get_by_symbol(request.symbol_b.upper())
-    if not currency_a or not currency_b:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or both currencies not found")
-
-    try:
-        pool = Rapid.create_liquidity_pool(currency_a.currency_id, currency_b.currency_id, request.amount_a, request.amount_b, user_id)
-        return pool
-    except (exceptions.InsufficientFunds, ValueError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except exceptions.TransactionError as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+@app.get("/transfer/{transfer_id}", response_model=structs.Transfer, tags=["Transfers"])
+async def get_transfer(transfer_id: int):
+    tx = Rapid.Transfers.get(transfer_id)
+    if not tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer not found")
+    return tx
 
 @app.post("/pools/add_liquidity", response_model=AddLiquidityResponse, tags=["DEX"])
 async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get_current_user_id)):
@@ -435,8 +541,9 @@ async def get_swap_route(symbol_from: str, symbol_to: str):
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+app.mount("/", StaticFiles(directory="web", html=True), name="web")
+
 if __name__ == "__main__":
-    app.mount("/", StaticFiles(directory="web", html=True), name="web")
     uvicorn.run(
         app,
         host=config.APIServer.host,

@@ -1,210 +1,343 @@
 # RapidWire コントラクトサンプル
 
-このドキュメントは、RapidWire Discordボット用のコントラクトのサンプル集です。これらの例は、スマートコントラクトシステムの様々な機能を示しています。
+このドキュメントは、RapidWire Discordボット用のスマートコントラクトのサンプル集です。
 
-## コントラクトの仕組み
+コントラクトは、仮想マシン（VM）上で実行されるJSON形式の命令セット（スクリプト）として記述されます。
 
-コントラクトが設定されたユーザーがトランザクションを受信すると、サンドボックス化された環境でコントラクトコードが実行されます。コントラクトは主に2つのオブジェクトにアクセスできます。
+## システム変数
 
-- `tx`: 受信するトランザクションの詳細を含むオブジェクトです。
-    - `source`: 送信者のユーザーID。
-    - `dest`: 受信者（あなた）のユーザーID。
-    - `currency`: 転送される通貨のID。
-    - `amount`: 転送される通貨の量（整数）。
-    - `input_data`: 送信者によってトランザクションに添付されたデータ。
-    - `transaction_id`: このトランザクションの一意なID。
-- `api`: RapidWireシステムと対話するためのメソッドを提供するオブジェクトです。
-    - `get_balance(user_id, currency_id)`: ユーザーの残高を取得します。
-    - `get_transaction(tx_id)`: 特定のトランザクションを取得します。
-    - `transfer(source, dest, currency, amount)`: 新しい送金を開始します。**注意:** `source`はコントラクトの所有者でなければなりません。
-    - `search_transactions(...)`: トランザクションを検索します。
-    - `get_currency(currency_id)`: 通貨の詳細を取得します。
-    - `create_claim(...)`, `get_claim(...)`, `pay_claim(...)`, `cancel_claim(...)`: 請求を管理します。
-    - `execute_contract(destination_id, currency_id, amount, input_data)`: 別のコントラクトを実行します。
-    - `get_variable(user_id, key)`: コントラクトに関連付けられた永続的な変数を取得します。
-    - `set_variable(key, value)`: コントラクトに関連付けられた永続的な変数を設定します。
-- `Cancel`: 受信するトランザクションをキャンセルするために発生させることができる例外です (`raise Cancel("キャンセルの理由")`)。
-- `return_message`: トランザクションの送信者にメッセージを返すために設定できる変数です。
+VMは実行時に以下のシステム変数を自動的に設定します。
 
----
+- `_sender`: コントラクトを呼び出したユーザーのID。
+- `_self`: コントラクトの所有者（あなた）のユーザーID。
+- `_input`: 実行時に渡された入力データ（文字列）。
 
-## サンプルコントラクト
+## 利用可能な操作（Opcode）
 
-### 1. 自動返信コントラクト
+JSONオブジェクトのリストとしてスクリプトを記述します。各オブジェクトは `op`（操作名）、`args`（引数リスト）、`out`（結果の格納先変数名、任意）を持ちます。
 
-これは、送信者に「ありがとう」というメッセージを送り返す基本的なコントラクトです。
+**計算・論理演算:**
+- `add`, `sub`, `mul`, `div`, `mod`: 四則演算と剰余。
+- `concat`: 文字列結合。
+- `eq`: 等価比較（1または0を返す）。
+- `gt`: 大なり比較（1または0を返す）。
+- `sha256`: SHA-256ハッシュ計算。
+- `random`: ランダム整数の生成。
 
-**コード:**
-```python
-# トランザクションの送信元に送信される返信メッセージを設定します。
-return_message = f"{tx.amount} コインありがとうございます！"
-```
+**フロー制御:**
+- `if`: 条件分岐。`args[0]`が真（非ゼロ）なら`then`ブロック、偽なら`else`ブロックを実行します。
+- `exit`: 実行を終了します。
+- `cancel`: トランザクションをキャンセルし、実行を巻き戻します。
 
-**説明:**
-- このスクリプトは`tx`オブジェクトにアクセスして、受信トランザクションから`amount`を取得します。
-- その後、`return_message`変数を設定します。この変数の内容は、送金が正常に処理された後、トランザクションを開始したユーザーに送信されます。
-
----
-
-### 2. 条件付き拒否コントラクト
-
-このコントラクトは、特定の条件に基づいてトランザクションを拒否する方法を示します。この例では、`input_data`に「fee」が含まれるトランザクションを拒否します。
-
-**コード:**
-```python
-# input_dataが'fee'かどうかを確認します
-if tx.input_data == 'fee':
-    # もしそうなら、メッセージ付きでトランザクションをキャンセルします。
-    raise Cancel("'fee'がinput_dataのトランザクションは受け付けられません。")
-
-return_message = "トランザクションは承認されました。"
-```
-
-**説明:**
-- スクリプトは`tx`オブジェクトの`input_data`フィールドをチェックします。
-- `input_data`が文字列「fee」と一致する場合、スクリプトは`Cancel`例外を発生させます。
-- `Cancel`を発生させると、トランザクションは即座に停止し、提供されたメッセージがキャンセルの理由として送信者に送り返されます。
-- 条件が満たされない場合、トランザクションは続行され、確認メッセージが設定されます。
+**アクション:**
+- `transfer`: 送金 (`[to, amount, cur]`)。
+- `output`: 呼び出し元への返信メッセージを設定 (`[message]`)。
+- `store_str_get`: 文字列変数の取得 (`[key]`)。
+- `store_int_get`: 整数変数の取得 (`[key]`)。
+- `store_str_set`: 文字列変数の設定 (`[key, val]`)。
+- `store_int_set`: 整数変数の設定 (`[key, val]`)。
+- `execute`: 他のコントラクトの実行 (`[dest, input]`)。
+- `getitem`: リストや辞書、タプルからの要素取得 (`[obj, index]`)。
+- `attr`: オブジェクトの属性取得 (`[obj, prop]`)。
+- `get_balance`: 残高取得 (`[user, cur]`)。
+- `get_currency`: 通貨情報取得 (`[cur_id]`)。
+- `get_transaction`: トランザクション情報取得 (`[tx_id]`)。
+- `create_claim`: 請求作成 (`[payer, amount, cur, desc]`)。
+- `pay_claim`: 請求支払 (`[claim_id]`)。
+- `cancel_claim`: 請求キャンセル (`[claim_id]`)。
+- `discord_send`: Discordメッセージ送信 (`[guild_id, channel_id, message]`)。
+- `discord_role_add`: Discordロール付与 (`[user_id, guild_id, role_id]`)。
 
 ---
 
-### 3. チップ転送コントラクト
+## 実践的サンプルコントラクト
 
-このコントラクトは、受け取った資金の一部を自動的に別のユーザーに転送します。これは「開発者税」や貯金口座などに使用できます。
+### 1. 初回限定ボーナス（Faucet）
 
-**コード:**
-```python
-# チップを転送する相手のユーザーID。
-# 重要: 123456789012345678を実際のDiscordユーザーIDに置き換えてください。
-FORWARD_TO_USER_ID = 123456789012345678
+ユーザーがこのコントラクトを初めて呼び出したときに、一度だけ通貨をプレゼントします。`store_int_set` を使って受け取り済みかどうかを管理します。
 
-# 転送する金額の割合（例: 10%）
-TIP_PERCENTAGE = 0.10
-
-# 転送する金額を計算します
-tip_amount = int(tx.amount * TIP_PERCENTAGE)
-
-# 金額が非常に小さい場合でも、最低1単位は転送されるようにします
-if tip_amount == 0 and tx.amount > 0:
-    tip_amount = 1
-
-# 送信するチップがある場合、それを転送します。
-if tip_amount > 0:
-    transfer(
-        source=tx.dest,  # sourceは常にコントラクトの所有者です
-        dest=FORWARD_TO_USER_ID,
-        currency=tx.currency,
-        amount=tip_amount
-    )
-    return_message = f"ありがとうございます！{tip_amount}がチップとして転送されました。"
-else:
-    return_message = "トランザクションありがとうございます！"
+**コード (JSON):**
+```json
+[
+  {
+    "op": "concat",
+    "args": ["claimed_", "_sender"],
+    "out": "_key"
+  },
+  {
+    "op": "store_int_get",
+    "args": ["_key"],
+    "out": "_has_claimed"
+  },
+  {
+    "op": "if",
+    "args": ["_has_claimed"],
+    "then": [
+      {
+        "op": "cancel",
+        "args": ["あなたは既にボーナスを受け取っています。"]
+      }
+    ]
+  },
+  {
+    "op": "transfer",
+    "args": ["_sender", "1000", "1"]
+  },
+  {
+    "op": "store_int_set",
+    "args": ["_key", "1"]
+  },
+  {
+    "op": "output",
+    "args": ["初回ボーナスとして 10.00 コインを送金しました！"]
+  }
+]
 ```
 
-**説明:**
-- **設定**: `FORWARD_TO_USER_ID`を、資金を送りたい実際のDiscordユーザーIDに設定する必要があります。`TIP_PERCENTAGE`は必要に応じて調整できます。
-- **計算**: スクリプトは、受信した`tx.amount`の`TIP_PERCENTAGE`に基づいて転送する金額を計算します。元の金額がゼロより大きい場合、少なくとも通貨の1単位が送信されることを保証します。
-- **API呼び出し**: `transfer()`メソッドを使用して、計算された`tip_amount`を送信します。
-    - `source`: これは**必ず**`tx.dest`（コントラクトを所有するアカウントのユーザーID）でなければなりません。コントラクトは自身のアカウントからのみ送金を開始できます。
-    - `dest`: 資金を転送する相手のユーザーID。
-    - `currency`: 受信トランザクションと同じ通貨。
-    - `amount`: 計算されたチップの金額。
-- **返信メッセージ**: 元の送信者に、彼らのトランザクションの一部が転送されたことを知らせるメッセージが設定されます。
+**ポイント:**
+- ユーザーIDごとのフラグを作成するために `concat` でキーを動的に生成しています。
+- 未受け取りの場合のみ送金を行い、その後フラグを立てて再取得を防ぎます。
 
 ---
 
-### 4. 状態管理コントラクト（カウンター）
+### 2. 数当てゲーム（High & Low）
 
-このコントラクトは、`set_variable`と`get_variable`を使用して、永続的な状態を保存する方法を示します。この例では、コントラクトがトランザクションを受信するたびにカウンターをインクリメントします。
+ユーザーが入力した数字と、コントラクトが生成したランダムな数字が一致すれば賞金を出します。
+ここでは簡易的に「0か1か」を当てるゲームとします。
 
-**コード:**
-```python
-# 'tx_count'というキーで保存されている現在のカウントを取得しようとします。
-# b''はバイト文字列リテラルです。変数のキーと値はバイト文字列として保存する必要があります。
-raw_count = get_variable(user_id=tx.dest, key=b'tx_count')
+**使い方:** `/execute_contract <bot_user> 0` または `1`
 
-# 変数がまだ設定されていない場合、カウンターを0に初期化します。
-if raw_count is None:
-    count = 0
-else:
-    # 保存された値はバイトなので、整数に変換します。
-    count = int.from_bytes(raw_count, 'big')
-
-# カウンターをインクリメントします。
-count += 1
-
-# 更新されたカウントをバイトに変換して永続ストレージに保存します。
-set_variable(key=b'tx_count', value=count.to_bytes(8, 'big'))
-
-# これまでに受信したトランザクションの総数を送信者に報告します。
-return_message = f"これはあなたの{count}番目のトランザクションです。ありがとうございます！"
+**コード (JSON):**
+```json
+[
+  {
+    "op": "random",
+    "args": ["0", "1"],
+    "out": "_lucky_num"
+  },
+  {
+    "op": "eq",
+    "args": ["_input", "_lucky_num"],
+    "out": "_is_win"
+  },
+  {
+    "op": "if",
+    "args": ["_is_win"],
+    "then": [
+      {
+        "op": "transfer",
+        "args": ["_sender", "500", "1"]
+      },
+      {
+        "op": "output",
+        "args": ["おめでとうございます！当たりです！5.00コインを獲得しました。"]
+      }
+    ],
+    "else": [
+      {
+        "op": "concat",
+        "args": ["残念、はずれです。正解は ", "_lucky_num"],
+        "out": "_msg"
+      },
+      {
+        "op": "concat",
+        "args": ["_msg", " でした。"],
+        "out": "_full_msg"
+      },
+      {
+        "op": "output",
+        "args": ["_full_msg"]
+      }
+    ]
+  }
+]
 ```
 
-**説明:**
-- **状態の取得**: `get_variable(user_id=tx.dest, key=b'tx_count')`を呼び出して、キー`b'tx_count'`に格納されている値を取得します。`user_id`は、変数を所有するユーザーを指定します。この場合はコントラクトの所有者です。
-- **初期化**: `raw_count`が`None`の場合（つまり、変数がまだ存在しない場合）、カウンターを`0`に設定します。
-- **デコード**: 値が存在する場合、`int.from_bytes()`を使用してバイト文字列を整数に変換します。
-- **状態の更新**: カウンターをインクリメントします。
-- **状態の保存**: `count.to_bytes()`を使用してカウンターをバイト文字列に変換し、`set_variable()`で保存します。これにより、次のトランザクションで値を取得できるようになります。
-- **キーと値**: `get_variable`と`set_variable`のキーと値は、バイト文字列（例：`b'my_key'`）である必要があります。
+**ポイント:**
+- `random` で運試し要素を実装しています。
+- `_input` でユーザーの選択を受け取ります。
 
 ---
 
-### 5. コントラクト間通信
+### 3. 自動販売機（ロール販売）
 
-この例は、`execute_contract`を使用して、あるコントラクトが別のコントラクトを呼び出す方法を示します。ここでは、「ディスパッチャー」コントラクトが受信した資金の一部を「ロガー」コントラクトに転送します。
+ユーザーからの送金を検証し、Discordのロールを付与します。
+**重要:** 先に送金を行い、その「転送ID」をコントラクトに入力する必要があります。
 
-#### パートA：ロガーコントラクト
+**使い方:**
+1. `/transfer <contract_owner> 100` を実行し、転送ID（例: `55`）を控える。
+2. `/execute_contract <contract_owner> 55` を実行。
 
-まず、呼び出されるコントラクトを設定する必要があります。この単純なロガーコントラクトは、受信したトランザクションの数を記録します。これは、上記の「状態管理コントラクト」と同様に機能します。
-
-**`LOGGER_USER_ID` に設定するコード:**
-```python
-# 'logged_tx_count' というキーで保存されている現在のカウントを取得します。
-raw_count = get_variable(user_id=tx.dest, key=b'logged_tx_count')
-
-count = int.from_bytes(raw_count, 'big') if raw_count else 0
-count += 1
-
-# 更新されたカウントを保存します。
-set_variable(key=b'logged_tx_count', value=count.to_bytes(8, 'big'))
-
-# ログに記録されたことを元のディスパッチャーに（間接的に）通知します。
-return_message = f"Logged transaction #{count}. Source: {tx.source}"
+**コード (JSON):**
+```json
+[
+  {
+    "op": "concat",
+    "args": ["used_tx_", "_input"],
+    "out": "_key_used"
+  },
+  {
+    "op": "store_int_get",
+    "args": ["_key_used"],
+    "out": "_is_used"
+  },
+  {
+    "op": "if",
+    "args": ["_is_used"],
+    "then": [
+      {
+        "op": "cancel",
+        "args": ["この転送IDは既に使用されています。"]
+      }
+    ]
+  },
+  {
+    "op": "get_transaction",
+    "args": ["_input"],
+    "out": "_tx"
+  },
+  {
+    "op": "if",
+    "args": ["_tx"],
+    "else": [
+      {
+        "op": "cancel",
+        "args": ["指定された転送が見つかりません。"]
+      }
+    ]
+  },
+  {
+    "op": "attr",
+    "args": ["_tx", "dest_id"],
+    "out": "_tx_dest"
+  },
+  {
+    "op": "eq",
+    "args": ["_tx_dest", "_self"],
+    "out": "_is_dest_ok"
+  },
+  {
+    "op": "if",
+    "args": ["_is_dest_ok"],
+    "else": [
+      {
+        "op": "cancel",
+        "args": ["この送金の宛先は私ではありません。"]
+      }
+    ]
+  },
+  {
+    "op": "attr",
+    "args": ["_tx", "amount"],
+    "out": "_tx_amount"
+  },
+  {
+    "op": "gt",
+    "args": ["_tx_amount", "9999"],
+    "out": "_is_amount_ok"
+  },
+  {
+    "op": "if",
+    "args": ["_is_amount_ok"],
+    "else": [
+      {
+        "op": "cancel",
+        "args": ["金額が不足しています。100.00コイン以上必要です。"]
+      }
+    ]
+  },
+  {
+    "op": "store_int_set",
+    "args": ["_key_used", "1"]
+  },
+  {
+    "op": "discord_role_add",
+    "args": ["_sender", "123456789012345678", "987654321098765432"]
+  },
+  {
+    "op": "output",
+    "args": ["購入ありがとうございます！ロールを付与しました。"]
+  }
+]
 ```
 
-#### パートB：ディスパッチャーコントラクト
+**ポイント:**
+- `get_transaction` と `attr` を使って、過去の取引の内容（宛先、金額）を厳密にチェックしています。
+- 「使用済みフラグ」を立てることで、同じ転送IDの使い回し（リプレイ攻撃）を防いでいます。
+- `discord_role_add` で外部への作用（ロール付与）を行っています。※IDはダミーです。
 
-このコントラクトは、トランザクションを受信し、ロガーコントラクトを呼び出し、資金の一部を転送します。
+---
 
-**コード:**
-```python
-# ロガーコントラクトが設定されているユーザーID。
-# 重要: 987654321098765432をロガーコントラクトを持つ実際のDiscordユーザーIDに置き換えてください。
-LOGGER_USER_ID = 987654321098765432
+### 4. パブリックゲストブック（掲示板）
 
-# ロガーに転送する金額
-FORWARD_AMOUNT = 10
+ユーザーが送信したメッセージを保存し、誰でも読めるようにします。
 
-# 元のトランザクションの金額が転送するのに十分であることを確認します
-if tx.amount > FORWARD_AMOUNT:
-    # 別のコントラクトを実行します。
-    # これにより、このコントラクト（tx.dest）からLOGGER_USER_IDに新しいトランザクションが作成されます。
-    new_tx, logger_message = execute_contract(
-        destination_id=LOGGER_USER_ID,
-        currency_id=tx.currency,
-        amount=FORWARD_AMOUNT,
-        input_data=f"forwarded_from:{tx.source}"
-    )
+**使い方:**
+- 書き込み: `/execute_contract <user> "Hello!"`
+- 読み込み: `/execute_contract <user> read`
 
-    # ロガーコントラクトからの返信メッセージを元の送信者に渡します。
-    return_message = f"Successfully forwarded {FORWARD_AMOUNT} to logger. Logger says: '{logger_message}'"
-else:
-    return_message = "Amount too small to forward."
+**コード (JSON):**
+```json
+[
+  {
+    "op": "eq",
+    "args": ["_input", "read"],
+    "out": "_is_read_mode"
+  },
+  {
+    "op": "if",
+    "args": ["_is_read_mode"],
+    "then": [
+      {
+        "op": "store_str_get",
+        "args": ["guestbook"],
+        "out": "_content"
+      },
+      {
+        "op": "output",
+        "args": ["_content"]
+      },
+      {
+        "op": "exit"
+      }
+    ]
+  },
+  {
+    "op": "store_str_get",
+    "args": ["guestbook"],
+    "out": "_current"
+  },
+  {
+    "op": "concat",
+    "args": ["_current", "\n"],
+    "out": "_temp"
+  },
+  {
+    "op": "concat",
+    "args": ["_temp", "_sender"],
+    "out": "_temp2"
+  },
+  {
+    "op": "concat",
+    "args": ["_temp2", ": "],
+    "out": "_temp3"
+  },
+  {
+    "op": "concat",
+    "args": ["_temp3", "_input"],
+    "out": "_new_content"
+  },
+  {
+    "op": "store_str_set",
+    "args": ["guestbook", "_new_content"]
+  },
+  {
+    "op": "output",
+    "args": ["ゲストブックに書き込みました。"]
+  }
+]
 ```
 
-**説明:**
-- **セットアップ**: まず、「ロガー」として機能する2番目のアカウントにパートAのコントラクトを設定する必要があります。次に、そのアカウントのユーザーIDをパートBのコントラクトの `LOGGER_USER_ID` 変数に入力します。
-- **`execute_contract`の呼び出し**: ディスパッチャーコントラクトは `execute_contract` を呼び出します。これにより、現在のコントラクトの所有者 (`tx.dest`) から `LOGGER_USER_ID` への新しい内部トランザクションが生成されます。
-- **データフロー**: `input_data` は、元の送信者に関する情報をロガーコントラクトに渡すために使用されます。
-- **戻り値**: `execute_contract` は、作成されたトランザクションの辞書と、呼び出されたコントラクトからの `return_message` の2つの値を返します。これにより、呼び出し元のコントラクトは、呼び出されたコントラクトの実行結果に基づいて行動できます。
+**ポイント:**
+- `_input` の内容によって処理を分岐させています（コマンドパターン）。
+- `concat` を繰り返して文字列を整形・追記しています。
