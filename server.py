@@ -159,12 +159,6 @@ class StakeResponse(BaseModel):
     currency: structs.Currency
     stake: structs.Stake
 
-class CreatePoolRequest(BaseModel):
-    symbol_a: str
-    symbol_b: str
-    amount_a: int = Field(..., gt=0)
-    amount_b: int = Field(..., gt=0)
-
 class AddLiquidityRequest(BaseModel):
     symbol_a: str
     symbol_b: str
