@@ -29,6 +29,10 @@ class RapidWireVM:
 
     def _set_var(self, name: str, value: Any):
         if name and isinstance(name, str) and name.startswith('_'):
+            # Security fix: Prevent overwriting system variables
+            if name in ['_sender', '_self', '_input']:
+                 self._raise_error(f"Cannot overwrite system variable '{name}'.")
+
             if isinstance(value, (int, float)):
                 if abs(value) > 10**30:
                     self._raise_error(f"Variable '{name}' exceeded numeric limit.")
