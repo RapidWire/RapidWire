@@ -42,7 +42,7 @@ CONTRACT_OP_COSTS = {
     'approve': 3, 'transfer_from': 10,
     'get_currency': 1, 'get_transaction': 2, 'attr': 0,
     'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
-    'exec': 15,
+    'execute': 15,
     'discord_send': 5, 'discord_role_add': 10,
     'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
 }
