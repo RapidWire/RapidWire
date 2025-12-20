@@ -20,6 +20,7 @@ app = FastAPI(
 )
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
+Rapid.Config = config.RapidWireConfig
 API_KEY_HEADER = APIKeyHeader(name="API-Key", auto_error=False)
 
 class DiscordUserCache:
@@ -81,7 +82,27 @@ async def get_current_user_id(api_key: str = Security(API_KEY_HEADER)) -> int:
         )
     return key_data.user_id
 
+class ConfigResponseContract(BaseModel):
+    max_cost: int
+    max_script_length: int
+    max_script_size: int
+    max_recursion_depth: int
+
+class ConfigResponseStaking(BaseModel):
+    rate_change_timelock: int
+
+class ConfigResponseSwap(BaseModel):
+    fee: int
+
+class ConfigResponseGas(BaseModel):
+    currency_id: int
+    price: int
+
 class ConfigResponse(BaseModel):
+    contract: ConfigResponseContract
+    staking: ConfigResponseStaking
+    swap: ConfigResponseSwap
+    gas: ConfigResponseGas
     decimal_places: int
 
 class BalanceResponse(BaseModel):
@@ -195,7 +216,7 @@ async def get_version():
 
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
-    return ConfigResponse(decimal_places=config.RapidWireConfig.decimal_places)
+    return ConfigResponse()
 
 @app.get("/user/{user_id}/name", response_model=UserNameResponse, tags=["User"])
 async def get_user_name(user_id: int):
