@@ -347,6 +347,9 @@ class RapidWire:
                 depth=0
             )
             created_context = True
+
+            if chain_context.total_cost > chain_context.budget:
+                raise ContractError("Execution budget exceeded.")
         else:
             if chain_context.depth >= self.Config.Contract.max_recursion_depth:
                 raise ContractError(f"Recursion depth limit exceeded ({self.Config.Contract.max_recursion_depth})")
