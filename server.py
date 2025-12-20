@@ -216,7 +216,25 @@ async def get_version():
 
 @app.get("/config", response_model=ConfigResponse, tags=["Config"])
 async def get_config():
-    return ConfigResponse()
+    return ConfigResponse(
+        contract=ConfigResponseContract(
+            max_cost=Rapid.Config.Contract.max_cost,
+            max_script_length=Rapid.Config.Contract.max_script_length,
+            max_script_size=Rapid.Config.Contract.max_script_size,
+            max_recursion_depth=Rapid.Config.Contract.max_recursion_depth
+        ),
+        staking=ConfigResponseStaking(
+            rate_change_timelock=Rapid.Config.Staking.rate_change_timelock
+        ),
+        swap=ConfigResponseSwap(
+            fee=Rapid.Config.Swap.fee
+        ),
+        gas=ConfigResponseGas(
+            currency_id=Rapid.Config.Gas.currency_id,
+            price=Rapid.Config.Gas.price
+        ),
+        decimal_places=Rapid.Config.decimal_places
+    )
 
 @app.get("/user/{user_id}/name", response_model=UserNameResponse, tags=["User"])
 async def get_user_name(user_id: int):
