@@ -3,6 +3,12 @@
 RapidWireは、高度なカスタマイズ性と柔軟性を備えた、多機能なDiscordエコノミーボットです。サーバー独自の通貨作成、DEX（分散型取引所）機能、スマートコントラクト、請求システムなど、本格的な経済圏を構築するための機能を網羅しています。<br>
 WebベースのネットワークエクスプローラーとAPIも提供しており、外部連携も容易です。
 
+## メインネット
+
+- [サーバーにボットを導入](https://discord.com/oauth2/authorize?client_id=1380118030310314035&permissions=268552192&integration_type=0&scope=bot)
+- [サポートサーバー](https://discord.com/invite/rqpSGFSRUH)
+- [Webページ](https://rapidwire.h4ribote.net/)
+
 ## 主な機能
 
 ### 1. 高度な通貨管理 (Currency)
