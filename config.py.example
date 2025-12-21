@@ -37,7 +37,7 @@ class RapidWireConfig:
         fee: int = 30 # 0.3%, in basis points
 
     class Gas:
-        currency_id: int = 1156171234942402601
+        currency_id: int = 1269970084965912747
         price: int = 1
 
     decimal_places: int = 3
