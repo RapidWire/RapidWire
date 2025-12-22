@@ -121,7 +121,7 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `sha256(val: str) -> str`: 文字列のSHA-256ハッシュを計算します。
 - `random(min_val: int, max_val: int) -> int`: 範囲内のランダムな整数を生成します。
 - `concat(a: str, b: str) -> str`: 文字列を結合します。
-- `execute_contract(destination_id: int, input_data: str = None) -> str`: 他のコントラクトを実行します。
+- `execute(destination_id: int, input_data: str = None) -> str`: 他のコントラクトを実行します。
 
 ### Discord連携 (要権限)
 
