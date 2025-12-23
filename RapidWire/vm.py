@@ -297,5 +297,35 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for random")
 
+        if op == 'length':
+            # args: [obj]
+            # Returns len(obj)
+            try:
+                obj = args[0]
+                return len(obj)
+            except (TypeError, IndexError):
+                self._raise_error("Invalid argument for length")
+
+        if op == 'slice':
+            # args: [obj, start, stop, step]
+            try:
+                obj = args[0]
+                # Helper to convert to int or None
+                def as_int_or_none(val):
+                    if val is None:
+                        return None
+                    try:
+                        return int(val)
+                    except ValueError:
+                        return None
+
+                start = as_int_or_none(args[1]) if len(args) > 1 else None
+                stop = as_int_or_none(args[2]) if len(args) > 2 else None
+                step = as_int_or_none(args[3]) if len(args) > 3 else None
+
+                return obj[start:stop:step]
+            except (TypeError, IndexError):
+                self._raise_error("Invalid arguments for slice")
+
         # Fallback or Error
         self._raise_error(f"Unknown operation: {op}")

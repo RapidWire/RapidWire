@@ -121,7 +121,22 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `sha256(val: str) -> str`: 文字列のSHA-256ハッシュを計算します。
 - `random(min_val: int, max_val: int) -> int`: 範囲内のランダムな整数を生成します。
 - `concat(a: str, b: str) -> str`: 文字列を結合します。
+- `length(val: Any) -> int`: オブジェクトの長さ（文字数など）を返します。Python標準の `len()` も使用できます。
 - `execute(destination_id: int, input_data: str = None) -> str`: 他のコントラクトを実行します。
+
+### スライス
+
+文字列などのシーケンス型に対して、Python標準のスライス構文を使用できます。
+
+- `val[start:end]`: 部分文字列の取得
+- `val[start:end:step]`: ステップ指定による取得
+
+例:
+```python
+s = "Hello World"
+sub = s[0:5] # "Hello"
+rev = s[::-1] # "dlroW olleH"
+```
 
 ### Discord連携 (要権限)
 

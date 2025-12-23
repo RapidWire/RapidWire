@@ -232,7 +232,9 @@ class Compiler:
                 'cancel_claim': 'cancel_claim',
                 'execute': 'execute',
                 'discord_send': 'discord_send',
-                'discord_role_add': 'discord_role_add'
+                'discord_role_add': 'discord_role_add',
+                'len': 'length',
+                'length': 'length'
             }
 
             op_name = call_map.get(func_name, func_name)
@@ -243,7 +245,7 @@ class Compiler:
                 'sha256', 'random', 'get_balance', 'concat',
                 'transfer_from', 'get_currency', 'get_transaction',
                 'create_claim', 'pay_claim', 'cancel_claim', 'execute',
-                'discord_send', 'discord_role_add'
+                'discord_send', 'discord_role_add', 'length'
             ]
 
             op_obj = {
@@ -300,45 +302,82 @@ class Compiler:
                 })
                 return out_var, instrs
             else:
-                # Generic getitem or attr access
+                # Generic getitem, attr access, or slice
                 obj_var, obj_instrs = self._process_expr(node.value)
                 instrs.extend(obj_instrs)
 
-                # Check for Index wrapper (Python < 3.9)
-                idx_node = node.slice
-                if isinstance(idx_node, ast.Index):
-                    idx_node = idx_node.value
+                # Check if this is a Slice
+                slice_node = node.slice
+                # Python < 3.9: Subscript(slice=Index(value=...)) for index
+                # Python < 3.9: Subscript(slice=Slice(...)) for slice (NO Index wrapper)
+                # Python >= 3.9: Subscript(slice=...)
 
-                # Check if index is a string constant
-                is_string_const = False
-                if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, str):
-                    is_string_const = True
-                elif isinstance(idx_node, ast.Str): # Python < 3.8
-                    is_string_const = True
+                is_slice = False
+                if isinstance(slice_node, ast.Slice):
+                    is_slice = True
 
-                if is_string_const:
-                    # Treat as attribute access: obj['key'] -> attr(obj, 'key')
-                    prop_name = idx_node.value if isinstance(idx_node, ast.Constant) else idx_node.s
+                if is_slice:
+                    # Handle Slicing: [lower:upper:step]
+                    # Each part can be None (if omitted) or an expression.
+
+                    def process_slice_part(part):
+                        if part is None:
+                            return None, []
+                        return self._process_expr(part)
+
+                    lower_var, lower_instrs = process_slice_part(slice_node.lower)
+                    instrs.extend(lower_instrs)
+
+                    upper_var, upper_instrs = process_slice_part(slice_node.upper)
+                    instrs.extend(upper_instrs)
+
+                    step_var, step_instrs = process_slice_part(slice_node.step)
+                    instrs.extend(step_instrs)
 
                     out_var = target_var if target_var else self._get_temp_var()
                     instrs.append({
-                        "op": "attr",
-                        "args": [obj_var, prop_name],
+                        "op": "slice",
+                        "args": [obj_var, lower_var, upper_var, step_var],
                         "out": out_var
                     })
                     return out_var, instrs
 
-                # For generic getitem, index can be expression
-                idx_var, idx_instrs = self._process_expr(idx_node)
-                instrs.extend(idx_instrs)
+                else:
+                    # Normal Index/Key Access
+                    idx_node = slice_node
+                    if isinstance(idx_node, ast.Index):
+                        idx_node = idx_node.value
 
-                out_var = target_var if target_var else self._get_temp_var()
-                instrs.append({
-                    "op": "getitem",
-                    "args": [obj_var, idx_var],
-                    "out": out_var
-                })
-                return out_var, instrs
+                    # Check if index is a string constant (Attribute access)
+                    is_string_const = False
+                    if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, str):
+                        is_string_const = True
+                    elif isinstance(idx_node, ast.Str): # Python < 3.8
+                        is_string_const = True
+
+                    if is_string_const:
+                        # Treat as attribute access: obj['key'] -> attr(obj, 'key')
+                        prop_name = idx_node.value if isinstance(idx_node, ast.Constant) else idx_node.s
+
+                        out_var = target_var if target_var else self._get_temp_var()
+                        instrs.append({
+                            "op": "attr",
+                            "args": [obj_var, prop_name],
+                            "out": out_var
+                        })
+                        return out_var, instrs
+
+                    # For generic getitem, index can be expression
+                    idx_var, idx_instrs = self._process_expr(idx_node)
+                    instrs.extend(idx_instrs)
+
+                    out_var = target_var if target_var else self._get_temp_var()
+                    instrs.append({
+                        "op": "getitem",
+                        "args": [obj_var, idx_var],
+                        "out": out_var
+                    })
+                    return out_var, instrs
 
         elif isinstance(node, ast.BoolOp):
             # Boolean Operation (and, or)
