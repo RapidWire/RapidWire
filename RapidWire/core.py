@@ -477,8 +477,8 @@ class RapidWire:
     def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', name):
             raise ValueError("Names must be alphanumeric and start with a letter.")
-        if not re.match(r'^[a-zA-Z]+$', symbol):
-            raise ValueError("Symbols must contain only letters (a-z, A-Z).")
+        if not re.match(r'^[A-Z]+$', symbol):
+            raise ValueError("Symbols must contain only letters (A-Z).")
 
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
 
