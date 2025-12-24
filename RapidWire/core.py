@@ -475,8 +475,12 @@ class RapidWire:
             raise TransactionError(f"Database error during transfer: {err}")
 
     def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
-        if not re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', name):
-            raise ValueError("Names must be alphanumeric and start with a letter.")
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]$', name) and not re.match(r'^[a-zA-Z]$', name):
+             raise ValueError("Names must start with a letter, end with an alphanumeric character, and contain only alphanumeric characters and underscores.")
+        if name.count('_') > 5:
+            raise ValueError("Names can contain at most 5 underscores.")
+        if "__" in name:
+            raise ValueError("Names cannot contain consecutive underscores.")
         if not re.match(r'^[A-Z]+$', symbol):
             raise ValueError("Symbols must contain only letters (A-Z).")
 

@@ -178,7 +178,12 @@
     }
 
     async function getCurrency(currencyId) {
-        return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+        try {
+            return await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+        } catch (error) {
+            console.warn(`Currency ${currencyId} not found, using fallback.`);
+            return { symbol: "???", currency_id: currencyId, name: "Deleted Currency" };
+        }
     }
 
     function displayOverview(stats) {
