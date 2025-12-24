@@ -1,0 +1,134 @@
+{
+	"scopeName": "source.rapidwire",
+	"patterns": [
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#numbers"
+		},
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#function-definitions"
+		},
+		{
+			"include": "#class-definitions"
+		},
+		{
+			"include": "#sdk-functions"
+		},
+		{
+			"include": "#function-calls"
+		},
+		{
+			"include": "#sdk-variables"
+		},
+		{
+			"include": "#operators"
+		},
+		{
+			"include": "#identifiers"
+		}
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.number-sign.rapidwire",
+					"match": "#.*$"
+				}
+			]
+		},
+		"strings": {
+			"patterns": [
+				{
+					"name": "string.quoted.double.rapidwire",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.rapidwire",
+							"match": "\\\\."
+						}
+					]
+				},
+				{
+					"name": "string.quoted.single.rapidwire",
+					"begin": "'",
+					"end": "'",
+					"patterns": [
+						{
+							"name": "constant.character.escape.rapidwire",
+							"match": "\\\\."
+						}
+					]
+				}
+			]
+		},
+		"numbers": {
+			"name": "constant.numeric.rapidwire",
+			"match": "\\b\\d+\\b"
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.rapidwire",
+					"match": "\\b(if|else|elif|while|for|in|return|def|class|import|from|pass|break|continue|and|or|not)\\b"
+				},
+				{
+					"name": "support.type.rapidwire",
+					"match": "\\b(int|str|bool|Dict|Optional|List|Any|Transaction|Currency|Claim)\\b"
+				},
+				{
+					"name": "constant.language.rapidwire",
+					"match": "\\b(True|False|None)\\b"
+				}
+			]
+		},
+		"function-definitions": {
+			"match": "(?<=def\\s+)([a-zA-Z_]\\w*)",
+			"captures": {
+				"1": {
+					"name": "entity.name.function.rapidwire"
+				}
+			}
+		},
+		"class-definitions": {
+			"match": "(?<=class\\s+)([a-zA-Z_]\\w*)",
+			"captures": {
+				"1": {
+					"name": "entity.name.type.class.rapidwire"
+				}
+			}
+		},
+		"sdk-functions": {
+			"name": "support.function.rapidwire",
+			"match": "\\b(output|transfer|cancel|exit|sha256|random|get_balance|concat|approve|transfer_from|get_currency|get_transaction|create_claim|pay_claim|cancel_claim|execute|discord_send|discord_role_add|length)\\b"
+		},
+		"function-calls": {
+			"match": "\\b([a-zA-Z_]\\w*)\\s*\\(",
+			"captures": {
+				"1": {
+					"name": "entity.name.function.rapidwire"
+				}
+			}
+		},
+		"sdk-variables": {
+			"name": "variable.language.rapidwire",
+			"match": "\\b(sender|self_id|input_data|storage_str|storage_int)\\b"
+		},
+		"operators": {
+			"name": "keyword.operator.rapidwire",
+			"match": "\\+|-|\\*|/|=|==|!=|<|>|<=|>="
+		},
+		"identifiers": {
+			"name": "variable.other.rapidwire",
+			"match": "\\b[a-zA-Z_]\\w*\\b"
+		}
+	}
+}

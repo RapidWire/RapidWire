@@ -1,0 +1,59 @@
+{
+  "name": "rapidwire",
+  "displayName": "RapidWire",
+  "description": "Provides auto-completion and type hints for RapidWire.",
+  "version": "0.0.1",
+  "publisher": "rapidwire",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:rapidwire"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "rapidwire",
+        "aliases": [
+          "RapidWire",
+          "rapidwire"
+        ],
+        "extensions": [
+          ".rwc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rapidwire",
+        "scopeName": "source.rapidwire",
+        "path": "./syntaxes/rapidwire.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "RapidWire",
+      "properties": {
+        "rapidWire.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable RapidWire global completions."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.5"
+  }
+}
