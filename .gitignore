@@ -1,5 +1,6 @@
 /config.py
-.env*
+my_contract.*
+
 .vscode
 
 *.log
@@ -7,4 +8,15 @@
 __pycache__/
 *.pyc
 
-my_contract.*
+
+.env*
+.venv/
+env/
+venv/
+
+*.egg-info/
+dist/
+build/
+.DS_Store
+vscode-extension/node_modules/
+vscode-extension/out/
