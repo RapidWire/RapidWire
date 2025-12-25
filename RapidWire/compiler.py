@@ -225,6 +225,7 @@ class Compiler:
                 'concat': 'concat',
                 'approve': 'approve',
                 'transfer_from': 'transfer_from',
+                'get_allowance': 'get_allowance',
                 'get_currency': 'get_currency',
                 'get_transaction': 'get_transaction',
                 'create_claim': 'create_claim',
@@ -243,7 +244,7 @@ class Compiler:
             # Note: discord_send/role_add return int (success), transfer_from returns result.
             ops_with_out = [
                 'sha256', 'random', 'get_balance', 'concat',
-                'transfer_from', 'get_currency', 'get_transaction',
+                'transfer_from', 'get_allowance', 'get_currency', 'get_transaction',
                 'create_claim', 'pay_claim', 'cancel_claim', 'execute',
                 'discord_send', 'discord_role_add', 'length'
             ]

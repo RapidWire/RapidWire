@@ -45,6 +45,7 @@ CONTRACT_OP_COSTS = {
     'execute': 15,
     'discord_send': 5, 'discord_role_add': 10,
     'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
+    'get_allowance': 1,
 }
 
 
@@ -68,6 +69,10 @@ class ContractAPI:
 
     def transfer_from(self, sender: int, recipient: int, currency: int, amount: int) -> Transfer:
         return self.core.transfer_from(sender, recipient, currency, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
+
+    def get_allowance(self, owner: int, spender: int, currency: int) -> int:
+        allowance = self.core.Allowances.get(owner, spender, currency)
+        return allowance.amount if allowance else 0
 
     def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
         return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)

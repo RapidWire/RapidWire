@@ -188,6 +188,13 @@ class RapidWireVM:
             cur_id = int(args[3])
             return self.api.transfer_from(sender, recipient, cur_id, amount)
 
+        if op == 'get_allowance':
+            # args: [owner, spender, cur]
+            owner = int(args[0])
+            spender = int(args[1])
+            cur_id = int(args[2])
+            return self.api.get_allowance(owner, spender, cur_id)
+
         if op == 'get_currency':
             # args: [cur_id]
             return self.api.get_currency(int(args[0]))

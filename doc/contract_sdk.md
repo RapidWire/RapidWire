@@ -108,6 +108,7 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `get_currency(currency_id: int) -> Currency`: 通貨情報を取得します。
 - `approve(spender: int, amount: int, currency: int) -> None`: 第三者による送金を許可します。
 - `transfer_from(sender: int, recipient: int, amount: int, currency: int) -> Transaction`: 許可された範囲で代理送金を行います。
+- `get_allowance(owner: int, spender: int, currency: int) -> int`: 指定したユーザーがスペンダーに対して許可している送金可能額を取得します。
 - `get_transaction(tx_id: int) -> Transaction`: トランザクション情報を取得します。
 
 ### 請求
