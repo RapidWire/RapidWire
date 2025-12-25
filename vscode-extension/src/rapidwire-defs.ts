@@ -173,6 +173,25 @@ export const sdkDefs = {
       "doc": ""
     },
     {
+      "name": "get_allowance",
+      "args": [
+        {
+          "name": "owner",
+          "type": "int"
+        },
+        {
+          "name": "spender",
+          "type": "int"
+        },
+        {
+          "name": "currency",
+          "type": "int"
+        }
+      ],
+      "returnType": "int",
+      "doc": ""
+    },
+    {
       "name": "get_currency",
       "args": [
         {
