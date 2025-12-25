@@ -233,6 +233,33 @@ class ContractAPI:
             print(f"Error adding role: {e}")
             return False
 
+    def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.discord_client:
+            return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            guild = self.discord_client.get_guild(guild_id)
+            if not guild:
+                return False
+
+            member = guild.get_member(user_id)
+            if not member:
+                return False
+
+            role = guild.get_role(role_id)
+            if not role:
+                return False
+
+            return role in member.roles
+
+        except Exception as e:
+            print(f"Error checking role: {e}")
+            return False
+
 
 class RapidWire:
     def __init__(self, db_config: dict):

@@ -287,6 +287,17 @@ class RapidWireVM:
             self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
             return 1
 
+        if op == 'has_role':
+            # args: [user_id, guild_id, role_id]
+            try:
+                user_id = int(args[0])
+                guild_id = int(args[1])
+                role_id = int(args[2])
+            except (ValueError, IndexError):
+                self._raise_error("Invalid arguments for has_role")
+
+            return 1 if self.api.has_role(guild_id, user_id, role_id) else 0
+
         if op == 'sha256':
             # args: [string]
             try:

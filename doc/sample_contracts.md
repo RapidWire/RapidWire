@@ -49,6 +49,7 @@ JSONオブジェクトのリストとしてスクリプトを記述します。�
 - `cancel_claim`: 請求キャンセル (`[claim_id]`)。
 - `discord_send`: Discordメッセージ送信 (`[guild_id, channel_id, message]`)。
 - `discord_role_add`: Discordロール付与 (`[user_id, guild_id, role_id]`)。
+- `has_role`: ロール所持判定 (`[user_id, guild_id, role_id]`)。
 
 ---
 
@@ -343,3 +344,46 @@ JSONオブジェクトのリストとしてスクリプトを記述します。�
 **ポイント:**
 - `_input` の内容によって処理を分岐させています（コマンドパターン）。
 - `concat` を繰り返して文字列を整形・追記しています。
+
+---
+
+### 5. ロール限定配給 (VIP Bonus)
+
+特定のDiscordロールを持っているユーザーにのみ、特別なボーナスを付与します。
+
+**使い方:** `/execute_contract <bot_user>`
+
+**コード (JSON):**
+```json
+[
+  {
+    "op": "has_role",
+    "args": ["_sender", "123456789012345678", "987654321098765432"],
+    "out": "_is_vip"
+  },
+  {
+    "op": "if",
+    "args": ["_is_vip"],
+    "then": [
+      {
+        "op": "transfer",
+        "args": ["_sender", "10000", "1"]
+      },
+      {
+        "op": "output",
+        "args": ["VIPボーナスとして 100.00 コインを送金しました！いつもありがとうございます。"]
+      }
+    ],
+    "else": [
+      {
+        "op": "output",
+        "args": ["申し訳ありませんが、このボーナスはVIP会員限定です。"]
+      }
+    ]
+  }
+]
+```
+
+**ポイント:**
+- `has_role` を使用して、実行者が特定のギルド（サーバー）で特定のロールを持っているかを判定しています。
+- これにより、Discordのコミュニティ活動と連携したトークンエコノミーを構築できます。
