@@ -188,6 +188,13 @@ class RapidWireVM:
             cur_id = int(args[3])
             return self.api.transfer_from(sender, recipient, cur_id, amount)
 
+        if op == 'get_allowance':
+            # args: [owner, spender, cur]
+            owner = int(args[0])
+            spender = int(args[1])
+            cur_id = int(args[2])
+            return self.api.get_allowance(owner, spender, cur_id)
+
         if op == 'get_currency':
             # args: [cur_id]
             return self.api.get_currency(int(args[0]))
@@ -279,6 +286,17 @@ class RapidWireVM:
             # We schedule this as a task. Return 1 (success) optimistically.
             self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
             return 1
+
+        if op == 'has_role':
+            # args: [user_id, guild_id, role_id]
+            try:
+                user_id = int(args[0])
+                guild_id = int(args[1])
+                role_id = int(args[2])
+            except (ValueError, IndexError):
+                self._raise_error("Invalid arguments for has_role")
+
+            return 1 if self.api.has_role(guild_id, user_id, role_id) else 0
 
         if op == 'sha256':
             # args: [string]

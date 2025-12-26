@@ -32,7 +32,7 @@ export class RapidWireCompletionProvider implements vscode.CompletionItemProvide
             item.detail = `(${f.args.map(a => a.name + ": " + a.type).join(', ')}) -> ${f.returnType}`;
             item.documentation = new vscode.MarkdownString(f.doc || `RapidWire Function: ${f.name}`);
             // Add snippet for function call
-            item.insertText = new vscode.SnippetString(`${f.name}($0)`);
+            item.insertText = new vscode.SnippetString(`${f.name}`);
             items.push(item);
         }
 

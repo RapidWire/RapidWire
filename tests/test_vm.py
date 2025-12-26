@@ -156,5 +156,15 @@ class TestRapidWireVM(unittest.TestCase):
         vm.run()
         self.assertTrue(1 <= vm.vars['_res'] <= 10)
 
+    def test_get_allowance(self):
+        script = [
+            {"op": "get_allowance", "args": ["100", "200", "1"], "out": "_res"}
+        ]
+        self.api.get_allowance.return_value = 500
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.api.get_allowance.assert_called_with(100, 200, 1)
+        self.assertEqual(vm.vars['_res'], 500)
+
 if __name__ == '__main__':
     unittest.main()

@@ -108,6 +108,7 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `get_currency(currency_id: int) -> Currency`: 通貨情報を取得します。
 - `approve(spender: int, amount: int, currency: int) -> None`: 第三者による送金を許可します。
 - `transfer_from(sender: int, recipient: int, amount: int, currency: int) -> Transaction`: 許可された範囲で代理送金を行います。
+- `get_allowance(owner: int, spender: int, currency: int) -> int`: 指定したユーザーがスペンダーに対して許可している送金可能額を取得します。
 - `get_transaction(tx_id: int) -> Transaction`: トランザクション情報を取得します。
 
 ### 請求
@@ -142,6 +143,10 @@ rev = s[::-1] # "dlroW olleH"
 
 - `discord_send(guild_id: int, channel_id: int, message: str) -> int`: Discordチャンネルにメッセージを送信します。
 - `discord_role_add(user_id: int, guild_id: int, role_id: int) -> int`: ユーザーにロールを付与します。
+
+- `has_role(user_id: int, guild_id: int, role_id: int) -> bool`: ユーザーが指定されたギルドで特定のロールを持っているかを確認します。
+
+*注意: この関数を使用するには、コントラクト所有者がそのギルドに対するDiscord操作権限を持っている必要があります。*
 
 ## 制限事項
 

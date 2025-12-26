@@ -45,6 +45,7 @@ CONTRACT_OP_COSTS = {
     'execute': 15,
     'discord_send': 5, 'discord_role_add': 10,
     'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
+    'get_allowance': 1,
 }
 
 
@@ -68,6 +69,10 @@ class ContractAPI:
 
     def transfer_from(self, sender: int, recipient: int, currency: int, amount: int) -> Transfer:
         return self.core.transfer_from(sender, recipient, currency, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
+
+    def get_allowance(self, owner: int, spender: int, currency: int) -> int:
+        allowance = self.core.Allowances.get(owner, spender, currency)
+        return allowance.amount if allowance else 0
 
     def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
         return self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
@@ -226,6 +231,33 @@ class ContractAPI:
             return True
         except Exception as e:
             print(f"Error adding role: {e}")
+            return False
+
+    def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.discord_client:
+            return False
+
+        # Whitelist check
+        if not self.core.DiscordPermissions.check(guild_id, self.ctx.contract_owner_id):
+            raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
+
+        try:
+            guild = self.discord_client.get_guild(guild_id)
+            if not guild:
+                return False
+
+            member = guild.get_member(user_id)
+            if not member:
+                return False
+
+            role = guild.get_role(role_id)
+            if not role:
+                return False
+
+            return role in member.roles
+
+        except Exception as e:
+            print(f"Error checking role: {e}")
             return False
 
 
@@ -481,8 +513,14 @@ class RapidWire:
             raise ValueError("Names can contain at most 5 underscores.")
         if "__" in name:
             raise ValueError("Names cannot contain consecutive underscores.")
-        if not re.match(r'^[A-Z]+$', symbol):
-            raise ValueError("Symbols must contain only letters (A-Z).")
+        if not re.match(r'^[A-Z\-]+$', symbol):
+            raise ValueError("Symbols must contain only letters (A-Z) and hyphens.")
+        if symbol.count('-') > 2:
+            raise ValueError("Symbols can contain at most 2 hyphens.")
+        if "--" in symbol:
+            raise ValueError("Symbols cannot contain consecutive hyphens.")
+        if symbol.startswith('-') or symbol.endswith('-'):
+            raise ValueError("Symbols cannot start or end with a hyphen.")
 
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
 

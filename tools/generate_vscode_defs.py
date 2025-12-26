@@ -5,7 +5,7 @@ import sys
 
 # Add parent directory to path to find RapidWire module if needed
 SDK_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'RapidWire', 'sdk.py')
-OUTPUT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vscode-rapidwire', 'src', 'rapidwire-defs.ts')
+OUTPUT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vscode-extension', 'src', 'rapidwire-defs.ts')
 
 def parse_sdk():
     with open(SDK_PATH, 'r', encoding='utf-8') as f:

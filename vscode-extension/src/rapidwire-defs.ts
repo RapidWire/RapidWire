@@ -173,6 +173,25 @@ export const sdkDefs = {
       "doc": ""
     },
     {
+      "name": "get_allowance",
+      "args": [
+        {
+          "name": "owner",
+          "type": "int"
+        },
+        {
+          "name": "spender",
+          "type": "int"
+        },
+        {
+          "name": "currency",
+          "type": "int"
+        }
+      ],
+      "returnType": "int",
+      "doc": ""
+    },
+    {
       "name": "get_currency",
       "args": [
         {
@@ -290,6 +309,25 @@ export const sdkDefs = {
         }
       ],
       "returnType": "int",
+      "doc": ""
+    },
+    {
+      "name": "has_role",
+      "args": [
+        {
+          "name": "user_id",
+          "type": "int"
+        },
+        {
+          "name": "guild_id",
+          "type": "int"
+        },
+        {
+          "name": "role_id",
+          "type": "int"
+        }
+      ],
+      "returnType": "bool",
       "doc": ""
     },
     {
