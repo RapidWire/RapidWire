@@ -312,6 +312,25 @@ export const sdkDefs = {
       "doc": ""
     },
     {
+      "name": "has_role",
+      "args": [
+        {
+          "name": "user_id",
+          "type": "int"
+        },
+        {
+          "name": "guild_id",
+          "type": "int"
+        },
+        {
+          "name": "role_id",
+          "type": "int"
+        }
+      ],
+      "returnType": "bool",
+      "doc": ""
+    },
+    {
       "name": "length",
       "args": [
         {
