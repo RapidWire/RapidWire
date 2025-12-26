@@ -513,8 +513,14 @@ class RapidWire:
             raise ValueError("Names can contain at most 5 underscores.")
         if "__" in name:
             raise ValueError("Names cannot contain consecutive underscores.")
-        if not re.match(r'^[A-Z]+$', symbol):
-            raise ValueError("Symbols must contain only letters (A-Z).")
+        if not re.match(r'^[A-Z\-]+$', symbol):
+            raise ValueError("Symbols must contain only letters (A-Z) and hyphens.")
+        if symbol.count('-') > 2:
+            raise ValueError("Symbols can contain at most 2 hyphens.")
+        if "--" in symbol:
+            raise ValueError("Symbols cannot contain consecutive hyphens.")
+        if symbol.startswith('-') or symbol.endswith('-'):
+            raise ValueError("Symbols cannot start or end with a hyphen.")
 
         new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
 
