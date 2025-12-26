@@ -213,32 +213,7 @@ class Compiler:
                 instrs.extend(arg_instrs)
                 args.append(arg_var)
 
-            # Mapping function names to ops
-            call_map = {
-                'output': 'output',
-                'transfer': 'transfer',
-                'sha256': 'sha256',
-                'random': 'random',
-                'get_balance': 'get_balance',
-                'cancel': 'cancel',
-                'exit': 'exit',
-                'concat': 'concat',
-                'approve': 'approve',
-                'transfer_from': 'transfer_from',
-                'get_allowance': 'get_allowance',
-                'get_currency': 'get_currency',
-                'get_transaction': 'get_transaction',
-                'create_claim': 'create_claim',
-                'pay_claim': 'pay_claim',
-                'cancel_claim': 'cancel_claim',
-                'execute': 'execute',
-                'discord_send': 'discord_send',
-                'discord_role_add': 'discord_role_add',
-                'len': 'length',
-                'length': 'length'
-            }
-
-            op_name = call_map.get(func_name, func_name)
+            op_name = func_name
 
             # Ops that produce output
             # Note: discord_send/role_add return int (success), transfer_from returns result.
