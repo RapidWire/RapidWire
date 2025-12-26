@@ -221,7 +221,7 @@ class Compiler:
                 'sha256', 'random', 'get_balance', 'concat',
                 'transfer_from', 'get_allowance', 'get_currency', 'get_transaction',
                 'create_claim', 'pay_claim', 'cancel_claim', 'execute',
-                'discord_send', 'discord_role_add', 'length'
+                'discord_send', 'discord_role_add', 'has_role', 'length',
             ]
 
             op_obj = {
