@@ -202,7 +202,6 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
             caller_id=interaction.user.id,
             contract_owner_id=user.id,
             input_data=input_data,
-            discord_client=interaction.client
         )
         desc = f"{user.mention} のコントラクトを実行しました。"
         fields = [EmbedField("実行ID", f"`{execution_id}`", False)]
