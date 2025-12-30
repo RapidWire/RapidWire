@@ -40,4 +40,7 @@ class RapidWireConfig:
         currency_id: int = 1269970084965912747
         price: int = 1
 
+    class Discord:
+        token: str = Discord.token
+
     decimal_places: int = 3
