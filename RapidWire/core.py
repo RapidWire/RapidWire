@@ -50,11 +50,11 @@ CONTRACT_OP_COSTS = {
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, discord_client: Any = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, httpx_client: Any = None):
         self.core = rapidwire_instance
         self.ctx = execution_context
         self.chain_context = chain_context
-        self.discord_client = discord_client
+        self.httpx_client = httpx_client
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
@@ -142,7 +142,7 @@ class ContractAPI:
             caller_id=source_id,
             contract_owner_id=destination_id,
             input_data=input_data,
-            discord_client=self.discord_client,
+            httpx_client=self.httpx_client,
             chain_context=self.chain_context
         )
 
@@ -173,8 +173,8 @@ class ContractAPI:
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
 
-    async def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
-        if not self.discord_client:
+    def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
+        if not self.httpx_client or not self.core.Config.Discord.token:
             return False
 
         # Whitelist check
@@ -182,26 +182,36 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            channel = self.discord_client.get_channel(channel_id)
-            if not channel:
-                # Try fetching if not in cache
-                channel = await self.discord_client.fetch_channel(channel_id)
+            headers = {
+                "Authorization": f"Bot {self.core.Config.Discord.token}",
+                "Content-Type": "application/json",
+                "User-Agent": "DiscordBot (https://github.com/RapidWire/RapidWire, 1.0)"
+            }
+            # Verify channel is in guild (approximate check by ensuring we can access it?)
+            # The API doesn't strictly enforce checking guild_id match for channel in the post endpoint itself
+            # but we can assume correct usage or trust the ID.
+            # However, previous logic checked `channel.guild.id != guild_id`.
+            # To do that strictly via API, we'd need to fetch channel first.
 
-            if not channel:
+            # Fetch channel to verify guild_id
+            resp = self.httpx_client.get(f"https://discord.com/api/v10/channels/{channel_id}", headers=headers)
+            if resp.status_code != 200:
                 return False
 
-            if channel.guild.id != guild_id:
+            channel_data = resp.json()
+            if int(channel_data.get('guild_id', 0)) != guild_id:
                 raise PermissionError("Channel does not belong to the specified guild.")
 
-            await channel.send(message)
-            return True
+            payload = {"content": message}
+            resp = self.httpx_client.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", headers=headers, json=payload)
+
+            return resp.status_code in (200, 201)
         except Exception as e:
-            # We might want to log this error or return it somehow, but for now just return False
             print(f"Error sending message: {e}")
             return False
 
-    async def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
-        if not self.discord_client:
+    def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.httpx_client or not self.core.Config.Discord.token:
              return False
 
         # Whitelist check
@@ -209,32 +219,20 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            guild = self.discord_client.get_guild(guild_id)
-            if not guild:
-                guild = await self.discord_client.fetch_guild(guild_id)
+            headers = {
+                "Authorization": f"Bot {self.core.Config.Discord.token}",
+                "User-Agent": "DiscordBot (https://github.com/RapidWire/RapidWire, 1.0)"
+            }
+            url = f"https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}/roles/{role_id}"
+            resp = self.httpx_client.put(url, headers=headers)
 
-            if not guild:
-                return False
-
-            member = guild.get_member(user_id)
-            if not member:
-                try:
-                    member = await guild.fetch_member(user_id)
-                except:
-                    return False
-
-            role = guild.get_role(role_id)
-            if not role:
-                return False
-
-            await member.add_roles(role)
-            return True
+            return resp.status_code == 204
         except Exception as e:
             print(f"Error adding role: {e}")
             return False
 
     def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
-        if not self.discord_client:
+        if not self.httpx_client or not self.core.Config.Discord.token:
             return False
 
         # Whitelist check
@@ -242,19 +240,20 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            guild = self.discord_client.get_guild(guild_id)
-            if not guild:
+            headers = {
+                "Authorization": f"Bot {self.core.Config.Discord.token}",
+                "User-Agent": "DiscordBot (https://github.com/RapidWire/RapidWire, 1.0)"
+            }
+            # Fetch member
+            url = f"https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}"
+            resp = self.httpx_client.get(url, headers=headers)
+
+            if resp.status_code != 200:
                 return False
 
-            member = guild.get_member(user_id)
-            if not member:
-                return False
-
-            role = guild.get_role(role_id)
-            if not role:
-                return False
-
-            return role in member.roles
+            member_data = resp.json()
+            roles = member_data.get('roles', [])
+            return str(role_id) in roles
 
         except Exception as e:
             print(f"Error checking role: {e}")
@@ -334,7 +333,7 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, httpx_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
         if input_data and "\\" in input_data:
             raise ValueError("Input data cannot contain backslashes.")
 
@@ -400,7 +399,7 @@ class RapidWire:
                     execution_id=execution_id
                 )
 
-                api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
+                api_handler = ContractAPI(self, execution_context, chain_context, httpx_client)
 
                 system_vars = {
                     '_sender': caller_id,

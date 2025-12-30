@@ -270,9 +270,7 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for discord_send")
 
-            # We schedule this as a task. Return 1 (success) optimistically.
-            self._run_async(self.api.discord_send(guild_id, channel_id, message))
-            return 1
+            return 1 if self.api.discord_send(guild_id, channel_id, message) else 0
 
         if op == 'discord_role_add':
             # args: [user_id, guild_id, role_id]
@@ -283,9 +281,7 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for discord_role_add")
 
-            # We schedule this as a task. Return 1 (success) optimistically.
-            self._run_async(self.api.discord_role_add(guild_id, user_id, role_id))
-            return 1
+            return 1 if self.api.discord_role_add(guild_id, user_id, role_id) else 0
 
         if op == 'has_role':
             # args: [user_id, guild_id, role_id]

@@ -15,4 +15,7 @@ class Config:
         currency_id: int = 1
         price: int = 1
 
+    class Discord:
+        token: str = ""
+
     decimal_places: int = 3
