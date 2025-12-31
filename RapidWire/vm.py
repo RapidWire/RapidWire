@@ -42,11 +42,7 @@ class RapidWireVM:
             self.vars[name] = value
 
     def _raise_error(self, message: str):
-        error_msg = f"Error at instruction {self.instruction_count}"
-        if self.current_op:
-            error_msg += f" (op: {self.current_op})"
-        error_msg += f": {message}"
-        raise ContractError(error_msg)
+        raise ContractError(message, instruction=self.instruction_count, op=self.current_op)
 
     def run(self):
         try:

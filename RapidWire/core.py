@@ -428,11 +428,16 @@ class RapidWire:
                 error_status = 'reverted'
 
             error_message = str(e)
-            if not isinstance(e, (TransactionCanceledByContract, ContractError)):
+            if isinstance(e, ContractError):
+                error_message = e.message
+            elif not isinstance(e, (TransactionCanceledByContract, ContractError)):
                 error_message = f"{e.__class__.__name__}: {str(e)}"
 
             try:
                 with self.db as cursor:
+                    # Truncate error message to 127 characters to fit in the database
+                    if len(error_message) > 127:
+                        error_message = error_message[:124] + "..."
                     self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
 
                     # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
