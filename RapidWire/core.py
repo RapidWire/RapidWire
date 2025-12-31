@@ -1,5 +1,6 @@
 import mysql.connector
 import json
+import httpx
 from time import time
 from typing import Optional, Dict, Any, List, Tuple, Literal
 from decimal import Decimal
@@ -50,11 +51,21 @@ CONTRACT_OP_COSTS = {
 
 
 class ContractAPI:
-    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None, discord_client: Any = None):
+    def __init__(self, rapidwire_instance: 'RapidWire', execution_context: ExecutionContext, chain_context: Optional[ChainContext] = None):
         self.core = rapidwire_instance
         self.ctx = execution_context
         self.chain_context = chain_context
-        self.discord_client = discord_client
+
+        headers = {
+            "User-Agent": "DiscordBot (https://github.com/RapidWire/RapidWire, 1.0)"
+        }
+        if self.core.Config.Discord.token:
+            headers["Authorization"] = f"Bot {self.core.Config.Discord.token}"
+
+        self.httpx_client = httpx.Client(
+            base_url="https://discord.com/api/v10",
+            headers=headers
+        )
 
     def get_balance(self, user_id: int, currency_id: int) -> int:
         return self.core.get_user(user_id).get_balance(currency_id).amount
@@ -142,7 +153,6 @@ class ContractAPI:
             caller_id=source_id,
             contract_owner_id=destination_id,
             input_data=input_data,
-            discord_client=self.discord_client,
             chain_context=self.chain_context
         )
 
@@ -173,8 +183,8 @@ class ContractAPI:
     def cancel(self, reason: str):
         raise TransactionCanceledByContract(reason)
 
-    async def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
-        if not self.discord_client:
+    def discord_send(self, guild_id: int, channel_id: int, message: str) -> bool:
+        if not self.core.Config.Discord.token:
             return False
 
         # Whitelist check
@@ -182,26 +192,25 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            channel = self.discord_client.get_channel(channel_id)
-            if not channel:
-                # Try fetching if not in cache
-                channel = await self.discord_client.fetch_channel(channel_id)
-
-            if not channel:
+            # Verify channel is in guild
+            resp = self.httpx_client.get(f"/channels/{channel_id}")
+            if resp.status_code != 200:
                 return False
 
-            if channel.guild.id != guild_id:
+            channel_data = resp.json()
+            if int(channel_data.get('guild_id', 0)) != guild_id:
                 raise PermissionError("Channel does not belong to the specified guild.")
 
-            await channel.send(message)
-            return True
+            payload = {"content": message}
+            resp = self.httpx_client.post(f"/channels/{channel_id}/messages", json=payload)
+
+            return resp.status_code in (200, 201)
         except Exception as e:
-            # We might want to log this error or return it somehow, but for now just return False
             print(f"Error sending message: {e}")
             return False
 
-    async def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
-        if not self.discord_client:
+    def discord_role_add(self, guild_id: int, user_id: int, role_id: int) -> bool:
+        if not self.core.Config.Discord.token:
              return False
 
         # Whitelist check
@@ -209,32 +218,16 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            guild = self.discord_client.get_guild(guild_id)
-            if not guild:
-                guild = await self.discord_client.fetch_guild(guild_id)
+            url = f"/guilds/{guild_id}/members/{user_id}/roles/{role_id}"
+            resp = self.httpx_client.put(url)
 
-            if not guild:
-                return False
-
-            member = guild.get_member(user_id)
-            if not member:
-                try:
-                    member = await guild.fetch_member(user_id)
-                except:
-                    return False
-
-            role = guild.get_role(role_id)
-            if not role:
-                return False
-
-            await member.add_roles(role)
-            return True
+            return resp.status_code == 204
         except Exception as e:
             print(f"Error adding role: {e}")
             return False
 
     def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
-        if not self.discord_client:
+        if not self.core.Config.Discord.token:
             return False
 
         # Whitelist check
@@ -242,19 +235,16 @@ class ContractAPI:
             raise PermissionError("This contract is not authorized to perform Discord operations in this server.")
 
         try:
-            guild = self.discord_client.get_guild(guild_id)
-            if not guild:
+            # Fetch member
+            url = f"/guilds/{guild_id}/members/{user_id}"
+            resp = self.httpx_client.get(url)
+
+            if resp.status_code != 200:
                 return False
 
-            member = guild.get_member(user_id)
-            if not member:
-                return False
-
-            role = guild.get_role(role_id)
-            if not role:
-                return False
-
-            return role in member.roles
+            member_data = resp.json()
+            roles = member_data.get('roles', [])
+            return str(role_id) in roles
 
         except Exception as e:
             print(f"Error checking role: {e}")
@@ -334,7 +324,7 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, discord_client: Any = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+    def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
         if input_data and "\\" in input_data:
             raise ValueError("Input data cannot contain backslashes.")
 
@@ -400,7 +390,7 @@ class RapidWire:
                     execution_id=execution_id
                 )
 
-                api_handler = ContractAPI(self, execution_context, chain_context, discord_client)
+                api_handler = ContractAPI(self, execution_context, chain_context)
 
                 system_vars = {
                     '_sender': caller_id,
@@ -438,11 +428,16 @@ class RapidWire:
                 error_status = 'reverted'
 
             error_message = str(e)
-            if not isinstance(e, (TransactionCanceledByContract, ContractError)):
+            if isinstance(e, ContractError):
+                error_message = e.message
+            elif not isinstance(e, (TransactionCanceledByContract, ContractError)):
                 error_message = f"{e.__class__.__name__}: {str(e)}"
 
             try:
                 with self.db as cursor:
+                    # Truncate error message to 127 characters to fit in the database
+                    if len(error_message) > 127:
+                        error_message = error_message[:124] + "..."
                     self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
 
                     # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL

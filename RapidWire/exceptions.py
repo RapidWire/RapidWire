@@ -20,14 +20,22 @@ class TransactionError(RapidWireError):
 
 class ContractError(RapidWireError):
     """Raised for general contract failures."""
-    def __init__(self, exc_info: dict[str, str] | str):
-        if isinstance(exc_info, str):
-            self.exc_info = {"message": exc_info}
-        else:
-            self.exc_info = exc_info
+    def __init__(self, message: str, instruction: int = None, op: str = None):
+        self.message = message
+        self.instruction = instruction
+        self.op = op
+        super().__init__(message)
 
     def __str__(self):
-        return str(self.exc_info)
+        if self.instruction is not None:
+            error_msg = f"Error at instruction {self.instruction}"
+            if self.op:
+                error_msg += f" (op: {self.op})"
+            if self.message:
+                error_msg += f": {self.message}"
+            return error_msg
+
+        return self.message
     
     def __repr__(self):
         return self.__str__()
