@@ -120,7 +120,7 @@
 		},
 		"sdk-variables": {
 			"name": "variable.language.rapidwire",
-			"match": "\\b(sender|self_id|input_data|storage_str|storage_int)\\b"
+			"match": "\\b(sender|self_id|input_data|storage)\\b"
 		},
 		"operators": {
 			"name": "keyword.operator.rapidwire",

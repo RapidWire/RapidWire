@@ -2,7 +2,7 @@
   "name": "rapidwire",
   "displayName": "RapidWire",
   "description": "Provides auto-completion and type hints for RapidWire.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "rapidwire",
   "engines": {
     "vscode": "^1.75.0"
