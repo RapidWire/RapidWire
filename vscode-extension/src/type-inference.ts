@@ -40,11 +40,7 @@ export function inferTypes(text: string): Map<string, string> {
             }
 
             // 2. Check for dictionary access
-            if (rhs.startsWith('storage_int[')) {
-                variableTypes.set(varName, 'int');
-                continue;
-            }
-            if (rhs.startsWith('storage_str[')) {
+            if (rhs.startsWith('storage[')) {
                 variableTypes.set(varName, 'str');
                 continue;
             }

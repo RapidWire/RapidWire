@@ -16,13 +16,8 @@ export const sdkDefs = {
       "doc": ""
     },
     {
-      "name": "storage_str",
+      "name": "storage",
       "type": "Dict[str, str]",
-      "doc": ""
-    },
-    {
-      "name": "storage_int",
-      "type": "Dict[str, int]",
       "doc": ""
     }
   ],

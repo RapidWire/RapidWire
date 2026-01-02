@@ -140,31 +140,17 @@ class RapidWireVM:
             self.output = str(args[0])
             return None
 
-        if op == 'store_str_get':
+        if op == 'store_get':
             # args: [key]
             key = str(args[0])
             val = self.api.get_variable(None, key) # None user_id defaults to owner in api
             if val is None: return ""
             return str(val)
 
-        if op == 'store_int_get':
-            # args: [key]
-            key = str(args[0])
-            val = self.api.get_variable(None, key) # None user_id defaults to owner in api
-            if val is None: return 0
-            return to_num(val)
-
-        if op == 'store_str_set':
+        if op == 'store_set':
             # args: [key, val]
             key = str(args[0])
             val = str(args[1])
-            self.api.set_variable(key, val)
-            return None
-
-        if op == 'store_int_set':
-            # args: [key, val]
-            key = str(args[0])
-            val = to_num(args[1])
             self.api.set_variable(key, val)
             return None
 

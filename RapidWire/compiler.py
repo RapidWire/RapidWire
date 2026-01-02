@@ -89,27 +89,21 @@ class Compiler:
                      })
 
             elif isinstance(target, ast.Subscript):
-                # Storage assignment: storage_int["key"] = x
+                # Storage assignment: storage["key"] = x
                 if isinstance(target.value, ast.Name):
-                    storage_type = target.value.id # storage_str or storage_int
+                    storage_type = target.value.id
 
                     # Check if it is storage assignment
-                    if storage_type in ['storage_int', 'storage_str']:
+                    if storage_type == 'storage':
                         # For assignment, we evaluate the RHS value.
                         val_var, val_instrs = self._process_expr(value_node)
                         instrs.extend(val_instrs)
-
-                        op_name = None
-                        if storage_type == 'storage_int':
-                            op_name = 'store_int_set'
-                        elif storage_type == 'storage_str':
-                            op_name = 'store_str_set'
 
                         # Extract key value if it's a constant
                         key_arg = self._extract_key(target)
 
                         instrs.append({
-                            "op": op_name,
+                            "op": 'store_set',
                             "args": [key_arg, val_var]
                         })
                     else:
@@ -257,22 +251,15 @@ class Compiler:
             # First check if it's storage access (special case)
             is_storage = False
             if isinstance(node.value, ast.Name):
-                if node.value.id in ['storage_str', 'storage_int']:
+                if node.value.id == 'storage':
                     is_storage = True
 
             if is_storage:
-                storage_type = node.value.id
                 key_arg = self._extract_key(node)
-
-                op_name = None
-                if storage_type == 'storage_str':
-                    op_name = 'store_str_get'
-                elif storage_type == 'storage_int':
-                    op_name = 'store_int_get'
 
                 out_var = target_var if target_var else self._get_temp_var()
                 instrs.append({
-                    "op": op_name,
+                    "op": 'store_get',
                     "args": [key_arg],
                     "out": out_var
                 })
