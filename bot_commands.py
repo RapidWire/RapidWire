@@ -624,10 +624,10 @@ async def contract_get(interaction: discord.Interaction, user: Optional[User] = 
     target_user = user or interaction.user
     contract = Rapid.Contracts.get(target_user.id)
     if contract and contract.script:
-        file = File(io.BytesIO(contract.script.encode('utf-8')), filename="contract.py")
+        file = File(io.BytesIO(contract.script.encode('utf-8')), filename=f"contract-{target_user.id}.py")
 
-        desc = f"{target_user.mention} のコントラクト:"
         fields = [
+            EmbedField("ユーザー", {target_user.mention}, False),
             EmbedField("計算されたコスト", f"`{contract.cost}`", False),
             EmbedField("設定された最大コスト", f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", False)
         ]
@@ -637,7 +637,7 @@ async def contract_get(interaction: discord.Interaction, user: Optional[User] = 
         else:
              fields.append(EmbedField("ロック期限", "ロックされていません", False))
 
-        await interaction.followup.send(content=desc, file=file, embed=create_success_embed("", title="コントラクト詳細", fields=fields))
+        await interaction.followup.send(file=file, embed=create_success_embed("", title="コントラクト詳細", fields=fields))
     else:
         msg = "現在、コントラクトは設定されていません。" if target_user.id == interaction.user.id else f"{target_user.mention} はコントラクトを設定していません。"
         await interaction.followup.send(embed=create_success_embed(msg, title="コントラクト情報"))
