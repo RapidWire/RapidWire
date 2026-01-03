@@ -108,7 +108,7 @@
 		},
 		"sdk-functions": {
 			"name": "support.function.rapidwire",
-			"match": "\\b(output|transfer|cancel|exit|sha256|random|get_balance|concat|approve|transfer_from|get_currency|get_transaction|create_claim|pay_claim|cancel_claim|execute|discord_send|discord_role_add|length)\\b"
+			"match": "\\b(output|transfer|cancel|exit|sha256|random|get_balance|concat|approve|transfer_from|get_currency|get_transaction|create_claim|pay_claim|cancel_claim|execute|discord_send|discord_role_add|length|split|to_str|to_int|now)\\b"
 		},
 		"function-calls": {
 			"match": "\\b([a-zA-Z_]\\w*)\\s*\\(",
@@ -120,7 +120,7 @@
 		},
 		"sdk-variables": {
 			"name": "variable.language.rapidwire",
-			"match": "\\b(sender|self_id|input_data|storage_str|storage_int)\\b"
+			"match": "\\b(sender|self_id|input_data|storage)\\b"
 		},
 		"operators": {
 			"name": "keyword.operator.rapidwire",

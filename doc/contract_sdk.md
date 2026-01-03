@@ -40,18 +40,17 @@ python3 RapidWire/compiler.py my_contract.py
 | `sender` | `int` | コントラクトを呼び出したユーザーのID |
 | `self_id` | `int` | コントラクト自身の所有者ID |
 | `input_data` | `str` | 実行時に渡された入力データ文字列 |
-| `storage_str` | `Dict[str, str]` | 永続的な文字列ストレージ（キーと値は文字列） |
-| `storage_int` | `Dict[str, int]` | 永続的な整数ストレージ（キーは文字列、値は整数） |
+| `storage` | `Dict[str, str]` | 永続的な文字列ストレージ（キーと値は文字列）。整数を代入した場合は自動的に文字列に変換されます。 |
 
 ### ストレージの使用例
 
 ```python
 # データの保存
-storage_str['last_msg'] = input_data
-storage_int['count'] = storage_int['count'] + 1
+storage['last_msg'] = input_data
+storage['count'] = int(storage['count']) + 1
 
 # データの取得
-msg = storage_str['last_msg']
+msg = storage['last_msg']
 ```
 
 ## データ構造

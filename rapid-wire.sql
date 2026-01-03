@@ -131,22 +131,10 @@ CREATE TABLE `liquidity_provider` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contract_int_variables`
+-- Table structure for table `contract_storage`
 --
 
-CREATE TABLE `contract_int_variables` (
-  `user_id` bigint UNSIGNED NOT NULL,
-  `key` varchar(31) NOT NULL,
-  `value` decimal(30, 0) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `contract_str_variables`
---
-
-CREATE TABLE `contract_str_variables` (
+CREATE TABLE `contract_storage` (
   `user_id` bigint UNSIGNED NOT NULL,
   `key` varchar(31) NOT NULL,
   `value` varchar(127) NOT NULL
@@ -332,15 +320,9 @@ ALTER TABLE `liquidity_provider`
   ADD UNIQUE KEY `pool_user` (`pool_id`,`user_id`);
 
 --
--- Indexes for table `contract_int_variables`
+-- Indexes for table `contract_storage`
 --
-ALTER TABLE `contract_int_variables`
-  ADD PRIMARY KEY (`user_id`, `key`);
-
---
--- Indexes for table `contract_str_variables`
---
-ALTER TABLE `contract_str_variables`
+ALTER TABLE `contract_storage`
   ADD PRIMARY KEY (`user_id`, `key`);
 
 --

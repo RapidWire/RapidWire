@@ -16,13 +16,8 @@ export const sdkDefs = {
       "doc": ""
     },
     {
-      "name": "storage_str",
+      "name": "storage",
       "type": "Dict[str, str]",
-      "doc": ""
-    },
-    {
-      "name": "storage_int",
-      "type": "Dict[str, int]",
       "doc": ""
     }
   ],
@@ -338,6 +333,45 @@ export const sdkDefs = {
           "type": "Any"
         }
       ],
+      "returnType": "int",
+      "doc": ""
+    },
+    {
+      "name": "split",
+      "args": [
+        {
+          "name": "separator",
+          "type": "str"
+        }
+      ],
+      "returnType": "list[str]",
+      "doc": ""
+    },
+    {
+      "name": "to_str",
+      "args": [
+        {
+          "name": "val",
+          "type": "int"
+        }
+      ],
+      "returnType": "str",
+      "doc": ""
+    },
+    {
+      "name": "to_int",
+      "args": [
+        {
+          "name": "val",
+          "type": "str"
+        }
+      ],
+      "returnType": "int",
+      "doc": ""
+    },
+    {
+      "name": "now",
+      "args": [],
       "returnType": "int",
       "doc": ""
     }

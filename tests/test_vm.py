@@ -1,4 +1,5 @@
 import unittest
+import time
 from unittest.mock import MagicMock
 from RapidWire.vm import RapidWireVM, StopExecution
 from RapidWire.exceptions import TransactionCanceledByContract
@@ -25,8 +26,8 @@ class TestRapidWireVM(unittest.TestCase):
     def test_arithmetic_cast(self):
         script = [
             {"op": "add", "args": ["10", "20"], "out": "_res"},
-            {"op": "store_int_set", "args": ["temp", "_res"]}, # Store 30
-            {"op": "store_int_get", "args": ["temp"], "out": "_val"}, # Get 30
+            {"op": "store_set", "args": ["temp", "_res"]}, # Store 30
+            {"op": "store_get", "args": ["temp"], "out": "_val"}, # Get 30
             {"op": "add", "args": ["_val", "5"], "out": "_final"} # Should be 30 + 5 = 35
         ]
         # Mock api response for store_get
@@ -98,8 +99,8 @@ class TestRapidWireVM(unittest.TestCase):
 
     def test_store_ops_str(self):
         script = [
-            {"op": "store_str_set", "args": ["key", "value"]},
-            {"op": "store_str_get", "args": ["key"], "out": "_val"}
+            {"op": "store_set", "args": ["key", "value"]},
+            {"op": "store_get", "args": ["key"], "out": "_val"}
         ]
         self.api.get_variable.return_value = 'value'
         vm = RapidWireVM(script, self.api, self.system_vars)
@@ -109,35 +110,14 @@ class TestRapidWireVM(unittest.TestCase):
 
     def test_store_ops_int(self):
         script = [
-            {"op": "store_int_set", "args": ["key", 123]},
-            {"op": "store_int_get", "args": ["key"], "out": "_val"}
+            {"op": "store_set", "args": ["key", 123]},
+            {"op": "store_get", "args": ["key"], "out": "_val"}
         ]
         self.api.get_variable.return_value = 123
         vm = RapidWireVM(script, self.api, self.system_vars)
         vm.run()
-        self.api.set_variable.assert_called_with('key', 123)
-        self.assertEqual(vm.vars['_val'], 123)
-
-    def test_store_ops_type_safety(self):
-        # test that store_str_get returns string even if stored value is something else (or None)
-        script = [
-            {"op": "store_str_get", "args": ["key"], "out": "_val"}
-        ]
-        self.api.get_variable.return_value = 123
-        vm = RapidWireVM(script, self.api, self.system_vars)
-        vm.run()
-        self.assertEqual(vm.vars['_val'], "123")
-        self.assertIsInstance(vm.vars['_val'], str)
-
-        # test that store_int_get returns int even if stored value is string "123"
-        script = [
-            {"op": "store_int_get", "args": ["key"], "out": "_val"}
-        ]
-        self.api.get_variable.return_value = "123"
-        vm = RapidWireVM(script, self.api, self.system_vars)
-        vm.run()
-        self.assertEqual(vm.vars['_val'], 123)
-        self.assertIsInstance(vm.vars['_val'], int)
+        self.api.set_variable.assert_called_with('key', '123')
+        self.assertEqual(vm.vars['_val'], '123')
 
     def test_sha256(self):
         script = [
@@ -165,6 +145,53 @@ class TestRapidWireVM(unittest.TestCase):
         vm.run()
         self.api.get_allowance.assert_called_with(100, 200, 1)
         self.assertEqual(vm.vars['_res'], 500)
+
+    def test_split(self):
+        script = [
+            {"op": "split", "args": ["a,b,c", ","], "out": "_res"},
+            {"op": "getitem", "args": ["_res", 1], "out": "_val"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_res'], ["a", "b", "c"])
+        self.assertEqual(vm.vars['_val'], "b")
+
+    def test_split_default(self):
+        script = [
+            {"op": "split", "args": ["hello world", " "], "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_res'], ["hello", "world"])
+
+    def test_to_str(self):
+        script = [
+            {"op": "to_str", "args": [123], "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_res'], "123")
+        self.assertIsInstance(vm.vars['_res'], str)
+
+    def test_to_int(self):
+        script = [
+            {"op": "to_int", "args": ["456"], "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+        self.assertEqual(vm.vars['_res'], 456)
+        self.assertIsInstance(vm.vars['_res'], int)
+
+    def test_now(self):
+        script = [
+            {"op": "now", "out": "_res"}
+        ]
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        start_time = int(time.time())
+        vm.run()
+        end_time = int(time.time())
+        self.assertIsInstance(vm.vars['_res'], int)
+        self.assertTrue(start_time <= vm.vars['_res'] <= end_time)
 
 if __name__ == '__main__':
     unittest.main()

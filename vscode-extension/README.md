@@ -4,7 +4,7 @@ This extension provides auto-completion, hover information, and signature help f
 
 ## Features
 
-- **Auto-completion**: Suggests RapidWire system variables (`sender`, `storage_str`, etc.) and functions (`output`, `transfer`, etc.) as you type.
+- **Auto-completion**: Suggests RapidWire system variables (`sender`, `storage`, etc.) and functions (`output`, `transfer`, etc.) as you type.
 - **Hover Info**: Shows type information and signatures when you hover over RapidWire symbols.
 - **Signature Help**: Shows parameter hints when you type a function call (e.g., `output(...)`).
 

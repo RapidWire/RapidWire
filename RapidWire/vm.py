@@ -2,6 +2,7 @@ from typing import Any, List, Dict, Optional, TYPE_CHECKING
 import asyncio
 import hashlib
 import random
+import time
 from .exceptions import ContractError, TransactionCanceledByContract
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ class RapidWireVM:
             if name in ['_sender', '_self', '_input']:
                  self._raise_error(f"Cannot overwrite system variable '{name}'.")
 
-            if isinstance(value, (int, float)):
+            if isinstance(value, int):
                 if abs(value) > 10**30:
                     self._raise_error(f"Variable '{name}' exceeded numeric limit.")
             elif isinstance(value, str):
@@ -85,25 +86,15 @@ class RapidWireVM:
             return None
 
     def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
-        # Helper to ensure numbers
-        def to_num(x):
-            try:
-                return int(x)
-            except (ValueError, TypeError):
-                try:
-                    return float(x)
-                except (ValueError, TypeError):
-                    return 0
-
         # A. Calculation & Logic
-        if op == 'add': return to_num(args[0]) + to_num(args[1])
-        if op == 'sub': return to_num(args[0]) - to_num(args[1])
-        if op == 'mul': return to_num(args[0]) * to_num(args[1])
-        if op == 'div': return to_num(args[0]) // to_num(args[1])
-        if op == 'mod': return to_num(args[0]) % to_num(args[1])
+        if op == 'add': return int(args[0]) + int(args[1])
+        if op == 'sub': return int(args[0]) - int(args[1])
+        if op == 'mul': return int(args[0]) * int(args[1])
+        if op == 'div': return int(args[0]) // int(args[1])
+        if op == 'mod': return int(args[0]) % int(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
         if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
-        if op == 'gt': return 1 if to_num(args[0]) > to_num(args[1]) else 0
+        if op == 'gt': return 1 if int(args[0]) > int(args[1]) else 0
         if op == 'set': return args[0]
 
         # B. Flow Control
@@ -140,31 +131,17 @@ class RapidWireVM:
             self.output = str(args[0])
             return None
 
-        if op == 'store_str_get':
+        if op == 'store_get':
             # args: [key]
             key = str(args[0])
             val = self.api.get_variable(None, key) # None user_id defaults to owner in api
             if val is None: return ""
             return str(val)
 
-        if op == 'store_int_get':
-            # args: [key]
-            key = str(args[0])
-            val = self.api.get_variable(None, key) # None user_id defaults to owner in api
-            if val is None: return 0
-            return to_num(val)
-
-        if op == 'store_str_set':
+        if op == 'store_set':
             # args: [key, val]
             key = str(args[0])
             val = str(args[1])
-            self.api.set_variable(key, val)
-            return None
-
-        if op == 'store_int_set':
-            # args: [key, val]
-            key = str(args[0])
-            val = to_num(args[1])
             self.api.set_variable(key, val)
             return None
 
@@ -336,6 +313,33 @@ class RapidWireVM:
                 return obj[start:stop:step]
             except (TypeError, IndexError):
                 self._raise_error("Invalid arguments for slice")
+
+        if op == 'split':
+            # args: [string, separator]
+            try:
+                s = str(args[0])
+                sep = str(args[1])
+                return s.split(sep)
+            except (IndexError, ValueError):
+                self._raise_error("Invalid arguments for split")
+
+        if op == 'to_str':
+            # args: [val]
+            try:
+                return str(args[0])
+            except IndexError:
+                self._raise_error("Invalid arguments for to_str")
+
+        if op == 'to_int':
+            # args: [val]
+            try:
+                return int(args[0])
+            except (IndexError, ValueError):
+                self._raise_error("Invalid arguments for to_int")
+
+        if op == 'now':
+            # args: []
+            return int(time.time())
 
         # Fallback or Error
         self._raise_error(f"Unknown operation: {op}")
