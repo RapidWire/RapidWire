@@ -216,6 +216,7 @@ class Compiler:
                 'transfer_from', 'get_allowance', 'get_currency', 'get_transaction',
                 'create_claim', 'pay_claim', 'cancel_claim', 'execute',
                 'discord_send', 'discord_role_add', 'has_role', 'length',
+                'split', 'to_str', 'to_int', 'now',
             ]
 
             op_obj = {

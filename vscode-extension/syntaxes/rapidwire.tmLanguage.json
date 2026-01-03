@@ -108,7 +108,7 @@
 		},
 		"sdk-functions": {
 			"name": "support.function.rapidwire",
-			"match": "\\b(output|transfer|cancel|exit|sha256|random|get_balance|concat|approve|transfer_from|get_currency|get_transaction|create_claim|pay_claim|cancel_claim|execute|discord_send|discord_role_add|length)\\b"
+			"match": "\\b(output|transfer|cancel|exit|sha256|random|get_balance|concat|approve|transfer_from|get_currency|get_transaction|create_claim|pay_claim|cancel_claim|execute|discord_send|discord_role_add|length|split|to_str|to_int|now)\\b"
 		},
 		"function-calls": {
 			"match": "\\b([a-zA-Z_]\\w*)\\s*\\(",
