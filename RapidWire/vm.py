@@ -2,6 +2,7 @@ from typing import Any, List, Dict, Optional, TYPE_CHECKING
 import asyncio
 import hashlib
 import random
+import time
 from .exceptions import ContractError, TransactionCanceledByContract
 
 if TYPE_CHECKING:
@@ -312,6 +313,33 @@ class RapidWireVM:
                 return obj[start:stop:step]
             except (TypeError, IndexError):
                 self._raise_error("Invalid arguments for slice")
+
+        if op == 'split':
+            # args: [string, separator]
+            try:
+                s = str(args[0])
+                sep = str(args[1])
+                return s.split(sep)
+            except (IndexError, ValueError):
+                self._raise_error("Invalid arguments for split")
+
+        if op == 'to_str':
+            # args: [val]
+            try:
+                return str(args[0])
+            except IndexError:
+                self._raise_error("Invalid arguments for to_str")
+
+        if op == 'to_int':
+            # args: [val]
+            try:
+                return int(args[0])
+            except (IndexError, ValueError):
+                self._raise_error("Invalid arguments for to_int")
+
+        if op == 'now':
+            # args: []
+            return int(time.time())
 
         # Fallback or Error
         self._raise_error(f"Unknown operation: {op}")
