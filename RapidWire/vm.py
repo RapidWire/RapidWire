@@ -33,7 +33,7 @@ class RapidWireVM:
             if name in ['_sender', '_self', '_input']:
                  self._raise_error(f"Cannot overwrite system variable '{name}'.")
 
-            if isinstance(value, (int, float)):
+            if isinstance(value, int):
                 if abs(value) > 10**30:
                     self._raise_error(f"Variable '{name}' exceeded numeric limit.")
             elif isinstance(value, str):
@@ -85,25 +85,15 @@ class RapidWireVM:
             return None
 
     def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
-        # Helper to ensure numbers
-        def to_num(x):
-            try:
-                return int(x)
-            except (ValueError, TypeError):
-                try:
-                    return float(x)
-                except (ValueError, TypeError):
-                    return 0
-
         # A. Calculation & Logic
-        if op == 'add': return to_num(args[0]) + to_num(args[1])
-        if op == 'sub': return to_num(args[0]) - to_num(args[1])
-        if op == 'mul': return to_num(args[0]) * to_num(args[1])
-        if op == 'div': return to_num(args[0]) // to_num(args[1])
-        if op == 'mod': return to_num(args[0]) % to_num(args[1])
+        if op == 'add': return int(args[0]) + int(args[1])
+        if op == 'sub': return int(args[0]) - int(args[1])
+        if op == 'mul': return int(args[0]) * int(args[1])
+        if op == 'div': return int(args[0]) // int(args[1])
+        if op == 'mod': return int(args[0]) % int(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
         if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
-        if op == 'gt': return 1 if to_num(args[0]) > to_num(args[1]) else 0
+        if op == 'gt': return 1 if int(args[0]) > int(args[1]) else 0
         if op == 'set': return args[0]
 
         # B. Flow Control
