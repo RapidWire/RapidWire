@@ -335,6 +335,45 @@ export const sdkDefs = {
       ],
       "returnType": "int",
       "doc": ""
+    },
+    {
+      "name": "split",
+      "args": [
+        {
+          "name": "separator",
+          "type": "str"
+        }
+      ],
+      "returnType": "list[str]",
+      "doc": ""
+    },
+    {
+      "name": "to_str",
+      "args": [
+        {
+          "name": "val",
+          "type": "int"
+        }
+      ],
+      "returnType": "str",
+      "doc": ""
+    },
+    {
+      "name": "to_int",
+      "args": [
+        {
+          "name": "val",
+          "type": "str"
+        }
+      ],
+      "returnType": "int",
+      "doc": ""
+    },
+    {
+      "name": "now",
+      "args": [],
+      "returnType": "int",
+      "doc": ""
     }
   ],
   "classes": [
