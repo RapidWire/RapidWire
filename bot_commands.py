@@ -5,6 +5,7 @@ import io
 from decimal import Decimal
 from time import time
 from datetime import datetime
+import hashlib
 
 import config
 from RapidWire import RapidWire, exceptions, structs
@@ -624,10 +625,11 @@ async def contract_get(interaction: discord.Interaction, user: Optional[User] = 
     target_user = user or interaction.user
     contract = Rapid.Contracts.get(target_user.id)
     if contract and contract.script:
-        file = File(io.BytesIO(contract.script.encode('utf-8')), filename=f"contract-{target_user.id}.py")
+        script_hash = hashlib.sha256(contract.script.encode('utf-8')).hexdigest()
+        file = File(io.BytesIO(contract.script.encode('utf-8')), filename=f"contract-{target_user.id}-{script_hash[:6]}.py")
 
         fields = [
-            EmbedField("ユーザー", {target_user.mention}, False),
+            EmbedField("ユーザー", target_user.mention, False),
             EmbedField("計算されたコスト", f"`{contract.cost}`", False),
             EmbedField("設定された最大コスト", f"`{contract.max_cost}`" if contract.max_cost > 0 else "無制限", False)
         ]
