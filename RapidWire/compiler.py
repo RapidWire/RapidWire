@@ -64,6 +64,134 @@ class Compiler:
             }
             instrs.append(if_op)
 
+        elif isinstance(stmt, ast.While):
+            # While loop
+            # Check condition
+            # Since VM's 'while' op re-evaluates the condition variable,
+            # we need to ensure the condition evaluation instructions are part of the loop body
+            # OR the condition is simple enough (single variable).
+
+            # If condition is an expression (e.g. i < 10), we need to:
+            # 1. Evaluate it once before loop.
+            # 2. Re-evaluate it at the end of loop body.
+
+            cond_var, cond_instrs = self._process_expr(stmt.test)
+
+            # Initial evaluation instructions
+            instrs.extend(cond_instrs)
+
+            # Body instructions
+            body_instrs = self._process_block(stmt.body)
+
+            # Re-evaluate condition at the end of body
+            # We need to reuse the same output variable 'cond_var' so the while loop checks it.
+            # Rerun the expression processing, but targeting cond_var.
+            _, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
+            body_instrs.extend(recheck_instrs)
+
+            while_op = {
+                "op": "while",
+                "args": [cond_var],
+                "body": body_instrs
+            }
+            instrs.append(while_op)
+
+        elif isinstance(stmt, ast.For):
+            # For loop
+            # Supports: for i in range(start, stop, step)
+
+            target = stmt.target
+            iter_node = stmt.iter
+
+            if not isinstance(target, ast.Name):
+                raise ValueError("For loop target must be a variable")
+
+            loop_var = self._map_var(target.id)
+
+            if isinstance(iter_node, ast.Call) and isinstance(iter_node.func, ast.Name) and iter_node.func.id == 'range':
+                args = iter_node.args
+
+                start_val = 0
+                step_val = 1
+                stop_val = 0
+
+                # range(stop)
+                if len(args) == 1:
+                    stop_expr = args[0]
+                    start_expr = ast.Constant(value=0)
+                    step_expr = ast.Constant(value=1)
+                # range(start, stop)
+                elif len(args) == 2:
+                    start_expr = args[0]
+                    stop_expr = args[1]
+                    step_expr = ast.Constant(value=1)
+                # range(start, stop, step)
+                elif len(args) == 3:
+                    start_expr = args[0]
+                    stop_expr = args[1]
+                    step_expr = args[2]
+                else:
+                    raise ValueError("Invalid arguments for range")
+
+                # Init loop var: i = start
+                start_res, start_instrs = self._process_expr(start_expr, target_var=loop_var)
+                instrs.extend(start_instrs)
+                if start_res != loop_var:
+                     instrs.append({"op": "set", "args": [start_res], "out": loop_var})
+
+                # Prepare condition: i < stop (assuming step > 0) or i > stop (step < 0)
+                # Complex step handling is hard statically. Assuming positive step for basic case,
+                # or we can try to evaluate step if constant.
+
+                # Let's handle dynamic step check? Too complex for JSON VM maybe.
+                # Simplification: Assume step is positive for i < stop.
+                # Users should use while for complex logic.
+
+                # Construct condition: loop_var < stop_expr
+                # We need to manually construct the AST node for comparison to reuse _process_expr
+                compare_node = ast.Compare(
+                    left=ast.Name(id=target.id, ctx=ast.Load()),
+                    ops=[ast.Lt()],
+                    comparators=[stop_expr]
+                )
+
+                # Generate while loop
+                cond_var, cond_instrs = self._process_expr(compare_node)
+                instrs.extend(cond_instrs)
+
+                body_instrs = self._process_block(stmt.body)
+
+                # Increment: i = i + step
+                # i += step
+                aug_assign = ast.AugAssign(
+                    target=ast.Name(id=target.id, ctx=ast.Store()),
+                    op=ast.Add(),
+                    value=step_expr
+                )
+                # We don't have _process_stmt for AugAssign implemented, let's implement manually here or via binop
+                step_res, step_instrs = self._process_expr(step_expr)
+                body_instrs.extend(step_instrs)
+
+                # add i, step -> i
+                body_instrs.append({
+                    "op": "add",
+                    "args": [loop_var, step_res],
+                    "out": loop_var
+                })
+
+                # Re-evaluate condition
+                _, recheck_instrs = self._process_expr(compare_node, target_var=cond_var)
+                body_instrs.extend(recheck_instrs)
+
+                instrs.append({
+                    "op": "while",
+                    "args": [cond_var],
+                    "body": body_instrs
+                })
+
+            else:
+                 raise ValueError("For loop only supports range()")
+
         elif isinstance(stmt, ast.Assign):
             # Handle assignment
             # target = value

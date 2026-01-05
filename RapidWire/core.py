@@ -32,22 +32,7 @@ from .exceptions import (
     TimeLockNotExpired,
     RequestExpired
 )
-
-SYSTEM_USER_ID = 0
-SECONDS_IN_A_DAY = 86400
-CONTRACT_OP_COSTS = {
-    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
-    'if': 1, 'exit': 0, 'cancel': 0,
-    'transfer': 10, 'get_balance': 1, 'output': 1,
-    'store_get': 1, 'store_set': 3,
-    'approve': 3, 'transfer_from': 10,
-    'get_currency': 1, 'get_transaction': 2, 'attr': 0,
-    'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
-    'execute': 15,
-    'discord_send': 5, 'discord_role_add': 10,
-    'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
-    'get_allowance': 1,
-}
+from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY
 
 
 class ContractAPI:
@@ -225,6 +210,12 @@ class ContractAPI:
         except Exception as e:
             print(f"Error adding role: {e}")
             return False
+
+    def add_cost(self, op: str):
+        cost = CONTRACT_OP_COSTS.get(op, 0)
+        self.chain_context.total_cost += cost
+        if self.chain_context.total_cost > self.chain_context.budget:
+            raise ContractError("Execution budget exceeded.")
 
     def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
         if not self.core.Config.Discord.token:
