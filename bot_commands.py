@@ -342,7 +342,7 @@ async def history(
 currency_group = app_commands.Group(name="currency", description="通貨に関連するコマンド")
 
 @currency_group.command(name="create", description="このサーバーに新しい通貨を発行します。")
-@app_commands.describe(name="通貨の名前", symbol="通貨のシンボル", supply="初期供給量", hourly_interest_rate="ステーキングの時利(%)")
+@app_commands.describe(name="通貨の名前", symbol="通貨のシンボル", supply="初期供給量", hourly_interest_rate="ステーキングの利率(%/hour)")
 async def currency_create(interaction: discord.Interaction, name: str, symbol: str, supply: float, hourly_interest_rate: float = 0.0):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -355,7 +355,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
         desc = f"新しい通貨 **{new_currency.name} ({new_currency.symbol})** が発行されました。"
         fields = [
             EmbedField("総供給量", f"`{format_amount(new_currency.supply)}`", False),
-            EmbedField("ステーキングの時利", f"`{hourly_interest_rate:.4f}%`", False)
+            EmbedField("ステーキングの利率", f"`{hourly_interest_rate:.4f}%/h`", False)
         ]
         if tx:
             fields.append(EmbedField("初期供給の転送ID", f"`{tx.transfer_id}`", False))
@@ -381,9 +381,9 @@ async def currency_info(interaction: discord.Interaction, symbol: Optional[str] 
     embed.add_field(name="発行サーバーID (通貨ID)", value=f"`{currency.currency_id}`", inline=False)
     embed.add_field(name="発行者", value=issuer.mention, inline=False)
     embed.add_field(name="総供給量", value=f"`{format_amount(currency.supply)}`", inline=False)
-    embed.add_field(name="ステーキング時利", value=f"`{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%`", inline=False)
+    embed.add_field(name="ステーキング利率", value=f"`{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/h`", inline=False)
     if currency.new_hourly_interest_rate and currency.rate_change_requested_at:
-        embed.add_field(name="次期ステーキング時利", value=f"`{Decimal(currency.new_hourly_interest_rate) / Decimal(100):.4f}%`", inline=False)
+        embed.add_field(name="次期ステーキング利率", value=f"`{Decimal(currency.new_hourly_interest_rate) / Decimal(100):.4f}%/h`", inline=False)
         embed.add_field(name="利率変更要求日時", value=f"<t:{currency.rate_change_requested_at}:F>", inline=True)
 
     embed.add_field(name="Mint/利率変更 放棄状態", value="はい" if currency.minting_renounced else "いいえ", inline=True)
@@ -488,7 +488,7 @@ async def currency_delete(interaction: discord.Interaction):
         await interaction.followup.send(embed=create_error_embed(str(e)))
 
 @currency_group.command(name="request-interest-change", description="[管理者] ステーキングの時利変更を予約します。")
-@app_commands.describe(rate="新しい時利 (%)")
+@app_commands.describe(rate="新しい利率 (%/hour)")
 async def currency_request_interest_change(interaction: discord.Interaction, rate: float):
     await interaction.response.defer(thinking=True)
     if not interaction.guild: return
@@ -500,7 +500,7 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
         timelock_seconds = Rapid.Config.Staking.rate_change_timelock
         apply_time = int(time()) + timelock_seconds
 
-        desc = (f"ステーキングの時利を`{rate:.4f}%`に変更するリクエストを受け付けました。\n"
+        desc = (f"ステーキングの利率を`{rate:.4f}%/hour`に変更するリクエストを受け付けました。\n"
                 f"この変更は <t:{apply_time}:F> (<t:{apply_time}:R>) 以降に適用可能になります。")
         await interaction.followup.send(embed=create_success_embed(desc, "利率変更予約完了"))
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
@@ -515,7 +515,7 @@ async def currency_apply_interest_change(interaction: discord.Interaction):
 
     try:
         currency = Rapid.apply_interest_rate_change(interaction.guild.id, interaction.user.id)
-        desc = f"ステーキングの時利が `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%` に正常に更新されました。"
+        desc = f"ステーキングの利率が `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/hour` に正常に更新されました。"
         await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
@@ -584,7 +584,7 @@ async def stake_info(interaction: discord.Interaction):
 
         field_name = f"通貨: **{currency.name} ({currency.symbol})**"
         field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
-                       f"現在の時利: `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%`\n"
+                       f"現在の利率: `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/h`\n"
                        f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
         
