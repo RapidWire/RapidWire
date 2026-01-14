@@ -111,42 +111,14 @@ class RapidWireVM:
             return None
 
         if op == 'while':
-            # while needs to re-evaluate condition each time.
-            # but in the current JSON format, args are pre-resolved in _execute_block before calling _execute_op.
-            # This is a problem for loop condition which usually depends on variables.
-            # We need to manually handle args/condition evaluation inside the loop.
-
-            # The 'args' passed here contains the *current* value of the condition variable (resolved once).
-            # If the condition is a variable name, we need to re-read it from self.vars.
-
-            # Convention: args[0] is the condition variable name (or value).
-            # We should probably look at cmd['args'][0] to see if it's a variable reference.
-
             raw_cond = cmd.get('args', [])[0]
             body = cmd.get('body', [])
-
-            # Initial check (using the already resolved arg is fine for first iteration,
-            # but to be consistent let's resolve in loop)
-
-            # Limit loop iterations to prevent total freeze if cost is 0 (though cost>0 prevents infinite)
-            # but we rely on gas.
-
             while True:
-                # Re-evaluate condition
                 cond_val = self._resolve_arg(raw_cond)
                 if not cond_val:
                     break
-
-                # Execute body
                 self._execute_block(body)
-
-                # Charge for the 'while' op itself again?
-                # _execute_block charges for instructions inside.
-                # But the 'while' check itself costs something.
-                # In _execute_block, we charged once for entering.
-                # Here we loop. Should we charge for loop overhead?
                 self.api.add_cost('while')
-
             return None
 
         if op == 'exit':
