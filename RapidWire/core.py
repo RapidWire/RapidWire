@@ -32,22 +32,7 @@ from .exceptions import (
     TimeLockNotExpired,
     RequestExpired
 )
-
-SYSTEM_USER_ID = 0
-SECONDS_IN_A_DAY = 86400
-CONTRACT_OP_COSTS = {
-    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
-    'if': 1, 'exit': 0, 'cancel': 0,
-    'transfer': 10, 'get_balance': 1, 'output': 1,
-    'store_get': 1, 'store_set': 3,
-    'approve': 3, 'transfer_from': 10,
-    'get_currency': 1, 'get_transaction': 2, 'attr': 0,
-    'create_claim': 3, 'pay_claim': 5, 'cancel_claim': 2,
-    'execute': 15,
-    'discord_send': 5, 'discord_role_add': 10,
-    'swap': 20, 'add_liquidity': 15, 'remove_liquidity': 15,
-    'get_allowance': 1,
-}
+from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY, SECONDS_IN_AN_HOUR, INTEREST_RATE_SCALE
 
 
 class ContractAPI:
@@ -226,6 +211,12 @@ class ContractAPI:
             print(f"Error adding role: {e}")
             return False
 
+    def add_cost(self, op: str):
+        cost = CONTRACT_OP_COSTS.get(op, 0)
+        self.chain_context.total_cost += cost
+        if self.chain_context.total_cost > self.chain_context.budget:
+            raise ContractError("Execution budget exceeded.")
+
     def has_role(self, guild_id: int, user_id: int, role_id: int) -> bool:
         if not self.core.Config.Discord.token:
             return False
@@ -281,17 +272,17 @@ class RapidWire:
             return None
 
         currency = self.Currencies.get(currency_id)
-        if not currency or currency.daily_interest_rate <= 0:
+        if not currency or currency.hourly_interest_rate <= 0:
             return stake
 
         current_time = int(time())
         elapsed_seconds = current_time - stake.last_updated_at
-        if elapsed_seconds <= SECONDS_IN_A_DAY:
+        if elapsed_seconds <= SECONDS_IN_AN_HOUR:
             return stake
 
-        days_passed = elapsed_seconds // SECONDS_IN_A_DAY
-        daily_rate = Decimal(currency.daily_interest_rate) / Decimal(10000)
-        reward = int(Decimal(stake.amount) * (Decimal(1) + daily_rate)**Decimal(days_passed) - Decimal(stake.amount))
+        hours_passed = elapsed_seconds // SECONDS_IN_AN_HOUR
+        hourly_rate = Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE)
+        reward = int(Decimal(stake.amount) * (Decimal(1) + hourly_rate)**Decimal(hours_passed) - Decimal(stake.amount))
 
         if reward > 0:
             new_amount = stake.amount + reward
@@ -366,7 +357,8 @@ class RapidWire:
             chain_context = ChainContext(
                 total_cost=contract.cost,
                 budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost,
-                depth=0
+                depth=0,
+                executing_contracts=set()
             )
             created_context = True
 
@@ -379,6 +371,11 @@ class RapidWire:
             # Note: The caller (ContractAPI) has already added this contract's cost to chain_context.total_cost
 
         try:
+            # Reentrancy Check
+            if contract_owner_id in chain_context.executing_contracts:
+                raise ContractError("Reentrancy is not allowed.")
+            chain_context.executing_contracts.add(contract_owner_id)
+
             with self.db as cursor:
                 # We need to re-fetch/attach context if necessary, but we are in the same instance
                 # Note: The previous block committed the gas deduction and execution record creation.
@@ -456,8 +453,10 @@ class RapidWire:
             raise e
 
         finally:
-            if not created_context and chain_context:
-                chain_context.depth -= 1
+            if chain_context:
+                chain_context.executing_contracts.discard(contract_owner_id)
+                if not created_context:
+                    chain_context.depth -= 1
 
     def transfer(
         self,
@@ -501,7 +500,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, hourly_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]$', name) and not re.match(r'^[a-zA-Z]$', name):
              raise ValueError("Names must start with a letter, end with an alphanumeric character, and contain only alphanumeric characters and underscores.")
         if name.count('_') > 5:
@@ -517,7 +516,7 @@ class RapidWire:
         if symbol.startswith('-') or symbol.endswith('-'):
             raise ValueError("Symbols cannot start or end with a hyphen.")
 
-        new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
+        new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, hourly_interest_rate)
 
         initial_tx = None
         if supply > 0:
@@ -714,7 +713,7 @@ class RapidWire:
         if currency.issuer_id != user_id:
             raise PermissionError("Only the issuer can apply interest rate changes.")
 
-        if currency.rate_change_requested_at is None or currency.new_daily_interest_rate is None:
+        if currency.rate_change_requested_at is None or currency.new_hourly_interest_rate is None:
             raise ValueError("No interest rate change is pending.")
 
         # Check if the timelock period has passed (e.g., 7 days)

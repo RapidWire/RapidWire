@@ -410,11 +410,11 @@ export const sdkDefs = {
           "type": "Optional[int]"
         },
         {
-          "name": "daily_interest_rate",
+          "name": "hourly_interest_rate",
           "type": "int"
         },
         {
-          "name": "new_daily_interest_rate",
+          "name": "new_hourly_interest_rate",
           "type": "Optional[int]"
         },
         {

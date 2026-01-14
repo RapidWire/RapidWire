@@ -4,6 +4,7 @@ import hashlib
 import random
 import time
 from .exceptions import ContractError, TransactionCanceledByContract
+from .constants import CONTRACT_OP_COSTS
 
 if TYPE_CHECKING:
     from .core import ContractAPI
@@ -63,6 +64,9 @@ class RapidWireVM:
             op = cmd.get('op')
             self.current_op = op
 
+            # Dynamic Cost Check
+            self.api.add_cost(op)
+
             raw_args = cmd.get('args', [])
             args = [self._resolve_arg(a) for a in raw_args]
             out = cmd.get('out')
@@ -104,6 +108,17 @@ class RapidWireVM:
                 self._execute_block(cmd.get('then', []))
             else:
                 self._execute_block(cmd.get('else', []))
+            return None
+
+        if op == 'while':
+            raw_cond = cmd.get('args', [])[0]
+            body = cmd.get('body', [])
+            while True:
+                cond_val = self._resolve_arg(raw_cond)
+                if not cond_val:
+                    break
+                self._execute_block(body)
+                self.api.add_cost('while')
             return None
 
         if op == 'exit':

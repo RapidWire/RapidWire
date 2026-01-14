@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_serializer
-from typing import Optional, Literal
+from typing import Optional, Literal, Set
 from decimal import Decimal
 
 class Currency(BaseModel):
@@ -10,8 +10,8 @@ class Currency(BaseModel):
     supply: int
     minting_renounced: bool
     delete_requested_at: Optional[int] = None
-    daily_interest_rate: int
-    new_daily_interest_rate: Optional[int] = None
+    hourly_interest_rate: int
+    new_hourly_interest_rate: Optional[int] = None
     rate_change_requested_at: Optional[int] = None
 
     @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')
@@ -145,6 +145,7 @@ class ChainContext(BaseModel):
     total_cost: int
     budget: int
     depth: int = 0
+    executing_contracts: Set[int] = Field(default_factory=set)
 
 class LiquidityPool(BaseModel):
     pool_id: int

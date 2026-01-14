@@ -76,8 +76,8 @@ CREATE TABLE `currency` (
   `supply` decimal(24, 0) NOT NULL,
   `minting_renounced` tinyint(1) NOT NULL DEFAULT '0',
   `delete_requested_at` bigint UNSIGNED DEFAULT NULL,
-  `daily_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
-  `new_daily_interest_rate` int UNSIGNED DEFAULT NULL,
+  `hourly_interest_rate` int UNSIGNED NOT NULL DEFAULT '0',
+  `new_hourly_interest_rate` int UNSIGNED DEFAULT NULL,
   `rate_change_requested_at` bigint UNSIGNED DEFAULT NULL,
   CHECK (`supply` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

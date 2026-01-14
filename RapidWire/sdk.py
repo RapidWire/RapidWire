@@ -16,8 +16,8 @@ class Currency:
     supply: int
     minting_renounced: bool
     delete_requested_at: Optional[int]
-    daily_interest_rate: int
-    new_daily_interest_rate: Optional[int]
+    hourly_interest_rate: int
+    new_hourly_interest_rate: Optional[int]
     rate_change_requested_at: Optional[int]
 
 class Transaction:

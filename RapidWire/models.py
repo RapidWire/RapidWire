@@ -74,12 +74,12 @@ class CurrencyModel:
             results = cursor.fetchall()
             return [Balance(**row) for row in results]
 
-    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Currency:
+    def create(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, hourly_interest_rate: int) -> Currency:
         try:
             with self.db as cursor:
                 cursor.execute(
-                    "INSERT INTO currency (currency_id, name, symbol, issuer, supply, daily_interest_rate) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (guild_id, name, symbol, issuer_id, supply, daily_interest_rate)
+                    "INSERT INTO currency (currency_id, name, symbol, issuer, supply, hourly_interest_rate) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (guild_id, name, symbol, issuer_id, supply, hourly_interest_rate)
                 )
             return self.get(currency_id=guild_id)
         except mysql.connector.errors.IntegrityError:
@@ -120,7 +120,7 @@ class CurrencyModel:
     def request_rate_change(self, currency_id: int, new_rate: int) -> Optional[Currency]:
         with self.db as cursor:
             cursor.execute(
-                "UPDATE currency SET new_daily_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",
+                "UPDATE currency SET new_hourly_interest_rate = %s, rate_change_requested_at = %s WHERE currency_id = %s",
                 (new_rate, int(time()), currency_id)
             )
             if cursor.rowcount == 0: return None
@@ -129,8 +129,8 @@ class CurrencyModel:
     def apply_rate_change(self, currency: Currency) -> Optional[Currency]:
         with self.db as cursor:
             cursor.execute(
-                "UPDATE currency SET daily_interest_rate = %s, new_daily_interest_rate = NULL, rate_change_requested_at = NULL WHERE currency_id = %s",
-                (currency.new_daily_interest_rate, currency.currency_id)
+                "UPDATE currency SET hourly_interest_rate = %s, new_hourly_interest_rate = NULL, rate_change_requested_at = NULL WHERE currency_id = %s",
+                (currency.new_hourly_interest_rate, currency.currency_id)
             )
             if cursor.rowcount == 0: return None
         return self.get(currency.currency_id)
