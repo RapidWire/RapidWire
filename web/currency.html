@@ -246,7 +246,7 @@
                       <dd class="md:col-span-2 font-mono text-slate-900">${formatAmount(currency.supply, networkDecimals)} ${currency.symbol}</dd>
 
                       <dt class="text-sm font-medium text-slate-500">Staking Rate (Hourly)</dt>
-                      <dd class="md:col-span-2 font-mono text-slate-900">${(currency.hourly_interest_rate / 100).toFixed(4)} %</dd>
+                      <dd class="md:col-span-2 font-mono text-slate-900">${(currency.hourly_interest_rate / 10000).toFixed(4)} %</dd>
 
                       <dt class="text-sm font-medium text-slate-500">Minting Renounced</dt>
                       <dd class="md:col-span-2 text-slate-900">${currency.minting_renounced ?

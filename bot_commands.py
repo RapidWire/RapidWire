@@ -9,6 +9,7 @@ import hashlib
 
 import config
 from RapidWire import RapidWire, exceptions, structs
+from RapidWire.constants import INTEREST_RATE_SCALE
 
 Rapid = RapidWire(db_config=config.MySQL.to_dict())
 Rapid.Config = config.RapidWireConfig
@@ -348,7 +349,8 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
     if not interaction.guild: return
     try:
         int_supply = int(Decimal(str(supply)) * (10**Rapid.Config.decimal_places))
-        rate_bps = int(Decimal(str(hourly_interest_rate)) * 100)
+        # Rate is percentage, so multiply by (INTEREST_RATE_SCALE / 100)
+        rate_bps = int(Decimal(str(hourly_interest_rate)) * (INTEREST_RATE_SCALE // 100))
         
         new_currency, tx = Rapid.create_currency(interaction.guild.id, name, symbol.upper(), int_supply, interaction.user.id, rate_bps)
         
@@ -381,9 +383,9 @@ async def currency_info(interaction: discord.Interaction, symbol: Optional[str] 
     embed.add_field(name="発行サーバーID (通貨ID)", value=f"`{currency.currency_id}`", inline=False)
     embed.add_field(name="発行者", value=issuer.mention, inline=False)
     embed.add_field(name="総供給量", value=f"`{format_amount(currency.supply)}`", inline=False)
-    embed.add_field(name="ステーキング利率", value=f"`{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/h`", inline=False)
+    embed.add_field(name="ステーキング利率", value=f"`{Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE // 100):.4f}%/h`", inline=False)
     if currency.new_hourly_interest_rate and currency.rate_change_requested_at:
-        embed.add_field(name="次期ステーキング利率", value=f"`{Decimal(currency.new_hourly_interest_rate) / Decimal(100):.4f}%/h`", inline=False)
+        embed.add_field(name="次期ステーキング利率", value=f"`{Decimal(currency.new_hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE // 100):.4f}%/h`", inline=False)
         embed.add_field(name="利率変更要求日時", value=f"<t:{currency.rate_change_requested_at}:F>", inline=True)
 
     embed.add_field(name="Mint/利率変更 放棄状態", value="はい" if currency.minting_renounced else "いいえ", inline=True)
@@ -494,7 +496,8 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
     if not interaction.guild: return
     
     try:
-        new_rate_bps = int(Decimal(str(rate)) * 100)
+        # Rate is percentage, so multiply by (INTEREST_RATE_SCALE / 100)
+        new_rate_bps = int(Decimal(str(rate)) * (INTEREST_RATE_SCALE // 100))
         currency = Rapid.request_interest_rate_change(interaction.guild.id, new_rate_bps, interaction.user.id)
 
         timelock_seconds = Rapid.Config.Staking.rate_change_timelock
@@ -515,7 +518,7 @@ async def currency_apply_interest_change(interaction: discord.Interaction):
 
     try:
         currency = Rapid.apply_interest_rate_change(interaction.guild.id, interaction.user.id)
-        desc = f"ステーキングの利率が `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/hour` に正常に更新されました。"
+        desc = f"ステーキングの利率が `{Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE // 100):.4f}%/hour` に正常に更新されました。"
         await interaction.followup.send(embed=create_success_embed(desc, "利率変更適用完了"))
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
@@ -584,7 +587,7 @@ async def stake_info(interaction: discord.Interaction):
 
         field_name = f"通貨: **{currency.name} ({currency.symbol})**"
         field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
-                       f"現在の利率: `{Decimal(currency.hourly_interest_rate) / Decimal(100):.4f}%/h`\n"
+                       f"現在の利率: `{Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE // 100):.4f}%/h`\n"
                        f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
         

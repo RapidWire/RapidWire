@@ -32,7 +32,7 @@ from .exceptions import (
     TimeLockNotExpired,
     RequestExpired
 )
-from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY, SECONDS_IN_AN_HOUR
+from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY, SECONDS_IN_AN_HOUR, INTEREST_RATE_SCALE
 
 
 class ContractAPI:
@@ -281,7 +281,7 @@ class RapidWire:
             return stake
 
         hours_passed = elapsed_seconds // SECONDS_IN_AN_HOUR
-        hourly_rate = Decimal(currency.hourly_interest_rate) / Decimal(10000)
+        hourly_rate = Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE)
         reward = int(Decimal(stake.amount) * (Decimal(1) + hourly_rate)**Decimal(hours_passed) - Decimal(stake.amount))
 
         if reward > 0:
