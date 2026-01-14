@@ -357,7 +357,8 @@ class RapidWire:
             chain_context = ChainContext(
                 total_cost=contract.cost,
                 budget=contract.max_cost if contract.max_cost > 0 else self.Config.Contract.max_cost,
-                depth=0
+                depth=0,
+                executing_contracts=set()
             )
             created_context = True
 
@@ -370,6 +371,11 @@ class RapidWire:
             # Note: The caller (ContractAPI) has already added this contract's cost to chain_context.total_cost
 
         try:
+            # Reentrancy Check
+            if contract_owner_id in chain_context.executing_contracts:
+                raise ContractError("Reentrancy is not allowed.")
+            chain_context.executing_contracts.add(contract_owner_id)
+
             with self.db as cursor:
                 # We need to re-fetch/attach context if necessary, but we are in the same instance
                 # Note: The previous block committed the gas deduction and execution record creation.
@@ -447,8 +453,10 @@ class RapidWire:
             raise e
 
         finally:
-            if not created_context and chain_context:
-                chain_context.depth -= 1
+            if chain_context:
+                chain_context.executing_contracts.discard(contract_owner_id)
+                if not created_context:
+                    chain_context.depth -= 1
 
     def transfer(
         self,

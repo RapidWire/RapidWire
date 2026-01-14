@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_serializer
-from typing import Optional, Literal
+from typing import Optional, Literal, Set
 from decimal import Decimal
 
 class Currency(BaseModel):
@@ -145,6 +145,7 @@ class ChainContext(BaseModel):
     total_cost: int
     budget: int
     depth: int = 0
+    executing_contracts: Set[int] = Field(default_factory=set)
 
 class LiquidityPool(BaseModel):
     pool_id: int
