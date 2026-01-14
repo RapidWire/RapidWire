@@ -32,7 +32,7 @@ from .exceptions import (
     TimeLockNotExpired,
     RequestExpired
 )
-from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY
+from .constants import CONTRACT_OP_COSTS, SYSTEM_USER_ID, SECONDS_IN_A_DAY, SECONDS_IN_AN_HOUR
 
 
 class ContractAPI:
@@ -272,17 +272,17 @@ class RapidWire:
             return None
 
         currency = self.Currencies.get(currency_id)
-        if not currency or currency.daily_interest_rate <= 0:
+        if not currency or currency.hourly_interest_rate <= 0:
             return stake
 
         current_time = int(time())
         elapsed_seconds = current_time - stake.last_updated_at
-        if elapsed_seconds <= SECONDS_IN_A_DAY:
+        if elapsed_seconds <= SECONDS_IN_AN_HOUR:
             return stake
 
-        days_passed = elapsed_seconds // SECONDS_IN_A_DAY
-        daily_rate = Decimal(currency.daily_interest_rate) / Decimal(10000)
-        reward = int(Decimal(stake.amount) * (Decimal(1) + daily_rate)**Decimal(days_passed) - Decimal(stake.amount))
+        hours_passed = elapsed_seconds // SECONDS_IN_AN_HOUR
+        hourly_rate = Decimal(currency.hourly_interest_rate) / Decimal(10000)
+        reward = int(Decimal(stake.amount) * (Decimal(1) + hourly_rate)**Decimal(hours_passed) - Decimal(stake.amount))
 
         if reward > 0:
             new_amount = stake.amount + reward
@@ -492,7 +492,7 @@ class RapidWire:
         except mysql.connector.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, daily_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
+    def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, hourly_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]$', name) and not re.match(r'^[a-zA-Z]$', name):
              raise ValueError("Names must start with a letter, end with an alphanumeric character, and contain only alphanumeric characters and underscores.")
         if name.count('_') > 5:
@@ -508,7 +508,7 @@ class RapidWire:
         if symbol.startswith('-') or symbol.endswith('-'):
             raise ValueError("Symbols cannot start or end with a hyphen.")
 
-        new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, daily_interest_rate)
+        new_currency = self.Currencies.create(guild_id, name, symbol, 0, issuer_id, hourly_interest_rate)
 
         initial_tx = None
         if supply > 0:
@@ -705,7 +705,7 @@ class RapidWire:
         if currency.issuer_id != user_id:
             raise PermissionError("Only the issuer can apply interest rate changes.")
 
-        if currency.rate_change_requested_at is None or currency.new_daily_interest_rate is None:
+        if currency.rate_change_requested_at is None or currency.new_hourly_interest_rate is None:
             raise ValueError("No interest rate change is pending.")
 
         # Check if the timelock period has passed (e.g., 7 days)
