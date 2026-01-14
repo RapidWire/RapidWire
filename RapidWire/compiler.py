@@ -66,10 +66,6 @@ class Compiler:
 
         elif isinstance(stmt, ast.While):
             # While loop
-            # Check condition
-            # Since VM's 'while' op re-evaluates the condition variable,
-            # we need to ensure the condition evaluation instructions are part of the loop body
-            # OR the condition is simple enough (single variable).
 
             # If condition is an expression (e.g. i < 10), we need to:
             # 1. Evaluate it once before loop.
