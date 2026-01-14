@@ -64,6 +64,34 @@ class Compiler:
             }
             instrs.append(if_op)
 
+        elif isinstance(stmt, ast.While):
+            # While loop
+
+            # If condition is an expression (e.g. i < 10), we need to:
+            # 1. Evaluate it once before loop.
+            # 2. Re-evaluate it at the end of loop body.
+
+            cond_var, cond_instrs = self._process_expr(stmt.test)
+
+            # Initial evaluation instructions
+            instrs.extend(cond_instrs)
+
+            # Body instructions
+            body_instrs = self._process_block(stmt.body)
+
+            # Re-evaluate condition at the end of body
+            # We need to reuse the same output variable 'cond_var' so the while loop checks it.
+            # Rerun the expression processing, but targeting cond_var.
+            _, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
+            body_instrs.extend(recheck_instrs)
+
+            while_op = {
+                "op": "while",
+                "args": [cond_var],
+                "body": body_instrs
+            }
+            instrs.append(while_op)
+
         elif isinstance(stmt, ast.Assign):
             # Handle assignment
             # target = value

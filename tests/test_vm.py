@@ -2,11 +2,23 @@ import unittest
 import time
 from unittest.mock import MagicMock
 from RapidWire.vm import RapidWireVM, StopExecution
-from RapidWire.exceptions import TransactionCanceledByContract
+from RapidWire.exceptions import TransactionCanceledByContract, ContractError
+from RapidWire.structs import ChainContext
 
 class TestRapidWireVM(unittest.TestCase):
     def setUp(self):
         self.api = MagicMock()
+        self.chain_context = ChainContext(total_cost=0, budget=100)
+        self.api.chain_context = self.chain_context
+
+        # Mock add_cost to update chain_context
+        def add_cost(op):
+            self.chain_context.total_cost += 1
+            if self.chain_context.total_cost > self.chain_context.budget:
+                raise ContractError("Execution budget exceeded.")
+
+        self.api.add_cost = MagicMock(side_effect=add_cost)
+
         self.system_vars = {
             '_sender': 100,
             '_self': 200,
@@ -192,6 +204,57 @@ class TestRapidWireVM(unittest.TestCase):
         end_time = int(time.time())
         self.assertIsInstance(vm.vars['_res'], int)
         self.assertTrue(start_time <= vm.vars['_res'] <= end_time)
+
+    def test_while_loop(self):
+        # i = 0
+        # while i < 5:
+        #   i = i + 1
+        script = [
+            # i = 0
+            {"op": "set", "args": [0], "out": "_i"},
+            # Condition check: i < 5
+            {"op": "gt", "args": [5, "_i"], "out": "_cond"},
+            {
+                "op": "while",
+                "args": ["_cond"],
+                "body": [
+                    # i = i + 1
+                    {"op": "add", "args": ["_i", 1], "out": "_i"},
+                    # Recheck condition: i < 5
+                    {"op": "gt", "args": [5, "_i"], "out": "_cond"}
+                ]
+            }
+        ]
+
+        vm = RapidWireVM(script, self.api, self.system_vars)
+        vm.run()
+
+        self.assertEqual(vm.vars['_i'], 5)
+        self.assertGreater(self.chain_context.total_cost, 10)
+        self.assertLess(self.chain_context.total_cost, 30)
+
+    def test_infinite_loop_budget_exceeded(self):
+        # while 1: pass
+        script = [
+            {"op": "set", "args": [1], "out": "_cond"},
+            {
+                "op": "while",
+                "args": ["_cond"],
+                "body": [
+                    # do nothing, just burn gas
+                    {"op": "add", "args": [1, 1], "out": "_dump"}
+                ]
+            }
+        ]
+
+        # Low budget
+        self.chain_context.budget = 10
+        vm = RapidWireVM(script, self.api, self.system_vars)
+
+        with self.assertRaises(ContractError) as cm:
+            vm.run()
+
+        self.assertIn("Execution budget exceeded", str(cm.exception))
 
 if __name__ == '__main__':
     unittest.main()
