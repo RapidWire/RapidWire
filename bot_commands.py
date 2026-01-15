@@ -593,6 +593,48 @@ async def stake_info(interaction: discord.Interaction):
         
     await interaction.followup.send(embed=embed)
 
+approve_group = app_commands.Group(name="approve", description="他のユーザーにあなたの資産の使用を許可します。")
+
+@approve_group.command(name="set", description="指定したユーザーに資産の使用を許可します。")
+@app_commands.describe(user="許可を与えるユーザー", amount="許可する量", symbol="通貨のシンボル (任意)")
+async def approve_set(interaction: discord.Interaction, user: User, amount: float, symbol: Optional[str] = None):
+    await interaction.response.defer(thinking=True)
+    try:
+        if amount < 0:
+             await interaction.followup.send(embed=create_error_embed("許可額は0以上である必要があります。"))
+             return
+
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
+        Rapid.approve(interaction.user.id, user.id, currency.currency_id, int_amount)
+
+        desc = f"{user.mention} に `{format_amount(int_amount)} {currency.symbol}` の使用を許可しました。"
+        await interaction.followup.send(embed=create_success_embed(desc, "承認完了"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"承認の設定中にエラーが発生しました: {e}"))
+
+@approve_group.command(name="info", description="指定したユーザーへの許可状況を確認します。")
+@app_commands.describe(user="確認するユーザー", symbol="通貨のシンボル (任意)")
+async def approve_info(interaction: discord.Interaction, user: User, symbol: Optional[str] = None):
+    await interaction.response.defer(thinking=True)
+    try:
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。"))
+            return
+
+        allowance = Rapid.Allowances.get(interaction.user.id, user.id, currency.currency_id)
+        current_amount = allowance.amount if allowance else 0
+
+        desc = f"{user.mention} への現在の許可額: `{format_amount(current_amount)} {currency.symbol}`"
+        await interaction.followup.send(embed=create_success_embed(desc, "許可情報"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"情報の取得中にエラーが発生しました: {e}"))
+
 contract_group = app_commands.Group(name="contract", description="あなたのアカウントのコントラクトを管理します。")
 
 @contract_group.command(name="set", description="あなたのアカウントにコントラクトを設定します。")
@@ -958,6 +1000,7 @@ def setup(tree: app_commands.CommandTree):
     tree.add_command(history)
     tree.add_command(currency_group)
     tree.add_command(stake_group)
+    tree.add_command(approve_group)
     tree.add_command(contract_group)
     tree.add_command(claim_group)
     tree.add_command(lp_group)
