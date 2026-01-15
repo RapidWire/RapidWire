@@ -7,20 +7,31 @@ from typing import List, Optional, Literal
 from decimal import Decimal
 import httpx
 import time
+from contextlib import asynccontextmanager
 
 import config
 from RapidWire import RapidWire, exceptions, structs
 
 API_SERVER_VERSION = "1.0.1"
 
+Rapid = RapidWire(db_config=config.MySQL.to_dict())
+Rapid.Config = config.RapidWireConfig
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await Rapid.initialize()
+    yield
+    # Shutdown
+    await Rapid.close()
+
 app = FastAPI(
     title="RapidWire API",
     description="API for interacting with the RapidWire bot features.",
-    version=API_SERVER_VERSION
+    version=API_SERVER_VERSION,
+    lifespan=lifespan
 )
 
-Rapid = RapidWire(db_config=config.MySQL.to_dict())
-Rapid.Config = config.RapidWireConfig
 API_KEY_HEADER = APIKeyHeader(name="API-Key", auto_error=False)
 
 class DiscordUserCache:
@@ -74,7 +85,7 @@ async def get_current_user_id(api_key: str = Security(API_KEY_HEADER)) -> int:
             detail="API-Key header is missing"
         )
     
-    key_data = Rapid.APIKeys.get_user_by_key(api_key)
+    key_data = await Rapid.APIKeys.get_user_by_key(api_key)
     if not key_data:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -240,16 +251,16 @@ async def get_user_name(user_id: int):
 
 @app.get("/user/{user_id}/stats", response_model=UserStatsResponse, tags=["User"])
 async def get_user_stats(user_id: int):
-    stats = Rapid.Transfers.get_user_stats(user_id)
+    stats = await Rapid.Transfers.get_user_stats(user_id)
     return UserStatsResponse(**stats)
 
 @app.get("/balance/{user_id}", response_model=List[BalanceResponse], tags=["Account"])
 async def get_my_balance(user_id: int):
     user = Rapid.get_user(user_id)
-    balances = user.get_all_balances()
+    balances = await user.get_all_balances()
     response = []
     for bal in balances:
-        currency = Rapid.Currencies.get(currency_id=bal.currency_id)
+        currency = await Rapid.Currencies.get(currency_id=bal.currency_id)
         if currency:
             response.append(
                 BalanceResponse(
@@ -261,10 +272,10 @@ async def get_my_balance(user_id: int):
 
 @app.get("/stakes/{user_id}", response_model=List[StakeResponse], tags=["Staking"])
 async def get_user_stakes(user_id: int):
-    stakes = Rapid.Stakes.get_for_user(user_id)
+    stakes = await Rapid.Stakes.get_for_user(user_id)
     response = []
     for stake in stakes:
-        currency = Rapid.Currencies.get(currency_id=stake.currency_id)
+        currency = await Rapid.Currencies.get(currency_id=stake.currency_id)
         if currency:
             response.append(
                 StakeResponse(
@@ -276,11 +287,11 @@ async def get_user_stakes(user_id: int):
 
 @app.get("/account/history", response_model=List[structs.Transfer], tags=["Account"])
 async def get_my_history(user_id: int = Depends(get_current_user_id), page: int = 1):
-    return Rapid.search_transfers(user_id=user_id, page=page)
+    return await Rapid.search_transfers(user_id=user_id, page=page)
 
 @app.get("/script/{user_id}", response_model=ContractScriptResponse, tags=["Contract"])
 async def get_contract_script(user_id: int):
-    contract = Rapid.Contracts.get(user_id)
+    contract = await Rapid.Contracts.get(user_id)
     if not contract or not contract.script:
         # Instead of 404, we return empty script if user has no contract, to be safe.
         # But if the endpoint implies fetching "the contract", 404 is appropriate if not found.
@@ -291,7 +302,7 @@ async def get_contract_script(user_id: int):
 @app.post("/contract/execute", response_model=ContractExecutionResponse, tags=["Contract"])
 async def execute_contract(request: ContractExecutionRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        execution_id, output_data = Rapid.execute_contract(
+        execution_id, output_data = await Rapid.execute_contract(
             caller_id=user_id,
             contract_owner_id=request.contract_owner_id,
             input_data=request.input_data
@@ -312,48 +323,48 @@ async def execute_contract(request: ContractExecutionRequest, user_id: int = Dep
 
 @app.get("/contract/variables/{user_id}", response_model=List[structs.ContractVariable], tags=["Contract"])
 async def get_contract_variables(user_id: int):
-    return Rapid.ContractVariables.get_all_for_user(user_id)
+    return await Rapid.ContractVariables.get_all_for_user(user_id)
 
 @app.get("/contract/variable/{user_id}/{key}", response_model=structs.ContractVariable, tags=["Contract"])
 async def get_contract_variable(user_id: int, key: str):
-    variable = Rapid.ContractVariables.get(user_id, key)
+    variable = await Rapid.ContractVariables.get(user_id, key)
     if not variable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variable not found")
     return variable
 
 @app.get("/contract/history/{user_id}", response_model=List[structs.ContractHistory], tags=["Contract"])
 async def get_contract_history(user_id: int):
-    return Rapid.ContractHistories.get_for_user(user_id)
+    return await Rapid.ContractHistories.get_for_user(user_id)
 
 @app.get("/executions/{execution_id}", response_model=structs.Execution, tags=["Contract"])
 async def get_execution(execution_id: int):
-    execution = Rapid.Executions.get(execution_id)
+    execution = await Rapid.Executions.get(execution_id)
     if not execution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found")
     return execution
 
 @app.get("/currency/{symbol}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info(symbol: str):
-    currency = Rapid.Currencies.get_by_symbol(symbol.upper())
+    currency = await Rapid.Currencies.get_by_symbol(symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     return currency
 
 @app.get("/currency/id/{currency_id}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info_by_id(currency_id: int):
-    currency = Rapid.Currencies.get(currency_id)
+    currency = await Rapid.Currencies.get(currency_id)
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     return currency
 
 @app.post("/currency/transfer", response_model=TransferResponse, tags=["Currency"])
 async def transfer_currency(request: TransferRequest, user_id: int = Depends(get_current_user_id)):
-    currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
+    currency = await Rapid.Currencies.get_by_symbol(request.symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
 
     try:
-        tx = Rapid.transfer(
+        tx = await Rapid.transfer(
             source_id=user_id,
             destination_id=request.destination_id,
             currency_id=currency.currency_id,
@@ -369,19 +380,19 @@ async def transfer_currency(request: TransferRequest, user_id: int = Depends(get
 
 @app.post("/currency/approve", response_model=SuccessResponse, tags=["Currency"])
 async def approve_allowance(request: ApproveRequest, user_id: int = Depends(get_current_user_id)):
-    currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
+    currency = await Rapid.Currencies.get_by_symbol(request.symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
 
     try:
-        Rapid.approve(user_id, request.spender_id, currency.currency_id, request.amount)
+        await Rapid.approve(user_id, request.spender_id, currency.currency_id, request.amount)
         return SuccessResponse(message="Allowance updated successfully.")
     except exceptions.TransactionError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
 
 @app.get("/currency/allowance/{owner_id}/{spender_id}/{currency_id}", response_model=structs.Allowance, tags=["Currency"])
 async def get_allowance(owner_id: int, spender_id: int, currency_id: int):
-    allowance = Rapid.Allowances.get(owner_id, spender_id, currency_id)
+    allowance = await Rapid.Allowances.get(owner_id, spender_id, currency_id)
     if not allowance:
         # Return zero allowance effectively
         return structs.Allowance(owner_id=owner_id, spender_id=spender_id, currency_id=currency_id, amount=0, last_updated_at=0)
@@ -389,20 +400,20 @@ async def get_allowance(owner_id: int, spender_id: int, currency_id: int):
 
 @app.post("/claims/create", response_model=structs.Claim, tags=["Claims"])
 async def create_claim(request: ClaimCreateRequest, user_id: int = Depends(get_current_user_id)):
-    currency = Rapid.Currencies.get_by_symbol(request.symbol.upper())
+    currency = await Rapid.Currencies.get_by_symbol(request.symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     
-    claim = Rapid.Claims.create(user_id, request.payer_id, currency.currency_id, request.amount, request.description)
+    claim = await Rapid.Claims.create(user_id, request.payer_id, currency.currency_id, request.amount, request.description)
     return claim
 
 @app.get("/claims", response_model=List[structs.Claim], tags=["Claims"])
 async def get_claims(user_id: int = Depends(get_current_user_id), page: int = 1):
-    return Rapid.Claims.get_for_user(user_id, page=page)
+    return await Rapid.Claims.get_for_user(user_id, page=page)
 
 @app.get("/claims/{claim_id}", response_model=structs.Claim, tags=["Claims"])
 async def get_claim_details(claim_id: int):
-    claim = Rapid.Claims.get(claim_id)
+    claim = await Rapid.Claims.get(claim_id)
     if not claim:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
     return claim
@@ -410,7 +421,7 @@ async def get_claim_details(claim_id: int):
 @app.post("/claims/{claim_id}/pay", response_model=structs.Transfer, tags=["Claims"])
 async def pay_claim(claim_id: int, user_id: int = Depends(get_current_user_id)):
     try:
-        tx = Rapid.pay_claim(claim_id, user_id)
+        tx = await Rapid.pay_claim(claim_id, user_id)
         return tx
     except (ValueError, PermissionError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -422,7 +433,7 @@ async def pay_claim(claim_id: int, user_id: int = Depends(get_current_user_id)):
 @app.post("/claims/{claim_id}/cancel", response_model=structs.Claim, tags=["Claims"])
 async def cancel_claim(claim_id: int, user_id: int = Depends(get_current_user_id)):
     try:
-        claim = Rapid.cancel_claim(claim_id, user_id)
+        claim = await Rapid.cancel_claim(claim_id, user_id)
         return claim
     except (ValueError, PermissionError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -462,17 +473,17 @@ async def search_transfers(
     }
 
     if currency_symbol:
-        currency = Rapid.Currencies.get_by_symbol(currency_symbol.upper())
+        currency = await Rapid.Currencies.get_by_symbol(currency_symbol.upper())
         search_params["currency_id"] = currency.currency_id if currency else -1
 
     search_params["min_amount"] = min_amount
     search_params["max_amount"] = max_amount
 
-    return Rapid.search_transfers(**search_params)
+    return await Rapid.search_transfers(**search_params)
 
 @app.get("/transfer/{transfer_id}", response_model=structs.Transfer, tags=["Transfers"])
 async def get_transfer(transfer_id: int):
-    tx = Rapid.Transfers.get(transfer_id)
+    tx = await Rapid.Transfers.get(transfer_id)
     if not tx:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transfer not found")
     return tx
@@ -480,7 +491,7 @@ async def get_transfer(transfer_id: int):
 @app.post("/pools/add_liquidity", response_model=AddLiquidityResponse, tags=["DEX"])
 async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        shares = Rapid.add_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.amount_a, request.amount_b, user_id)
+        shares = await Rapid.add_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.amount_a, request.amount_b, user_id)
         return AddLiquidityResponse(shares_minted=str(shares))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -490,7 +501,7 @@ async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get
 @app.post("/pools/remove_liquidity", response_model=RemoveLiquidityResponse, tags=["DEX"])
 async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        amount_a, amount_b = Rapid.remove_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.shares, user_id)
+        amount_a, amount_b = await Rapid.remove_liquidity(request.symbol_a.upper(), request.symbol_b.upper(), request.shares, user_id)
         return RemoveLiquidityResponse(amount_a_received=str(amount_a), amount_b_received=str(amount_b))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -499,24 +510,24 @@ async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depen
 
 @app.get("/pools", response_model=List[structs.LiquidityPool], tags=["DEX"])
 async def get_all_pools():
-    return Rapid.LiquidityPools.get_all()
+    return await Rapid.LiquidityPools.get_all()
 
 @app.get("/pools/{symbol_a}/{symbol_b}", response_model=structs.LiquidityPool, tags=["DEX"])
 async def get_pool(symbol_a: str, symbol_b: str):
-    pool = Rapid.LiquidityPools.get_by_symbols(symbol_a.upper(), symbol_b.upper())
+    pool = await Rapid.LiquidityPools.get_by_symbols(symbol_a.upper(), symbol_b.upper())
     if not pool:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Liquidity pool not found")
     return pool
 
 @app.get("/pools/provider/{user_id}", response_model=List[structs.LiquidityProvider], tags=["DEX"])
 async def get_provider_info(user_id: int):
-    return Rapid.LiquidityProviders.get_for_user(user_id)
+    return await Rapid.LiquidityProviders.get_for_user(user_id)
 
 @app.post("/swap/rate", response_model=SwapRateResponse, tags=["DEX"])
 async def get_swap_rate(request: SwapRequest):
     try:
-        route = Rapid.find_swap_route(request.symbol_from.upper(), request.symbol_to.upper())
-        from_currency = Rapid.Currencies.get_by_symbol(request.symbol_from.upper())
+        route = await Rapid.find_swap_route(request.symbol_from.upper(), request.symbol_to.upper())
+        from_currency = await Rapid.Currencies.get_by_symbol(request.symbol_from.upper())
         amount_out = Rapid.get_swap_rate(request.amount, route, from_currency.currency_id)
         return SwapRateResponse(amount_out=str(amount_out))
     except (ValueError, exceptions.CurrencyNotFound) as e:
@@ -525,8 +536,8 @@ async def get_swap_rate(request: SwapRequest):
 @app.post("/swap", response_model=SwapResponse, tags=["DEX"])
 async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        amount_out, currency_out_id = Rapid.swap(request.symbol_from.upper(), request.symbol_to.upper(), request.amount, user_id)
-        currency_out = Rapid.Currencies.get(currency_out_id)
+        amount_out, currency_out_id = await Rapid.swap(request.symbol_from.upper(), request.symbol_to.upper(), request.amount, user_id)
+        currency_out = await Rapid.Currencies.get(currency_out_id)
         return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -536,7 +547,7 @@ async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_
 @app.get("/swap/route/{symbol_from}/{symbol_to}", response_model=RouteResponse, tags=["DEX"])
 async def get_swap_route(symbol_from: str, symbol_to: str):
     try:
-        route = Rapid.find_swap_route(symbol_from.upper(), symbol_to.upper())
+        route = await Rapid.find_swap_route(symbol_from.upper(), symbol_to.upper())
         return RouteResponse(route=route)
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

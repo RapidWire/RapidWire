@@ -1,5 +1,6 @@
 httpx
-mysql-connector-python
+aiomysql
 pydantic
 uvicorn
 fastapi
+cryptography
