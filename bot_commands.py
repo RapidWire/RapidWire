@@ -995,7 +995,6 @@ async def discord_permission_list(interaction: discord.Interaction):
 def setup(tree: app_commands.CommandTree, rapid: RapidWire):
     global Rapid
     Rapid = rapid
-    Rapid.Config = config.RapidWireConfig
 
     tree.add_command(balance)
     tree.add_command(transfer)

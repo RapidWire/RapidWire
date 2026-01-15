@@ -45,6 +45,7 @@ async def check_claims_and_notify():
 @client.event
 async def on_ready():
     await Rapid.initialize()
+    Rapid.Config = config.RapidWireConfig
     if not check_claims_and_notify.is_running():
         check_claims_and_notify.start()
     print(f'"{client.user}" としてログインしました')
@@ -93,7 +94,6 @@ async def on_message(message: discord.Message):
 def main():
     global Rapid
     Rapid = RapidWire(db_config=config.MySQL.to_dict())
-    Rapid.Config = config.RapidWireConfig
     bot_commands.setup(tree, Rapid)
     client.run(config.Discord.token)
 
