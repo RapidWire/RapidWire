@@ -11,8 +11,7 @@ import config
 from RapidWire import RapidWire, exceptions, structs
 from RapidWire.constants import INTEREST_RATE_SCALE
 
-Rapid = RapidWire(db_config=config.MySQL.to_dict())
-Rapid.Config = config.RapidWireConfig
+Rapid: RapidWire = None
 SYSTEM_USER_ID = 0
 
 class EmbedField:
@@ -993,7 +992,11 @@ async def discord_permission_list(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
 
-def setup(tree: app_commands.CommandTree):
+def setup(tree: app_commands.CommandTree, rapid: RapidWire):
+    global Rapid
+    Rapid = rapid
+    Rapid.Config = config.RapidWireConfig
+
     tree.add_command(balance)
     tree.add_command(transfer)
     tree.add_command(execute_contract)

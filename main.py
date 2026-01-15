@@ -94,7 +94,7 @@ def main():
     global Rapid
     Rapid = RapidWire(db_config=config.MySQL.to_dict())
     Rapid.Config = config.RapidWireConfig
-    bot_commands.setup(tree)
+    bot_commands.setup(tree, Rapid)
     client.run(config.Discord.token)
 
 if __name__ == "__main__":
