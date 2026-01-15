@@ -19,20 +19,30 @@ class UserModel:
         self.user_id = user_id
         self.db = db_connection
 
-    async def get_balance(self, currency_id: int, for_update: bool = False) -> Balance:
-        async with self.db as cursor:
+    async def get_balance(self, currency_id: int, for_update: bool = False, cursor=None) -> Balance:
+        if cursor:
             query = "SELECT * FROM balance WHERE user_id = %s AND currency_id = %s"
             if for_update:
                 query += " FOR UPDATE"
-
-            await cursor.execute(
-                query,
-                (self.user_id, currency_id)
-            )
+            await cursor.execute(query, (self.user_id, currency_id))
             result = await cursor.fetchone()
             if not result:
                 return Balance(user_id=self.user_id, currency_id=currency_id, amount=0)
             return Balance(**result)
+        else:
+            async with self.db as cursor:
+                query = "SELECT * FROM balance WHERE user_id = %s AND currency_id = %s"
+                if for_update:
+                    query += " FOR UPDATE"
+
+                await cursor.execute(
+                    query,
+                    (self.user_id, currency_id)
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    return Balance(user_id=self.user_id, currency_id=currency_id, amount=0)
+                return Balance(**result)
 
     async def get_all_balances(self) -> List[Balance]:
         async with self.db as cursor:
@@ -355,11 +365,22 @@ class LiquidityProviderModel:
             result = await cursor.fetchone()
             return LiquidityProvider(**result) if result else None
 
-    async def get_by_pool_and_user(self, pool_id: int, user_id: int) -> Optional[LiquidityProvider]:
-        async with self.db as cursor:
-            await cursor.execute("SELECT * FROM liquidity_provider WHERE pool_id = %s AND user_id = %s", (pool_id, user_id))
+    async def get_by_pool_and_user(self, pool_id: int, user_id: int, for_update: bool = False, cursor=None) -> Optional[LiquidityProvider]:
+        if cursor:
+            query = "SELECT * FROM liquidity_provider WHERE pool_id = %s AND user_id = %s"
+            if for_update:
+                query += " FOR UPDATE"
+            await cursor.execute(query, (pool_id, user_id))
             result = await cursor.fetchone()
             return LiquidityProvider(**result) if result else None
+        else:
+            async with self.db as cursor:
+                query = "SELECT * FROM liquidity_provider WHERE pool_id = %s AND user_id = %s"
+                if for_update:
+                    query += " FOR UPDATE"
+                await cursor.execute(query, (pool_id, user_id))
+                result = await cursor.fetchone()
+                return LiquidityProvider(**result) if result else None
 
     async def add_shares(self, cursor, pool_id: int, user_id: int, shares_change: int):
         await cursor.execute(

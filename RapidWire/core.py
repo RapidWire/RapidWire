@@ -488,11 +488,27 @@ class RapidWire:
 
         try:
             async with self.db as cursor:
+                # Deadlock prevention: Lock users in consistent order (by ID)
+                first_id, second_id = sorted([source_id, destination_id])
+
+                # We need to lock the balances.
+                # Note: If user is SYSTEM_USER_ID (0?), we might skip locking it if it's special,
+                # but locking it is safer if we update it.
+                # However, previous code only locked source if not SYSTEM.
+                # Let's lock both if they are not system, or lock system too if we update it.
+
+                if first_id != SYSTEM_USER_ID:
+                    await self.get_user(first_id).get_balance(currency_id, for_update=True, cursor=cursor)
+                if second_id != SYSTEM_USER_ID:
+                    await self.get_user(second_id).get_balance(currency_id, for_update=True, cursor=cursor)
+
                 source = self.get_user(source_id)
                 destination = self.get_user(destination_id)
 
+                # Check funds (Lock already acquired)
                 if source_id != SYSTEM_USER_ID:
-                    source_balance = await source.get_balance(currency_id, for_update=True)
+                    # Reuse cursor for balance check
+                    source_balance = await source.get_balance(currency_id, cursor=cursor)
                     if source_balance.amount < amount:
                         raise InsufficientFunds("Source user has insufficient funds.")
 
@@ -819,6 +835,16 @@ class RapidWire:
         try:
             async with self.db as cursor:
                 user = self.get_user(user_id)
+
+                # Check balances with locks
+                balance_a = await user.get_balance(currency_a_id, for_update=True, cursor=cursor)
+                if balance_a.amount < amount_a:
+                    raise InsufficientFunds("Insufficient funds for currency A.")
+
+                balance_b = await user.get_balance(currency_b_id, for_update=True, cursor=cursor)
+                if balance_b.amount < amount_b:
+                    raise InsufficientFunds("Insufficient funds for currency B.")
+
                 await user._update_balance(cursor, currency_a_id, -amount_a)
                 await user._update_balance(cursor, currency_b_id, -amount_b)
 
@@ -856,8 +882,8 @@ class RapidWire:
         try:
             async with self.db as cursor:
                 user = self.get_user(user_id)
-                source_balance_a = await user.get_balance(pool.currency_a_id)
-                source_balance_b = await user.get_balance(pool.currency_b_id)
+                source_balance_a = await user.get_balance(pool.currency_a_id, for_update=True, cursor=cursor)
+                source_balance_b = await user.get_balance(pool.currency_b_id, for_update=True, cursor=cursor)
 
                 if source_balance_a.amount < amount_a or source_balance_b.amount < amount_b:
                     raise InsufficientFunds("Insufficient funds to add liquidity.")
@@ -887,6 +913,11 @@ class RapidWire:
 
         try:
             async with self.db as cursor:
+                # Lock provider shares to prevent race conditions
+                provider = await self.LiquidityProviders.get_by_pool_and_user(pool.pool_id, user_id, for_update=True, cursor=cursor)
+                if not provider or provider.shares < shares:
+                     raise InsufficientFunds("Insufficient shares (checked with lock).")
+
                 user = self.get_user(user_id)
                 await user._update_balance(cursor, pool.currency_a_id, amount_a)
                 await user._update_balance(cursor, pool.currency_b_id, amount_b)
@@ -979,12 +1010,18 @@ class RapidWire:
         try:
             async with self.db as cursor:
                 # Re-fetch route pools with locks to ensure atomicity
-                locked_route = []
-                for pool in initial_route:
+                # Deadlock prevention: Lock pools in sorted order of pool_id
+                pools_to_lock = sorted(initial_route, key=lambda p: p.pool_id)
+                locked_pools_map = {}
+
+                for pool in pools_to_lock:
                     locked_pool = await self.LiquidityPools.get(pool.pool_id, for_update=True)
                     if not locked_pool:
                         raise TransactionError("Liquidity pool changed or disappeared during swap.")
-                    locked_route.append(locked_pool)
+                    locked_pools_map[pool.pool_id] = locked_pool
+
+                # Reconstruct the route with locked objects in the original order for calculation
+                locked_route = [locked_pools_map[p.pool_id] for p in initial_route]
 
                 # Recalculate amount_out with locked values
                 amount_out = self.get_swap_rate(amount, locked_route, from_currency.currency_id)
@@ -993,7 +1030,7 @@ class RapidWire:
                 amount_in = amount
 
                 user = self.get_user(user_id)
-                source_balance = await user.get_balance(current_currency_id, for_update=True)
+                source_balance = await user.get_balance(current_currency_id, for_update=True, cursor=cursor)
                 if source_balance.amount < amount:
                     raise InsufficientFunds("Insufficient funds for swap.")
                 await user._update_balance(cursor, current_currency_id, -amount)
