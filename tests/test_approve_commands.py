@@ -35,6 +35,12 @@ class TestApproveCommands(unittest.IsolatedAsyncioTestCase):
         bot_commands.Rapid.reset_mock()
         bot_commands.Rapid.Config.decimal_places = 2
 
+        # Configure Rapid methods to be async
+        bot_commands.Rapid.approve = AsyncMock()
+        bot_commands.Rapid.Allowances.get = AsyncMock()
+        bot_commands.Rapid.Currencies.get_by_symbol = AsyncMock()
+        bot_commands.Rapid.Currencies.get = AsyncMock()
+
         # Setup Currency mock
         self.currency = MagicMock()
         self.currency.currency_id = 1

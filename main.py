@@ -5,6 +5,7 @@ import config
 import bot_commands
 from RapidWire import RapidWire
 from time import time
+import asyncio
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -18,13 +19,13 @@ async def check_claims_and_notify():
     current_time = int(time())
 
     try:
-        claims = Rapid.Claims.get_claims_created_after(last_check_timestamp)
+        claims = await Rapid.Claims.get_claims_created_after(last_check_timestamp)
         for claim in claims:
-            if Rapid.NotificationPermissions.check(claim.payer_id, claim.claimant_id):
+            if await Rapid.NotificationPermissions.check(claim.payer_id, claim.claimant_id):
                 try:
                     payer = await client.fetch_user(claim.payer_id)
                     claimant = await client.fetch_user(claim.claimant_id)
-                    currency = Rapid.Currencies.get(claim.currency_id)
+                    currency = await Rapid.Currencies.get(claim.currency_id)
 
                     if not payer.dm_channel:
                         await payer.create_dm()
@@ -43,6 +44,7 @@ async def check_claims_and_notify():
 
 @client.event
 async def on_ready():
+    await Rapid.initialize()
     if not check_claims_and_notify.is_running():
         check_claims_and_notify.start()
     print(f'"{client.user}" としてログインしました')
@@ -64,6 +66,7 @@ async def on_message(message: discord.Message):
         args = message.content.split(' ')
         if len(args) > 1 and args[1] == "kill":
             print("シャットダウンコマンドを受け取りました。")
+            await Rapid.close()
             await client.close()
             return
 
@@ -71,13 +74,13 @@ async def on_message(message: discord.Message):
 
     if content_after_mention.strip():
         try:
-            Rapid.Contracts.set(message.author.id, content_after_mention)
+            await Rapid.Contracts.set(message.author.id, content_after_mention)
             await message.reply("コントラクトを登録しました。")
         except Exception as e:
             await message.reply(f"コントラクトの登録中にエラーが発生しました: `{e}`")
     else:
         try:
-            api_key_obj = Rapid.APIKeys.create(message.author.id)
+            api_key_obj = await Rapid.APIKeys.create(message.author.id)
             try:
                 dm_channel = await message.author.create_dm()
                 await dm_channel.send(f"あなたのAPIキーです。大切に保管してください:\n`{api_key_obj.api_key}`")

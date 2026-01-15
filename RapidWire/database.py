@@ -1,29 +1,44 @@
-import mysql.connector
+import aiomysql
+from contextvars import ContextVar
+
+# Context variables to store per-task state
+_connection = ContextVar("connection", default=None)
+_cursor = ContextVar("cursor", default=None)
+_nesting_level = ContextVar("nesting_level", default=0)
 
 class DatabaseConnection:
-    def __init__(self, connection: mysql.connector.MySQLConnection):
-        self.connection = connection
-        self.cursor = None
-        self.nesting_level = 0
+    def __init__(self, pool: aiomysql.Pool):
+        self.pool = pool
 
-    def __enter__(self):
-        if self.nesting_level == 0:
-            self.connection.ping(reconnect=True, attempts=10, delay=1)
-            self.cursor = self.connection.cursor(dictionary=True)
-        self.nesting_level += 1
-        return self.cursor
+    async def __aenter__(self):
+        level = _nesting_level.get()
+        if level == 0:
+            connection = await self.pool.acquire()
+            cursor = await connection.cursor(aiomysql.DictCursor)
+            _connection.set(connection)
+            _cursor.set(cursor)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.nesting_level -= 1
-        if self.nesting_level == 0:
+        _nesting_level.set(level + 1)
+        return _cursor.get()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        level = _nesting_level.get()
+        _nesting_level.set(level - 1)
+
+        if level - 1 == 0:
+            connection = _connection.get()
+            cursor = _cursor.get()
             try:
                 if exc_type:
-                    self.connection.rollback()
+                    await connection.rollback()
                 else:
-                    self.connection.commit()
+                    await connection.commit()
             finally:
-                if self.cursor:
-                    self.cursor.close()
-                    self.cursor = None
-        elif self.nesting_level < 0:
-            self.nesting_level = 0
+                if cursor:
+                    await cursor.close()
+                    _cursor.set(None)
+                if connection:
+                    self.pool.release(connection)
+                    _connection.set(None)
+        elif level - 1 < 0:
+            _nesting_level.set(0)
