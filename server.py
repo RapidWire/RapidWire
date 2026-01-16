@@ -124,7 +124,6 @@ class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
     symbol: str = Field(..., description="The symbol of the currency to transfer.")
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
-    input_data: Optional[str] = Field(None, max_length=127, description="Alphanumeric data for the contract.")
 
 class ContractExecutionRequest(BaseModel):
     contract_owner_id: int = Field(..., description="The Discord user ID of the contract owner.")
