@@ -491,11 +491,7 @@ class RapidWire:
                 # Deadlock prevention: Lock users in consistent order (by ID)
                 first_id, second_id = sorted([source_id, destination_id])
 
-                # We need to lock the balances.
-                # Note: If user is SYSTEM_USER_ID (0?), we might skip locking it if it's special,
-                # but locking it is safer if we update it.
-                # However, previous code only locked source if not SYSTEM.
-                # Let's lock both if they are not system, or lock system too if we update it.
+                # Lock both if they are not system, or lock system too if we update it.
 
                 if first_id != SYSTEM_USER_ID:
                     await self.get_user(first_id).get_balance(currency_id, for_update=True, cursor=cursor)
@@ -747,7 +743,7 @@ class RapidWire:
         if currency.rate_change_requested_at is None or currency.new_hourly_interest_rate is None:
             raise ValueError("No interest rate change is pending.")
 
-        # Check if the timelock period has passed (e.g., 7 days)
+        # Check if the timelock period has passed
         if time() - currency.rate_change_requested_at < self.Config.Staking.rate_change_timelock:
             raise PermissionError("The timelock period for the interest rate change has not passed yet.")
 
@@ -771,9 +767,7 @@ class RapidWire:
 
         if current_contract and current_contract.locked_until > current_time:
             # Contract is locked
-            # Check if script is different (using hash or direct string comparison)
-            # Since we re-calculated script_hash from input, we can compare with history or just content if available.
-            # But here we have the full script string for both.
+            # Check if script is different
             if current_contract.script != script:
                 raise PermissionError(f"Contract is locked until <t:{current_contract.locked_until}:F>.")
 
@@ -785,9 +779,7 @@ class RapidWire:
                 else:
                     raise PermissionError("New lock duration must be longer than the current remaining duration.")
             else:
-                 # If just setting same script without lock extension, we can allow it (idempotent) or raise error.
-                 # Let's keep existing lock.
-                 new_locked_until = current_contract.locked_until
+                new_locked_until = current_contract.locked_until
 
         else:
             # Not locked
