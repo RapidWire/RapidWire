@@ -762,26 +762,47 @@ class RapidWire:
         current_time = int(time())
         new_locked_until = 0
 
-        if current_contract and current_contract.locked_until > current_time:
-            # Contract is locked
-            # Check if script is different
-            if current_contract.script != script:
-                raise PermissionError(f"Contract is locked until <t:{current_contract.locked_until}:F>.")
+        has_script_change = True
+        has_lock_change = False
+        has_max_cost_change = False
 
-            # Script is same, check if extending lock
-            if lock_hours is not None and lock_hours > 0:
-                proposed_locked_until = current_time + (lock_hours * 3600)
-                if proposed_locked_until > current_contract.locked_until:
-                    new_locked_until = proposed_locked_until
+        if current_contract:
+            if current_contract.script == script:
+                has_script_change = False
+
+            if current_contract.max_cost != max_cost:
+                has_max_cost_change = True
+
+            if current_contract.locked_until > current_time:
+                # Contract is locked
+                # Check if script is different
+                if has_script_change:
+                    raise PermissionError(f"Contract is locked until <t:{current_contract.locked_until}:F>.")
+
+                # Script is same, check if extending lock
+                if lock_hours is not None and lock_hours > 0:
+                    proposed_locked_until = current_time + (lock_hours * 3600)
+                    if proposed_locked_until > current_contract.locked_until:
+                        new_locked_until = proposed_locked_until
+                        has_lock_change = True
+                    else:
+                        raise PermissionError("New lock duration must be longer than the current remaining duration.")
                 else:
-                    raise PermissionError("New lock duration must be longer than the current remaining duration.")
+                    new_locked_until = current_contract.locked_until
+
             else:
-                new_locked_until = current_contract.locked_until
+                # Not locked
+                if lock_hours is not None and lock_hours > 0:
+                    new_locked_until = current_time + (lock_hours * 3600)
+                    has_lock_change = True
 
         else:
             # Not locked
             if lock_hours is not None and lock_hours > 0:
                 new_locked_until = current_time + (lock_hours * 3600)
+
+        if not has_script_change and not has_lock_change and not has_max_cost_change:
+            raise ValueError("No changes detected.")
 
         try:
             async with self.db as cursor:
