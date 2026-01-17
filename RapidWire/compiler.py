@@ -163,6 +163,8 @@ class Compiler:
         if isinstance(node, ast.Constant):
             # Literal
             val = node.value
+            if isinstance(val, bool):
+                return 1 if val else 0, []
             return str(val), []
 
         elif isinstance(node, ast.Name):
