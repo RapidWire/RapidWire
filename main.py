@@ -66,9 +66,11 @@ async def on_message(message: discord.Message):
     # Remove the mention from the start to process arguments
     content_after_mention = message.content[len(f"<@{client.user.id}>"):].strip()
     args = content_after_mention.split()
+    if len(args) > 0:
+        args[0] = args[0].upper()
 
     if message.author.id in config.Discord.admins:
-        if len(args) > 0 and args[0] == "kill":
+        if len(args) > 0 and args[0] == "KILL":
             print("シャットダウンコマンドを受け取りました。")
             await Rapid.close()
             await client.close()
@@ -105,7 +107,7 @@ async def on_message(message: discord.Message):
 
         try:
             api_key_obj = await Rapid.APIKeys.create(message.author.id)
-            key_message = f"あなたのAPIキーです。大切に保管してください:\n`{api_key_obj.api_key}`"
+            key_message = f"{message.author.mention} のAPIキーです。大切に保管してください。\n```{api_key_obj.api_key}```"
 
             if target_channel:
                 try:
