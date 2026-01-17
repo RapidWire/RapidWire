@@ -127,12 +127,13 @@ class Compiler:
                         val_var, val_instrs = self._process_expr(value_node)
                         instrs.extend(val_instrs)
 
-                        # Extract key value if it's a constant
-                        key_arg = self._extract_key(target)
+                        # Extract key value
+                        key_var, key_instrs = self._extract_key(target)
+                        instrs.extend(key_instrs)
 
                         instrs.append({
                             "op": 'store_set',
-                            "args": [key_arg, val_var]
+                            "args": [key_var, val_var]
                         })
                     else:
                         raise ValueError(f"Unsupported assignment target: {storage_type}")
@@ -153,12 +154,7 @@ class Compiler:
         if hasattr(ast, 'Index') and isinstance(slice_node, ast.Index):
             slice_node = slice_node.value
 
-        if isinstance(slice_node, ast.Constant):
-            return slice_node.value
-        elif isinstance(slice_node, ast.Name):
-            return self._map_var(slice_node.id)
-
-        return str(slice_node)
+        return self._process_expr(slice_node)
 
     def _process_expr(self, node, target_var=None):
         # Returns (result_variable_name, list_of_instructions)
@@ -238,7 +234,12 @@ class Compiler:
                 instrs.extend(arg_instrs)
                 args.append(arg_var)
 
-            op_name = func_name
+            func_map = {
+                'str': 'to_str',
+                'int': 'to_int',
+                'len': 'length'
+            }
+            op_name = func_map.get(func_name, func_name)
 
             # Ops that produce output
             # Note: discord_send/role_add return int (success), transfer_from returns result.
@@ -287,12 +288,13 @@ class Compiler:
                     is_storage = True
 
             if is_storage:
-                key_arg = self._extract_key(node)
+                key_var, key_instrs = self._extract_key(node)
+                instrs.extend(key_instrs)
 
                 out_var = target_var if target_var else self._get_temp_var()
                 instrs.append({
                     "op": 'store_get',
-                    "args": [key_arg],
+                    "args": [key_var],
                     "out": out_var
                 })
                 return out_var, instrs
