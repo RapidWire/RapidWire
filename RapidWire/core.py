@@ -676,14 +676,11 @@ class RapidWire:
 
         try:
             async with self.db as cursor:
-                # Lock user balance first
-                await self.get_user(user_id).get_balance(currency_id, for_update=True, cursor=cursor)
-
                 # First, compound any existing interest
                 await self._compound_interest(cursor, user_id, currency_id)
 
                 # Then, perform the transfer from user to system
-                source_balance = await self.get_user(user_id).get_balance(currency_id, cursor=cursor)
+                source_balance = await self.get_user(user_id).get_balance(currency_id)
                 if source_balance.amount < amount:
                     raise InsufficientFunds("User has insufficient funds.")
 
@@ -704,12 +701,6 @@ class RapidWire:
 
         try:
             async with self.db as cursor:
-                # Deadlock prevention: Lock user balance first (consistent with stake_deposit)
-                await self.get_user(user_id).get_balance(currency_id, for_update=True, cursor=cursor)
-
-                # Lock the stake before processing
-                await self.Stakes.get(user_id, currency_id, for_update=True, cursor=cursor)
-
                 stake = await self._compound_interest(cursor, user_id, currency_id)
                 if not stake or stake.amount < amount:
                     raise InsufficientFunds("Withdrawal amount exceeds staked balance.")

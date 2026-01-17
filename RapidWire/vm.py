@@ -199,16 +199,10 @@ class RapidWireVM:
             # args: [obj, prop]
             obj = args[0]
             prop = args[1]
-
-            if not isinstance(prop, str):
-                return None
-
-            if prop.startswith('__'):
-                return None
-
-            if isinstance(obj, dict):
+            if hasattr(obj, prop):
+                return getattr(obj, prop)
+            elif isinstance(obj, dict):
                 return obj.get(prop)
-
             return None
 
         if op == 'getitem':
@@ -224,6 +218,7 @@ class RapidWireVM:
 
         if op == 'create_claim':
             # args: [payer, amount, cur, desc]
+            # Spec says: ["請求先ID", "金額", "通貨ID", "説明"]
             payer = int(args[0])
             amount = int(args[1])
             cur = int(args[2])

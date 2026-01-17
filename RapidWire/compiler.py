@@ -82,8 +82,15 @@ class Compiler:
             # Re-evaluate condition at the end of body
             # We need to reuse the same output variable 'cond_var' so the while loop checks it.
             # Rerun the expression processing, but targeting cond_var.
-            _, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
+            res_var, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
             body_instrs.extend(recheck_instrs)
+
+            if res_var != cond_var:
+                body_instrs.append({
+                    "op": "set",
+                    "args": [res_var],
+                    "out": cond_var
+                })
 
             while_op = {
                 "op": "while",
