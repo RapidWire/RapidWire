@@ -12,7 +12,7 @@ class MySQL:
             "port": cls.port,
             "user": cls.user,
             "password": cls.password,
-            "database": cls.database,
+            "db": cls.database,
         }
 
 class Discord:
