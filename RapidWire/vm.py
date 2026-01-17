@@ -98,7 +98,11 @@ class RapidWireVM:
         if op == 'mod': return int(args[0]) % int(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
         if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
+        if op == 'neq': return 1 if str(args[0]) != str(args[1]) else 0
         if op == 'gt': return 1 if int(args[0]) > int(args[1]) else 0
+        if op == 'lt': return 1 if int(args[0]) < int(args[1]) else 0
+        if op == 'gte': return 1 if int(args[0]) >= int(args[1]) else 0
+        if op == 'lte': return 1 if int(args[0]) <= int(args[1]) else 0
         if op == 'set': return args[0]
 
         # B. Flow Control

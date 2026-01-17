@@ -1,5 +1,5 @@
 CONTRACT_OP_COSTS = {
-    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'gt': 1,
+    'add': 1, 'sub': 1, 'mul': 1, 'div': 1, 'mod': 1, 'concat': 1, 'eq': 1, 'neq': 1, 'gt': 1, 'lt': 1, 'gte': 1, 'lte': 1,
     'if': 1, 'while': 1, 'exit': 0, 'cancel': 0,
     'transfer': 10, 'get_balance': 1, 'output': 1,
     'store_get': 1, 'store_set': 3,

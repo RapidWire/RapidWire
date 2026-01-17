@@ -213,8 +213,11 @@ class Compiler:
 
             op_map = {
                 ast.Eq: 'eq',
+                ast.NotEq: 'neq',
                 ast.Gt: 'gt',
                 ast.Lt: 'lt',
+                ast.LtE: 'lte',
+                ast.GtE: 'gte',
             }
             op_name = op_map.get(type(node.ops[0]))
 
