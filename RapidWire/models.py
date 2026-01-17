@@ -263,11 +263,22 @@ class StakeModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    async def get(self, user_id: int, currency_id: int) -> Optional[Stake]:
-        async with self.db as cursor:
-            await cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+    async def get(self, user_id: int, currency_id: int, for_update: bool = False, cursor=None) -> Optional[Stake]:
+        if cursor:
+            query = "SELECT * FROM staking WHERE user_id = %s AND currency_id = %s"
+            if for_update:
+                query += " FOR UPDATE"
+            await cursor.execute(query, (user_id, currency_id))
             result = await cursor.fetchone()
             return Stake(**result) if result else None
+        else:
+            async with self.db as cursor:
+                query = "SELECT * FROM staking WHERE user_id = %s AND currency_id = %s"
+                if for_update:
+                    query += " FOR UPDATE"
+                await cursor.execute(query, (user_id, currency_id))
+                result = await cursor.fetchone()
+                return Stake(**result) if result else None
 
     async def get_for_user(self, user_id: int) -> List[Stake]:
         async with self.db as cursor:
