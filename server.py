@@ -205,6 +205,7 @@ class RouteResponse(BaseModel):
 class ContractUpdateRequest(BaseModel):
     script: str
     max_cost: Optional[int] = None
+    lock_hours: Optional[int] = None
 
 class ContractUpdateResponse(BaseModel):
     contract: structs.Contract
@@ -550,6 +551,21 @@ async def get_swap_route(symbol_from: str, symbol_to: str):
         return RouteResponse(route=route)
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/contract/update", response_model=ContractUpdateResponse, tags=["Contract"])
+async def update_contract(request: ContractUpdateRequest, user_id: int = Depends(get_current_user_id)):
+    try:
+        contract = await Rapid.set_contract(
+            user_id=user_id,
+            script=request.script,
+            max_cost=request.max_cost,
+            lock_hours=request.lock_hours
+        )
+        return ContractUpdateResponse(contract=contract)
+    except (ValueError, PermissionError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")
 
