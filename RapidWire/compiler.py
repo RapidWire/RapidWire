@@ -442,7 +442,8 @@ def main():
     try:
         result = compiler.compile(code)
         split_filename = input_filename.split(".")
-        output_filename = f"{".".join(split_filename[:-1])}.json" if len(split_filename) >= 2 else f"{input_filename}.json"
+        base_name = ".".join(split_filename[:-1])
+        output_filename = f"{base_name}.json" if len(split_filename) >= 2 else f"{input_filename}.json"
         with open(output_filename, 'w', encoding="utf-8") as f:
             json.dump(result, f, indent=2)
         print(f"{input_filename} -> {output_filename}")
