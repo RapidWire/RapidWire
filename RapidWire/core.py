@@ -355,7 +355,7 @@ class RapidWire:
                     caller = self.get_user(caller_id)
                     balance = await caller.get_balance(gas_currency_id)
                     if balance.amount < initial_gas_deduction:
-                         raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {initial_gas_deduction}, Available: {balance.amount}")
+                        raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {initial_gas_deduction}, Available: {balance.amount}")
 
                     # Deduct now
                     await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction, execution_id=execution_id)
@@ -422,11 +422,8 @@ class RapidWire:
                     if caller_id != SYSTEM_USER_ID and gas_price > 0:
                         refund = initial_gas_deduction - final_fee
                         if refund > 0:
-                             await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                            await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
                         elif refund < 0:
-                            # This shouldn't theoretically happen if we charged max cost, but if dynamic costs increased it:
-                            # We might need to charge more? For now let's assume initial deduction was sufficient or we eat the loss/charge remaining.
-                            # If we strictly want to charge more:
                             additional_charge = abs(refund)
                             await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
 
