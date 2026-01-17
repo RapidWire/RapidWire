@@ -199,10 +199,18 @@ class RapidWireVM:
             # args: [obj, prop]
             obj = args[0]
             prop = args[1]
-            if hasattr(obj, prop):
-                return getattr(obj, prop)
-            elif isinstance(obj, dict):
+
+            if not isinstance(prop, str):
+                return None
+
+            if prop.startswith('__'):
+                return None
+
+            if isinstance(obj, dict):
                 return obj.get(prop)
+
+            # Strict whitelist for other types if needed.
+            # Currently only dict access is safe and supported via 'attr'.
             return None
 
         if op == 'getitem':
