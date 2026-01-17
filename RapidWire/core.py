@@ -825,12 +825,12 @@ class RapidWire:
             raise TransactionError(f"Database error during approval: {err}")
 
     async def transfer_from(self, source_id: int, destination_id: int, currency_id: int, amount: int, spender_id: int, execution_id: Optional[int] = None) -> Transfer:
-        allowance = await self.Allowances.get(source_id, spender_id, currency_id)
-        if not allowance or allowance.amount < amount:
-            raise InsufficientFunds("Spender does not have sufficient allowance.")
-
         try:
             async with self.db as cursor:
+                allowance = await self.Allowances.get(source_id, spender_id, currency_id, for_update=True, cursor=cursor)
+                if not allowance or allowance.amount < amount:
+                    raise InsufficientFunds("Spender does not have sufficient allowance.")
+
                 await self.Allowances.spend(cursor, source_id, spender_id, currency_id, amount)
                 return await self.transfer(source_id, destination_id, currency_id, amount, execution_id)
         except aiomysql.Error as err:

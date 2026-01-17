@@ -636,14 +636,25 @@ class AllowanceModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    async def get(self, owner_id: int, spender_id: int, currency_id: int) -> Optional[Allowance]:
-        async with self.db as cursor:
-            await cursor.execute(
-                "SELECT * FROM allowance WHERE owner_id = %s AND spender_id = %s AND currency_id = %s",
-                (owner_id, spender_id, currency_id)
-            )
+    async def get(self, owner_id: int, spender_id: int, currency_id: int, for_update: bool = False, cursor=None) -> Optional[Allowance]:
+        if cursor:
+            query = "SELECT * FROM allowance WHERE owner_id = %s AND spender_id = %s AND currency_id = %s"
+            if for_update:
+                query += " FOR UPDATE"
+            await cursor.execute(query, (owner_id, spender_id, currency_id))
             result = await cursor.fetchone()
             return Allowance(**result) if result else None
+        else:
+            async with self.db as cursor:
+                query = "SELECT * FROM allowance WHERE owner_id = %s AND spender_id = %s AND currency_id = %s"
+                if for_update:
+                    query += " FOR UPDATE"
+                await cursor.execute(
+                    query,
+                    (owner_id, spender_id, currency_id)
+                )
+                result = await cursor.fetchone()
+                return Allowance(**result) if result else None
 
     async def upsert(self, cursor, owner_id: int, spender_id: int, currency_id: int, amount: int):
         await cursor.execute(
