@@ -198,6 +198,11 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 @app_commands.describe(user="コントラクトの所有者", input_data="コントラクトに渡すデータ")
 async def execute_contract(interaction: discord.Interaction, user: User, input_data: Optional[str] = None):
     await interaction.response.defer(thinking=True)
+
+    if input_data and len(input_data) > 127:
+        await interaction.followup.send(embed=create_error_embed("Input dataの長さは127文字以下である必要があります。"))
+        return
+
     try:
         execution_id, output_data = await Rapid.execute_contract(
             caller_id=interaction.user.id,

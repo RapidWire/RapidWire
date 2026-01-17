@@ -330,6 +330,8 @@ class RapidWire:
         return calculate_block_cost(ops)
 
     async def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+        if input_data and len(input_data) > 127:
+            raise ValueError("Input data is too long (max 127 characters).")
         if input_data and "\\" in input_data:
             raise ValueError("Input data cannot contain backslashes.")
 
