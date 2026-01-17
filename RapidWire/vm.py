@@ -209,8 +209,6 @@ class RapidWireVM:
             if isinstance(obj, dict):
                 return obj.get(prop)
 
-            # Strict whitelist for other types if needed.
-            # Currently only dict access is safe and supported via 'attr'.
             return None
 
         if op == 'getitem':
@@ -226,7 +224,6 @@ class RapidWireVM:
 
         if op == 'create_claim':
             # args: [payer, amount, cur, desc]
-            # Spec says: ["請求先ID", "金額", "通貨ID", "説明"]
             payer = int(args[0])
             amount = int(args[1])
             cur = int(args[2])
