@@ -342,9 +342,16 @@ async def get_execution(execution_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found")
     return execution
 
-@app.get("/currency/id/{currency_id}", response_model=structs.Currency, tags=["Currency"])
+@app.get("/currency/{currency_id}", response_model=structs.Currency, tags=["Currency"])
 async def get_currency_info_by_id(currency_id: int):
     currency = await Rapid.Currencies.get(currency_id)
+    if not currency:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
+    return currency
+
+@app.get("/currency/symbol/{symbol}", response_model=structs.Currency, tags=["Currency"])
+async def get_currency_info(symbol: str):
+    currency = await Rapid.Currencies.get_by_symbol(symbol.upper())
     if not currency:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
     return currency

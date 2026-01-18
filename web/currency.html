@@ -221,7 +221,7 @@
         const container = document.getElementById('currency-details-container');
         try {
             await getConfig();
-            const currency = await fetchWithCache(`${API_BASE_URL}/currency/id/${currencyId}`);
+            const currency = await fetchWithCache(`${API_BASE_URL}/currency/${currencyId}`);
             
             if (page === 1) {
               const issuerLink = await formatUserLink(currency.issuer);

@@ -287,8 +287,13 @@ class RapidWireClient:
         resp.raise_for_status()
         return Execution(**resp.json())
 
-    def get_currency_by_id(self, currency_id: int) -> Currency:
-        resp = self.client.get(f"/currency/id/{currency_id}")
+    def get_currency(self, currency_id: int) -> Currency:
+        resp = self.client.get(f"/currency/{currency_id}")
+        resp.raise_for_status()
+        return Currency(**resp.json())
+
+    def get_currency_by_symbol(self, symbol: str) -> Currency:
+        resp = self.client.get(f"/currency/symbol/{symbol}")
         resp.raise_for_status()
         return Currency(**resp.json())
 

@@ -57,7 +57,7 @@
 
             let currency;
             try {
-                currency = await fetchWithCache(`${API_BASE_URL}/currency/id/${tx.currency_id}`);
+                currency = await fetchWithCache(`${API_BASE_URL}/currency/${tx.currency_id}`);
             } catch (error) {
                 currency = { symbol: "???", currency_id: tx.currency_id, name: "Deleted Currency" };
             }
