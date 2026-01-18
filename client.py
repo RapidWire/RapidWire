@@ -132,7 +132,7 @@ class BalanceResponse(BaseModel):
 
 class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
-    symbol: str = Field(..., description="The symbol of the currency to transfer.")
+    currency_id: int = Field(..., description="The ID of the currency to transfer.")
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
 
 class ContractExecutionRequest(BaseModel):
@@ -149,7 +149,7 @@ class ContractExecutionResponse(BaseModel):
 
 class ClaimCreateRequest(BaseModel):
     payer_id: int = Field(..., description="The Discord user ID of the person to pay the claim.")
-    symbol: str = Field(..., description="The symbol of the currency for the claim.")
+    currency_id: int = Field(..., description="The ID of the currency for the claim.")
     amount: int = Field(..., gt=0, description="The amount of currency for the claim.")
     description: Optional[str] = Field(None, max_length=100, description="Description of the claim.")
 
@@ -176,19 +176,19 @@ class StakeResponse(BaseModel):
     stake: Stake
 
 class AddLiquidityRequest(BaseModel):
-    symbol_a: str
-    symbol_b: str
+    currency_a_id: int
+    currency_b_id: int
     amount_a: int = Field(..., gt=0)
     amount_b: int = Field(..., gt=0)
 
 class RemoveLiquidityRequest(BaseModel):
-    symbol_a: str
-    symbol_b: str
+    currency_a_id: int
+    currency_b_id: int
     shares: int = Field(..., gt=0)
 
 class SwapRequest(BaseModel):
-    symbol_from: str
-    symbol_to: str
+    currency_from_id: int
+    currency_to_id: int
     amount: int = Field(..., gt=0)
 
 class AddLiquidityResponse(BaseModel):
@@ -210,7 +210,7 @@ class RouteResponse(BaseModel):
 
 class ApproveRequest(BaseModel):
     spender_id: int
-    symbol: str
+    currency_id: int
     amount: int = Field(..., ge=0)
 
 # --- Client ---
@@ -287,20 +287,15 @@ class RapidWireClient:
         resp.raise_for_status()
         return Execution(**resp.json())
 
-    def get_currency(self, symbol: str) -> Currency:
-        resp = self.client.get(f"/currency/{symbol}")
-        resp.raise_for_status()
-        return Currency(**resp.json())
-
     def get_currency_by_id(self, currency_id: int) -> Currency:
         resp = self.client.get(f"/currency/id/{currency_id}")
         resp.raise_for_status()
         return Currency(**resp.json())
 
-    def transfer_currency(self, destination_id: int, symbol: str, amount: int, input_data: Optional[str] = None) -> TransferResponse:
+    def transfer_currency(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> TransferResponse:
         request = TransferRequest(
             destination_id=destination_id,
-            symbol=symbol,
+            currency_id=currency_id,
             amount=amount,
             input_data=input_data
         )
@@ -308,8 +303,8 @@ class RapidWireClient:
         resp.raise_for_status()
         return TransferResponse(**resp.json())
 
-    def approve_allowance(self, spender_id: int, symbol: str, amount: int) -> SuccessResponse:
-        request = ApproveRequest(spender_id=spender_id, symbol=symbol, amount=amount)
+    def approve_allowance(self, spender_id: int, currency_id: int, amount: int) -> SuccessResponse:
+        request = ApproveRequest(spender_id=spender_id, currency_id=currency_id, amount=amount)
         resp = self.client.post("/currency/approve", json=request.model_dump())
         resp.raise_for_status()
         return SuccessResponse(**resp.json())
@@ -319,10 +314,10 @@ class RapidWireClient:
         resp.raise_for_status()
         return Allowance(**resp.json())
 
-    def create_claim(self, payer_id: int, symbol: str, amount: int, description: Optional[str] = None) -> Claim:
+    def create_claim(self, payer_id: int, currency_id: int, amount: int, description: Optional[str] = None) -> Claim:
         request = ClaimCreateRequest(
             payer_id=payer_id,
-            symbol=symbol,
+            currency_id=currency_id,
             amount=amount,
             description=description
         )
@@ -354,7 +349,7 @@ class RapidWireClient:
                          source_id: Optional[int] = None,
                          dest_id: Optional[int] = None,
                          user_id: Optional[int] = None,
-                         currency_symbol: Optional[str] = None,
+                         currency_id: Optional[int] = None,
                          start_timestamp: Optional[int] = None,
                          end_timestamp: Optional[int] = None,
                          min_amount: Optional[int] = None,
@@ -369,7 +364,7 @@ class RapidWireClient:
             "source_id": source_id,
             "dest_id": dest_id,
             "user_id": user_id,
-            "currency_symbol": currency_symbol,
+            "currency_id": currency_id,
             "start_timestamp": start_timestamp,
             "end_timestamp": end_timestamp,
             "min_amount": min_amount,
@@ -392,14 +387,14 @@ class RapidWireClient:
         resp.raise_for_status()
         return Transfer(**resp.json())
 
-    def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a: int, amount_b: int) -> AddLiquidityResponse:
-        request = AddLiquidityRequest(symbol_a=symbol_a, symbol_b=symbol_b, amount_a=amount_a, amount_b=amount_b)
+    def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> AddLiquidityResponse:
+        request = AddLiquidityRequest(currency_a_id=currency_a_id, currency_b_id=currency_b_id, amount_a=amount_a, amount_b=amount_b)
         resp = self.client.post("/pools/add_liquidity", json=request.model_dump())
         resp.raise_for_status()
         return AddLiquidityResponse(**resp.json())
 
-    def remove_liquidity(self, symbol_a: str, symbol_b: str, shares: int) -> RemoveLiquidityResponse:
-        request = RemoveLiquidityRequest(symbol_a=symbol_a, symbol_b=symbol_b, shares=shares)
+    def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> RemoveLiquidityResponse:
+        request = RemoveLiquidityRequest(currency_a_id=currency_a_id, currency_b_id=currency_b_id, shares=shares)
         resp = self.client.post("/pools/remove_liquidity", json=request.model_dump())
         resp.raise_for_status()
         return RemoveLiquidityResponse(**resp.json())
@@ -409,8 +404,8 @@ class RapidWireClient:
         resp.raise_for_status()
         return [LiquidityPool(**item) for item in resp.json()]
 
-    def get_pool(self, symbol_a: str, symbol_b: str) -> LiquidityPool:
-        resp = self.client.get(f"/pools/{symbol_a}/{symbol_b}")
+    def get_pool(self, currency_a_id: int, currency_b_id: int) -> LiquidityPool:
+        resp = self.client.get(f"/pools/{currency_a_id}/{currency_b_id}")
         resp.raise_for_status()
         return LiquidityPool(**resp.json())
 
@@ -419,20 +414,20 @@ class RapidWireClient:
         resp.raise_for_status()
         return [LiquidityProvider(**item) for item in resp.json()]
 
-    def get_swap_rate(self, symbol_from: str, symbol_to: str, amount: int) -> SwapRateResponse:
-        request = SwapRequest(symbol_from=symbol_from, symbol_to=symbol_to, amount=amount)
+    def get_swap_rate(self, currency_from_id: int, currency_to_id: int, amount: int) -> SwapRateResponse:
+        request = SwapRequest(currency_from_id=currency_from_id, currency_to_id=currency_to_id, amount=amount)
         resp = self.client.post("/swap/rate", json=request.model_dump())
         resp.raise_for_status()
         return SwapRateResponse(**resp.json())
 
-    def swap(self, symbol_from: str, symbol_to: str, amount: int) -> SwapResponse:
-        request = SwapRequest(symbol_from=symbol_from, symbol_to=symbol_to, amount=amount)
+    def swap(self, currency_from_id: int, currency_to_id: int, amount: int) -> SwapResponse:
+        request = SwapRequest(currency_from_id=currency_from_id, currency_to_id=currency_to_id, amount=amount)
         resp = self.client.post("/swap", json=request.model_dump())
         resp.raise_for_status()
         return SwapResponse(**resp.json())
 
-    def get_swap_route(self, symbol_from: str, symbol_to: str) -> RouteResponse:
-        resp = self.client.get(f"/swap/route/{symbol_from}/{symbol_to}")
+    def get_swap_route(self, currency_from_id: int, currency_to_id: int) -> RouteResponse:
+        resp = self.client.get(f"/swap/route/{currency_from_id}/{currency_to_id}")
         resp.raise_for_status()
         return RouteResponse(**resp.json())
 

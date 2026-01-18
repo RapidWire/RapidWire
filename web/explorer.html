@@ -324,6 +324,10 @@
 
         if (currentSearchQuery) {
             if (/^\d+$/.test(currentSearchQuery)) {
+                // Determine if it's a User ID or Transfer ID.
+                // Since Transfer ID search is handled separately above, let's treat this as User ID search.
+                // However, the original logic for user_id was implicit.
+                // Let's assume user_id if it's a number.
                 url += `&user_id=${currentSearchQuery}`;
             } else {
                 url += `&input_data=${encodeURIComponent(currentSearchQuery)}`;
