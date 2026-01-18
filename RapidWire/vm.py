@@ -25,7 +25,7 @@ class RapidWireVM:
         if isinstance(arg, str):
             if arg.startswith('_'):
                 return self.vars.get(arg)
-            if arg.isdigit():
+            if arg.replace('-', '', 1).isdigit():
                 return int(arg)
         return arg
 
