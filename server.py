@@ -293,9 +293,6 @@ async def get_my_history(user_id: int = Depends(get_current_user_id), page: int 
 async def get_contract_script(user_id: int):
     contract = await Rapid.Contracts.get(user_id)
     if not contract or not contract.script:
-        # Instead of 404, we return empty script if user has no contract, to be safe.
-        # But if the endpoint implies fetching "the contract", 404 is appropriate if not found.
-        # The previous implementation returned 404. I will keep it but return clearer detail.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found for this user.")
     return ContractScriptResponse(script=contract.script, cost=contract.cost, max_cost=contract.max_cost, locked_until=contract.locked_until)
 
