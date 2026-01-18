@@ -104,6 +104,16 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     await message.reply(f"チャンネルの取得中にエラーが発生しました: `{e}`")
                     return
+            else:
+                if message.guild is None:
+                    await message.reply("チャンネルを指定してAPIキーを発行する場合は、サーバー内でコマンドを実行してください。")
+                    return
+                if not isinstance(target_channel, (discord.abc.GuildChannel, discord.threads.Thread)) or target_channel.guild is None:
+                    await message.reply("指定されたチャンネルはサーバーのチャンネルではありません。")
+                    return
+                if target_channel.guild.id != message.guild.id:
+                    await message.reply("指定されたチャンネルは、メッセージを送信したサーバーと同一のサーバーにある必要があります。")
+                    return
 
         try:
             api_key_obj = await Rapid.APIKeys.create(message.author.id)
