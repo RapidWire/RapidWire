@@ -111,7 +111,7 @@ async def on_message(message: discord.Message):
 
             if target_channel:
                 try:
-                    await target_channel.send(f"{message.author.mention} {key_message}")
+                    await target_channel.send(key_message)
                     await message.reply(f"<#{channel_id}> にAPIキーを送信しました。")
                 except discord.Forbidden:
                     await message.reply(f"<#{channel_id}> にメッセージを送信できませんでした。権限を確認してください。")
