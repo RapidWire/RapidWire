@@ -201,12 +201,12 @@
         container.innerHTML = tableHTML + '</tbody></table>';
     }
 
-    async function fetchTransfers(symbol, page = 1) {
+    async function fetchTransfers(currencyId, page = 1) {
         currentPage = page;
         pageInfo.textContent = `Page: ${currentPage}`;
         prevButton.disabled = (currentPage === 1);
         try {
-            const txsResponse = await fetch(`${API_BASE_URL}/transfers/search?currency_symbol=${symbol}&page=${currentPage}&limit=${LIMIT}`);
+            const txsResponse = await fetch(`${API_BASE_URL}/transfers/search?currency_id=${currencyId}&page=${currentPage}&limit=${LIMIT}`);
             if (!txsResponse.ok) throw new Error('Failed to fetch transfer history.');
             const txsData = await txsResponse.json();
             nextButton.disabled = (txsData.length < LIMIT);
@@ -217,11 +217,11 @@
         }
     }
 
-    async function fetchCurrencyDetails(symbol, page = 1) {
+    async function fetchCurrencyDetails(currencyId, page = 1) {
         const container = document.getElementById('currency-details-container');
         try {
             await getConfig();
-            const currency = await fetchWithCache(`${API_BASE_URL}/currency/${symbol}`);
+            const currency = await fetchWithCache(`${API_BASE_URL}/currency/${currencyId}`);
             
             if (page === 1) {
               const issuerLink = await formatUserLink(currency.issuer);
@@ -263,7 +263,7 @@
             }
             
             
-            const transfers = await fetchTransfers(symbol, page);
+            const transfers = await fetchTransfers(currencyId, page);
             await displayTransfers(transfers, currency);
 
         } catch (error) {
@@ -273,14 +273,13 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        const symbol = new URLSearchParams(window.location.search).get('symbol');
-        if (symbol) {
-            const upperSymbol = symbol.toUpperCase()
-            fetchCurrencyDetails(upperSymbol, 1);
-            prevButton.addEventListener('click', () => { if (currentPage > 1) fetchCurrencyDetails(upperSymbol, currentPage - 1); });
-            nextButton.addEventListener('click', () => fetchCurrencyDetails(upperSymbol, currentPage + 1));
+        const id = new URLSearchParams(window.location.search).get('id');
+        if (id) {
+            fetchCurrencyDetails(id, 1);
+            prevButton.addEventListener('click', () => { if (currentPage > 1) fetchCurrencyDetails(id, currentPage - 1); });
+            nextButton.addEventListener('click', () => fetchCurrencyDetails(id, currentPage + 1));
         } else {
-            document.getElementById('currency-details-container').innerHTML = '<p class="text-red-600">No currency symbol provided.</p>';
+            document.getElementById('currency-details-container').innerHTML = '<p class="text-red-600">No currency ID provided.</p>';
         }
     });
 </script>

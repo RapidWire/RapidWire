@@ -25,7 +25,7 @@ class RapidWireVM:
         if isinstance(arg, str):
             if arg.startswith('_'):
                 return self.vars.get(arg)
-            if arg.isdigit():
+            if arg.replace('-', '', 1).isdigit():
                 return int(arg)
         return arg
 
@@ -46,9 +46,9 @@ class RapidWireVM:
     def _raise_error(self, message: str):
         raise ContractError(message, instruction=self.instruction_count, op=self.current_op)
 
-    def run(self):
+    async def run(self):
         try:
-            self._execute_block(self.script)
+            await self._execute_block(self.script)
         except StopExecution:
             pass
         except TransactionCanceledByContract:
@@ -58,7 +58,7 @@ class RapidWireVM:
         except Exception as e:
             self._raise_error(str(e))
 
-    def _execute_block(self, block: List[Dict[str, Any]]):
+    async def _execute_block(self, block: List[Dict[str, Any]]):
         for cmd in block:
             self.instruction_count += 1
             op = cmd.get('op')
@@ -71,7 +71,7 @@ class RapidWireVM:
             args = [self._resolve_arg(a) for a in raw_args]
             out = cmd.get('out')
 
-            result = self._execute_op(op, args, cmd)
+            result = await self._execute_op(op, args, cmd)
 
             if out:
                 self._set_var(out, result)
@@ -89,7 +89,7 @@ class RapidWireVM:
         except RuntimeError:
             return None
 
-    def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
+    async def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
         # A. Calculation & Logic
         if op == 'add': return int(args[0]) + int(args[1])
         if op == 'sub': return int(args[0]) - int(args[1])
@@ -98,16 +98,20 @@ class RapidWireVM:
         if op == 'mod': return int(args[0]) % int(args[1])
         if op == 'concat': return str(args[0]) + str(args[1])
         if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
+        if op == 'neq': return 1 if str(args[0]) != str(args[1]) else 0
         if op == 'gt': return 1 if int(args[0]) > int(args[1]) else 0
+        if op == 'lt': return 1 if int(args[0]) < int(args[1]) else 0
+        if op == 'gte': return 1 if int(args[0]) >= int(args[1]) else 0
+        if op == 'lte': return 1 if int(args[0]) <= int(args[1]) else 0
         if op == 'set': return args[0]
 
         # B. Flow Control
         if op == 'if':
             condition = args[0]
             if condition:
-                self._execute_block(cmd.get('then', []))
+                await self._execute_block(cmd.get('then', []))
             else:
-                self._execute_block(cmd.get('else', []))
+                await self._execute_block(cmd.get('else', []))
             return None
 
         if op == 'while':
@@ -117,7 +121,7 @@ class RapidWireVM:
                 cond_val = self._resolve_arg(raw_cond)
                 if not cond_val:
                     break
-                self._execute_block(body)
+                await self._execute_block(body)
                 self.api.add_cost('while')
             return None
 
@@ -135,11 +139,11 @@ class RapidWireVM:
             amount = int(args[1])
             cur_id = int(args[2])
             # source is contract owner (self)
-            return self.api.transfer(self.vars['_self'], to_id, cur_id, amount)
+            return await self.api.transfer(self.vars['_self'], to_id, cur_id, amount)
 
         if op == 'get_balance':
             # args: [user, cur]
-            return self.api.get_balance(int(args[0]), int(args[1]))
+            return await self.api.get_balance(int(args[0]), int(args[1]))
 
         if op == 'output':
             # args: [message]
@@ -149,7 +153,7 @@ class RapidWireVM:
         if op == 'store_get':
             # args: [key]
             key = str(args[0])
-            val = self.api.get_variable(None, key) # None user_id defaults to owner in api
+            val = await self.api.get_variable(None, key) # None user_id defaults to owner in api
             if val is None: return ""
             return str(val)
 
@@ -157,7 +161,7 @@ class RapidWireVM:
             # args: [key, val]
             key = str(args[0])
             val = str(args[1])
-            self.api.set_variable(key, val)
+            await self.api.set_variable(key, val)
             return None
 
         if op == 'approve':
@@ -165,7 +169,7 @@ class RapidWireVM:
             spender = int(args[0])
             amount = int(args[1])
             cur_id = int(args[2])
-            self.api.approve(spender, cur_id, amount)
+            await self.api.approve(spender, cur_id, amount)
             return None
 
         if op == 'transfer_from':
@@ -174,22 +178,22 @@ class RapidWireVM:
             recipient = int(args[1])
             amount = int(args[2])
             cur_id = int(args[3])
-            return self.api.transfer_from(sender, recipient, cur_id, amount)
+            return await self.api.transfer_from(sender, recipient, cur_id, amount)
 
         if op == 'get_allowance':
             # args: [owner, spender, cur]
             owner = int(args[0])
             spender = int(args[1])
             cur_id = int(args[2])
-            return self.api.get_allowance(owner, spender, cur_id)
+            return await self.api.get_allowance(owner, spender, cur_id)
 
         if op == 'get_currency':
             # args: [cur_id]
-            return self.api.get_currency(int(args[0]))
+            return await self.api.get_currency(int(args[0]))
 
         if op == 'get_transaction':
             # args: [tx_id]
-            return self.api.get_transaction(int(args[0]))
+            return await self.api.get_transaction(int(args[0]))
 
         if op == 'attr':
             # args: [obj, prop]
@@ -221,33 +225,33 @@ class RapidWireVM:
             desc = str(args[3]) if len(args) > 3 else None
             # ContractAPI.create_claim(self, claimant: int, payer: int, currency: int, amount: int, desc: Optional[str] = None)
             # claimant is self (contract owner)
-            return self.api.create_claim(self.vars['_self'], payer, cur, amount, desc)
+            return await self.api.create_claim(self.vars['_self'], payer, cur, amount, desc)
 
         if op == 'pay_claim':
             # args: [claim_id]
-            return self.api.pay_claim(int(args[0]), self.vars['_self'])
+            return await self.api.pay_claim(int(args[0]), self.vars['_self'])
 
         if op == 'cancel_claim':
             # args: [claim_id]
-            return self.api.cancel_claim(int(args[0]), self.vars['_self'])
+            return await self.api.cancel_claim(int(args[0]), self.vars['_self'])
 
         if op == 'swap':
             # args: [from_currency_id, to_currency_id, amount]
-            return self.api.swap(int(args[0]), int(args[1]), int(args[2]))
+            return await self.api.swap(int(args[0]), int(args[1]), int(args[2]))
 
         if op == 'add_liquidity':
             # args: [currency_a_id, currency_b_id, amount_a, amount_b]
-            return self.api.add_liquidity(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+            return await self.api.add_liquidity(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
 
         if op == 'remove_liquidity':
             # args: [currency_a_id, currency_b_id, shares]
-            return self.api.remove_liquidity(int(args[0]), int(args[1]), int(args[2]))
+            return await self.api.remove_liquidity(int(args[0]), int(args[1]), int(args[2]))
 
         if op == 'execute':
             # args: [dest, input]
             dest = int(args[0])
             input_data = str(args[1]) if len(args) > 1 else None
-            return self.api.execute_contract(dest, input_data)
+            return await self.api.execute_contract(dest, input_data)
 
         if op == 'discord_send':
             # args: [guild_id, channel_id, message]
@@ -258,7 +262,7 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for discord_send")
 
-            return 1 if self.api.discord_send(guild_id, channel_id, message) else 0
+            return 1 if await self.api.discord_send(guild_id, channel_id, message) else 0
 
         if op == 'discord_role_add':
             # args: [user_id, guild_id, role_id]
@@ -269,7 +273,7 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for discord_role_add")
 
-            return 1 if self.api.discord_role_add(guild_id, user_id, role_id) else 0
+            return 1 if await self.api.discord_role_add(guild_id, user_id, role_id) else 0
 
         if op == 'has_role':
             # args: [user_id, guild_id, role_id]
@@ -280,7 +284,7 @@ class RapidWireVM:
             except (ValueError, IndexError):
                 self._raise_error("Invalid arguments for has_role")
 
-            return 1 if self.api.has_role(guild_id, user_id, role_id) else 0
+            return 1 if await self.api.has_role(guild_id, user_id, role_id) else 0
 
         if op == 'sha256':
             # args: [string]

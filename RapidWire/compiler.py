@@ -82,8 +82,15 @@ class Compiler:
             # Re-evaluate condition at the end of body
             # We need to reuse the same output variable 'cond_var' so the while loop checks it.
             # Rerun the expression processing, but targeting cond_var.
-            _, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
+            res_var, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
             body_instrs.extend(recheck_instrs)
+
+            if res_var != cond_var:
+                body_instrs.append({
+                    "op": "set",
+                    "args": [res_var],
+                    "out": cond_var
+                })
 
             while_op = {
                 "op": "while",
@@ -127,12 +134,13 @@ class Compiler:
                         val_var, val_instrs = self._process_expr(value_node)
                         instrs.extend(val_instrs)
 
-                        # Extract key value if it's a constant
-                        key_arg = self._extract_key(target)
+                        # Extract key value
+                        key_var, key_instrs = self._extract_key(target)
+                        instrs.extend(key_instrs)
 
                         instrs.append({
                             "op": 'store_set',
-                            "args": [key_arg, val_var]
+                            "args": [key_var, val_var]
                         })
                     else:
                         raise ValueError(f"Unsupported assignment target: {storage_type}")
@@ -153,12 +161,7 @@ class Compiler:
         if hasattr(ast, 'Index') and isinstance(slice_node, ast.Index):
             slice_node = slice_node.value
 
-        if isinstance(slice_node, ast.Constant):
-            return slice_node.value
-        elif isinstance(slice_node, ast.Name):
-            return self._map_var(slice_node.id)
-
-        return str(slice_node)
+        return self._process_expr(slice_node)
 
     def _process_expr(self, node, target_var=None):
         # Returns (result_variable_name, list_of_instructions)
@@ -167,6 +170,8 @@ class Compiler:
         if isinstance(node, ast.Constant):
             # Literal
             val = node.value
+            if isinstance(val, bool):
+                return 1 if val else 0, []
             return str(val), []
 
         elif isinstance(node, ast.Name):
@@ -213,8 +218,11 @@ class Compiler:
 
             op_map = {
                 ast.Eq: 'eq',
+                ast.NotEq: 'neq',
                 ast.Gt: 'gt',
                 ast.Lt: 'lt',
+                ast.LtE: 'lte',
+                ast.GtE: 'gte',
             }
             op_name = op_map.get(type(node.ops[0]))
 
@@ -235,7 +243,12 @@ class Compiler:
                 instrs.extend(arg_instrs)
                 args.append(arg_var)
 
-            op_name = func_name
+            func_map = {
+                'str': 'to_str',
+                'int': 'to_int',
+                'len': 'length'
+            }
+            op_name = func_map.get(func_name, func_name)
 
             # Ops that produce output
             # Note: discord_send/role_add return int (success), transfer_from returns result.
@@ -284,12 +297,13 @@ class Compiler:
                     is_storage = True
 
             if is_storage:
-                key_arg = self._extract_key(node)
+                key_var, key_instrs = self._extract_key(node)
+                instrs.extend(key_instrs)
 
                 out_var = target_var if target_var else self._get_temp_var()
                 instrs.append({
                     "op": 'store_get',
-                    "args": [key_arg],
+                    "args": [key_var],
                     "out": out_var
                 })
                 return out_var, instrs
@@ -442,7 +456,8 @@ def main():
     try:
         result = compiler.compile(code)
         split_filename = input_filename.split(".")
-        output_filename = f"{".".join(split_filename[:-1])}.json" if len(split_filename) >= 2 else f"{input_filename}.json"
+        base_name = ".".join(split_filename[:-1])
+        output_filename = f"{base_name}.json" if len(split_filename) >= 2 else f"{input_filename}.json"
         with open(output_filename, 'w', encoding="utf-8") as f:
             json.dump(result, f, indent=2)
         print(f"{input_filename} -> {output_filename}")

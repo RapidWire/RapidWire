@@ -57,7 +57,7 @@
 
             let currency;
             try {
-                currency = await fetchWithCache(`${API_BASE_URL}/currency/id/${tx.currency_id}`);
+                currency = await fetchWithCache(`${API_BASE_URL}/currency/${tx.currency_id}`);
             } catch (error) {
                 currency = { symbol: "???", currency_id: tx.currency_id, name: "Deleted Currency" };
             }
@@ -91,7 +91,7 @@
                     </dd>
 
                     <dt class="text-sm font-medium text-slate-500">Currency</dt>
-                    <dd class="md:col-span-2"><a href="currency.html?symbol=${currency.symbol}" class="text-blue-600 hover:underline">${currency.name} (${currency.symbol})</a></dd>
+                    <dd class="md:col-span-2"><a href="currency.html?id=${currency.currency_id}" class="text-blue-600 hover:underline">${currency.name} (${currency.symbol})</a></dd>
                     
                     <hr class="md:col-span-3 my-2 border-slate-200" />
                     

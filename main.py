@@ -5,6 +5,7 @@ import config
 import bot_commands
 from RapidWire import RapidWire
 from time import time
+import asyncio
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -18,13 +19,13 @@ async def check_claims_and_notify():
     current_time = int(time())
 
     try:
-        claims = Rapid.Claims.get_claims_created_after(last_check_timestamp)
+        claims = await Rapid.Claims.get_claims_created_after(last_check_timestamp)
         for claim in claims:
-            if Rapid.NotificationPermissions.check(claim.payer_id, claim.claimant_id):
+            if await Rapid.NotificationPermissions.check(claim.payer_id, claim.claimant_id):
                 try:
                     payer = await client.fetch_user(claim.payer_id)
                     claimant = await client.fetch_user(claim.claimant_id)
-                    currency = Rapid.Currencies.get(claim.currency_id)
+                    currency = await Rapid.Currencies.get(claim.currency_id)
 
                     if not payer.dm_channel:
                         await payer.create_dm()
@@ -43,6 +44,8 @@ async def check_claims_and_notify():
 
 @client.event
 async def on_ready():
+    await Rapid.initialize()
+    Rapid.Config = config.RapidWireConfig
     if not check_claims_and_notify.is_running():
         check_claims_and_notify.start()
     print(f'"{client.user}" としてログインしました')
@@ -60,38 +63,77 @@ async def on_message(message: discord.Message):
     if not message.content.startswith(f"<@{client.user.id}>"):
         return
 
+    # Remove the mention from the start to process arguments
+    content_after_mention = message.content[len(f"<@{client.user.id}>"):].strip()
+    args = content_after_mention.split()
+    if len(args) > 0:
+        args[0] = args[0].upper()
+
     if message.author.id in config.Discord.admins:
-        args = message.content.split(' ')
-        if len(args) > 1 and args[1] == "kill":
+        if len(args) > 0 and args[0] == "KILL":
             print("シャットダウンコマンドを受け取りました。")
+            await Rapid.close()
             await client.close()
             return
 
-    content_after_mention = message.content.replace(f"<@{client.user.id}>", "")
+    if len(args) > 0 and args[0] == "API":
+        channel_id = None
+        if len(args) > 1:
+            if args[1].isdigit():
+                channel_id = int(args[1])
+            else:
+                await message.reply("チャンネルIDは数値で指定してください。")
+                return
 
-    if content_after_mention.strip():
+        if message.author.bot and channel_id is None:
+            await message.reply("BotがAPIキーを発行する場合は、チャンネルIDを指定する必要があります。")
+            return
+
+        target_channel = None
+        if channel_id:
+            target_channel = client.get_channel(channel_id)
+            if not target_channel:
+                try:
+                    target_channel = await client.fetch_channel(channel_id)
+                except discord.NotFound:
+                    await message.reply("指定されたチャンネルが見つかりませんでした。")
+                    return
+                except discord.Forbidden:
+                    await message.reply("指定されたチャンネルへのアクセス権がありません。")
+                    return
+                except Exception as e:
+                    await message.reply(f"チャンネルの取得中にエラーが発生しました: `{e}`")
+                    return
+
         try:
-            Rapid.Contracts.set(message.author.id, content_after_mention)
-            await message.reply("コントラクトを登録しました。")
-        except Exception as e:
-            await message.reply(f"コントラクトの登録中にエラーが発生しました: `{e}`")
-    else:
-        try:
-            api_key_obj = Rapid.APIKeys.create(message.author.id)
-            try:
-                dm_channel = await message.author.create_dm()
-                await dm_channel.send(f"あなたのAPIキーです。大切に保管してください:\n`{api_key_obj.api_key}`")
-                await message.reply("APIキーをDMに送信しました。")
-            except discord.Forbidden:
-                await message.reply("APIキーをDMに送信できませんでした。DMの受信設定を確認してください。")
+            api_key_obj = await Rapid.APIKeys.create(message.author.id)
+            key_message = f"{message.author.mention} のAPIキーです。大切に保管してください。\n```{api_key_obj.api_key}```"
+
+            if target_channel:
+                try:
+                    await target_channel.send(f"{message.author.mention} {key_message}")
+                    await message.reply(f"<#{channel_id}> にAPIキーを送信しました。")
+                except discord.Forbidden:
+                    await message.reply(f"<#{channel_id}> にメッセージを送信できませんでした。権限を確認してください。")
+                except Exception as e:
+                    await message.reply(f"メッセージの送信中にエラーが発生しました: `{e}`")
+            else:
+                try:
+                    dm_channel = await message.author.create_dm()
+                    await dm_channel.send(key_message)
+                    await message.reply("APIキーをDMに送信しました。")
+                except discord.Forbidden:
+                    await message.reply("APIキーをDMに送信できませんでした。DMの受信設定を確認してください。")
+                except Exception as e:
+                    await message.reply(f"DMの送信中にエラーが発生しました: `{e}`")
+
         except Exception as e:
             await message.reply(f"APIキーの処理中にエラーが発生しました: `{e}`")
 
 def main():
     global Rapid
     Rapid = RapidWire(db_config=config.MySQL.to_dict())
-    Rapid.Config = config.RapidWireConfig
-    bot_commands.setup(tree)
+    bot_commands.setup(tree, Rapid)
     client.run(config.Discord.token)
 
 if __name__ == "__main__":
