@@ -297,12 +297,11 @@ class RapidWireClient:
         resp.raise_for_status()
         return Currency(**resp.json())
 
-    def transfer_currency(self, destination_id: int, currency_id: int, amount: int, input_data: Optional[str] = None) -> TransferResponse:
+    def transfer_currency(self, destination_id: int, currency_id: int, amount: int) -> TransferResponse:
         request = TransferRequest(
             destination_id=destination_id,
             currency_id=currency_id,
-            amount=amount,
-            input_data=input_data
+            amount=amount
         )
         resp = self.client.post("/currency/transfer", json=request.model_dump())
         resp.raise_for_status()
