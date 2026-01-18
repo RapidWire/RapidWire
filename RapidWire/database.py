@@ -14,9 +14,13 @@ class DatabaseConnection:
         level = _nesting_level.get()
         if level == 0:
             connection = await self.pool.acquire()
-            cursor = await connection.cursor(aiomysql.DictCursor)
-            _connection.set(connection)
-            _cursor.set(cursor)
+            try:
+                cursor = await connection.cursor(aiomysql.DictCursor)
+                _connection.set(connection)
+                _cursor.set(cursor)
+            except Exception:
+                self.pool.release(connection)
+                raise
 
         _nesting_level.set(level + 1)
         return _cursor.get()
