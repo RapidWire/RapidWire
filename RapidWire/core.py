@@ -301,8 +301,6 @@ class RapidWire:
             new_amount = stake.amount + reward
             new_last_updated_at = stake.last_updated_at + (hours_passed * SECONDS_IN_AN_HOUR)
             await self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, new_last_updated_at)
-            # need to create a transfer for the reward
-            await self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, currency_id, reward)
             # Update the supply
             await self.Currencies.update_supply(cursor, currency_id, reward)
             return await self.Stakes.get(user_id, currency_id)
