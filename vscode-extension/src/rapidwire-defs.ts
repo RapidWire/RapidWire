@@ -418,7 +418,7 @@ export const sdkDefs = {
           "type": "int"
         }
       ],
-      "returnType": "Any",
+      "returnType": "int",
       "doc": ""
     },
     {
@@ -437,7 +437,7 @@ export const sdkDefs = {
           "type": "int"
         }
       ],
-      "returnType": "Any",
+      "returnType": "list[int]",
       "doc": ""
     }
   ],

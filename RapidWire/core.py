@@ -477,7 +477,7 @@ class RapidWire:
                         if caller_id != SYSTEM_USER_ID and gas_price > 0:
                             refund = initial_gas_deduction - final_fee
                             if refund > 0:
-                                 await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                                await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
                             elif refund < 0:
                                 additional_charge = abs(refund)
                                 await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
@@ -495,36 +495,36 @@ class RapidWire:
     async def execute_transfer_from(self, caller_id: int, source_id: int, destination_id: int, currency_id: int, amount: int) -> Tuple[int, Transfer]:
         input_data = f"transfer_from source:{source_id} dest:{destination_id} cur:{currency_id} amt:{amount}"
         if len(input_data) > 127:
-             input_data = input_data[:127]
+            input_data = input_data[:127]
 
         execution_id = None
         try:
-             async with self.db as cursor:
-                 execution_id = await self.Executions.create(cursor, caller_id, SYSTEM_USER_ID, input_data, 'pending')
+            async with self.db as cursor:
+                execution_id = await self.Executions.create(cursor, caller_id, SYSTEM_USER_ID, input_data, 'pending')
         except aiomysql.Error as err:
-             raise TransactionError(f"Database error during execution creation: {err}")
+            raise TransactionError(f"Database error during execution creation: {err}")
 
         try:
-             # spender_id is the caller (the one executing this action)
-             transfer = await self.transfer_from(source_id, destination_id, currency_id, amount, spender_id=caller_id, execution_id=execution_id)
+            # spender_id is the caller (the one executing this action)
+            transfer = await self.transfer_from(source_id, destination_id, currency_id, amount, spender_id=caller_id, execution_id=execution_id)
 
-             async with self.db as cursor:
-                 await self.Executions.update(cursor, execution_id, None, 0, 'success')
+            async with self.db as cursor:
+                await self.Executions.update(cursor, execution_id, None, 0, 'success')
 
-             return execution_id, transfer
+            return execution_id, transfer
 
         except Exception as e:
-             error_message = str(e)
-             if len(error_message) > 127:
-                 error_message = error_message[:124] + "..."
+            error_message = str(e)
+            if len(error_message) > 127:
+                error_message = error_message[:124] + "..."
 
-             try:
-                 async with self.db as cursor:
-                     await self.Executions.update(cursor, execution_id, error_message, 0, 'failed')
-             except Exception:
-                 pass
+            try:
+                async with self.db as cursor:
+                    await self.Executions.update(cursor, execution_id, error_message, 0, 'failed')
+            except Exception:
+                pass
 
-             raise e
+            raise e
 
     async def transfer(
         self,
@@ -921,7 +921,7 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during liquidity pool creation: {err}")
 
-    async def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a_desired: int, amount_b_desired: int, user_id: int) -> Tuple[int, int]:
+    async def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a_desired: int, amount_b_desired: int, user_id: int) -> int:
         pool = await self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
         if not pool:
             raise ValueError("Liquidity pool not found.")
@@ -982,7 +982,7 @@ class RapidWire:
                 # Lock provider shares to prevent race conditions
                 provider = await self.LiquidityProviders.get_by_pool_and_user(pool.pool_id, user_id, for_update=True, cursor=cursor)
                 if not provider or provider.shares < shares:
-                     raise InsufficientFunds("Insufficient shares (checked with lock).")
+                    raise InsufficientFunds("Insufficient shares (checked with lock).")
 
                 user = self.get_user(user_id)
                 await user._update_balance(cursor, pool.currency_a_id, amount_a)
