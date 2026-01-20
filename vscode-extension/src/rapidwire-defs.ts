@@ -340,6 +340,10 @@ export const sdkDefs = {
       "name": "split",
       "args": [
         {
+          "name": "val",
+          "type": "str"
+        },
+        {
           "name": "separator",
           "type": "str"
         }
@@ -373,6 +377,67 @@ export const sdkDefs = {
       "name": "now",
       "args": [],
       "returnType": "int",
+      "doc": ""
+    },
+    {
+      "name": "swap",
+      "args": [
+        {
+          "name": "from_currency_id",
+          "type": "int"
+        },
+        {
+          "name": "to_currency_id",
+          "type": "int"
+        },
+        {
+          "name": "amount",
+          "type": "int"
+        }
+      ],
+      "returnType": "Transaction",
+      "doc": ""
+    },
+    {
+      "name": "add_liquidity",
+      "args": [
+        {
+          "name": "currency_a_id",
+          "type": "int"
+        },
+        {
+          "name": "currency_b_id",
+          "type": "int"
+        },
+        {
+          "name": "amount_a",
+          "type": "int"
+        },
+        {
+          "name": "amount_b",
+          "type": "int"
+        }
+      ],
+      "returnType": "Any",
+      "doc": ""
+    },
+    {
+      "name": "remove_liquidity",
+      "args": [
+        {
+          "name": "currency_a_id",
+          "type": "int"
+        },
+        {
+          "name": "currency_b_id",
+          "type": "int"
+        },
+        {
+          "name": "shares",
+          "type": "int"
+        }
+      ],
+      "returnType": "Any",
       "doc": ""
     }
   ],
