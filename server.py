@@ -125,6 +125,12 @@ class TransferRequest(BaseModel):
     currency_id: int = Field(..., description="The ID of the currency to transfer.")
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
 
+class TransferFromRequest(BaseModel):
+    source_id: int = Field(..., description="The Discord user ID of the source.")
+    destination_id: int = Field(..., description="The Discord user ID of the recipient.")
+    currency_id: int = Field(..., description="The ID of the currency to transfer.")
+    amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
+
 class ContractExecutionRequest(BaseModel):
     contract_owner_id: int = Field(..., description="The Discord user ID of the contract owner.")
     input_data: Optional[str] = Field(None, max_length=127, description="Alphanumeric data for the contract.")
@@ -132,6 +138,10 @@ class ContractExecutionRequest(BaseModel):
 class TransferResponse(BaseModel):
     transfer: Optional[structs.Transfer] = None
     execution_id: Optional[int] = None
+
+class TransferFromResponse(BaseModel):
+    transfer: structs.Transfer
+    execution_id: int
 
 class ContractExecutionResponse(BaseModel):
     execution_id: int
@@ -369,6 +379,28 @@ async def transfer_currency(request: TransferRequest, user_id: int = Depends(get
         return TransferResponse(transfer=tx)
     except exceptions.InsufficientFunds:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds")
+    except exceptions.TransactionError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@app.post("/currency/transfer_from", response_model=TransferFromResponse, tags=["Currency"])
+async def transfer_from_currency(request: TransferFromRequest, user_id: int = Depends(get_current_user_id)):
+    currency = await Rapid.Currencies.get(request.currency_id)
+    if not currency:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
+
+    try:
+        execution_id, transfer = await Rapid.execute_transfer_from(
+            caller_id=user_id,
+            source_id=request.source_id,
+            destination_id=request.destination_id,
+            currency_id=currency.currency_id,
+            amount=request.amount
+        )
+        return TransferFromResponse(transfer=transfer, execution_id=execution_id)
+    except exceptions.InsufficientFunds:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds or allowance")
     except exceptions.TransactionError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Transaction error: {e}")
     except ValueError as e:

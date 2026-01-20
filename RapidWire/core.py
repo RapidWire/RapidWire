@@ -492,6 +492,40 @@ class RapidWire:
                 if not created_context:
                     chain_context.depth -= 1
 
+    async def execute_transfer_from(self, caller_id: int, source_id: int, destination_id: int, currency_id: int, amount: int) -> Tuple[int, Transfer]:
+        input_data = f"transfer_from source:{source_id} dest:{destination_id} cur:{currency_id} amt:{amount}"
+        if len(input_data) > 127:
+             input_data = input_data[:127]
+
+        execution_id = None
+        try:
+             async with self.db as cursor:
+                 execution_id = await self.Executions.create(cursor, caller_id, SYSTEM_USER_ID, input_data, 'pending')
+        except aiomysql.Error as err:
+             raise TransactionError(f"Database error during execution creation: {err}")
+
+        try:
+             # spender_id is the caller (the one executing this action)
+             transfer = await self.transfer_from(source_id, destination_id, currency_id, amount, spender_id=caller_id, execution_id=execution_id)
+
+             async with self.db as cursor:
+                 await self.Executions.update(cursor, execution_id, None, 0, 'success')
+
+             return execution_id, transfer
+
+        except Exception as e:
+             error_message = str(e)
+             if len(error_message) > 127:
+                 error_message = error_message[:124] + "..."
+
+             try:
+                 async with self.db as cursor:
+                     await self.Executions.update(cursor, execution_id, error_message, 0, 'failed')
+             except Exception:
+                 pass
+
+             raise e
+
     async def transfer(
         self,
         source_id: int,

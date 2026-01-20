@@ -194,6 +194,44 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
 
+@app_commands.command(name="transfer_from", description="他のユーザーのウォレットから送金します（要承認）。")
+@app_commands.describe(source="送金元ユーザー", destination="送金先ユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
+async def transfer_from(interaction: discord.Interaction, source: User, destination: User, amount: float, symbol: Optional[str] = None):
+    await interaction.response.defer(thinking=True)
+
+    if amount <= 0:
+        await interaction.followup.send(embed=create_error_embed("送金額は0より大きい必要があります。"))
+        return
+
+    try:
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。サーバー内で実行するか、シンボルを正しく指定してください。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
+
+        execution_id, tx = await Rapid.execute_transfer_from(
+            caller_id=interaction.user.id,
+            source_id=source.id,
+            destination_id=destination.id,
+            currency_id=currency.currency_id,
+            amount=int_amount
+        )
+        desc = f"{source.mention} から {destination.mention} へ `{format_amount(int_amount)} {currency.symbol}` の代理送金が完了しました。"
+        fields = [
+            EmbedField("転送ID", f"`{tx.transfer_id}`", False),
+            EmbedField("実行ID", f"`{execution_id}`", False)
+        ]
+        await interaction.followup.send(embed=create_success_embed(desc, title="代理送金完了", fields=fields))
+
+    except exceptions.InsufficientFunds:
+        await interaction.followup.send(embed=create_error_embed("残高が不足しているか、承認額（Allowance）が不足しています。"))
+    except exceptions.TransactionError as e:
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+
 @app_commands.command(name="execute_contract", description="指定したユーザーのコントラクトを実行します。")
 @app_commands.describe(user="コントラクトの所有者", input_data="コントラクトに渡すデータ")
 async def execute_contract(interaction: discord.Interaction, user: User, input_data: Optional[str] = None):
@@ -1003,6 +1041,7 @@ def setup(tree: app_commands.CommandTree, rapid: RapidWire):
 
     tree.add_command(balance)
     tree.add_command(transfer)
+    tree.add_command(transfer_from)
     tree.add_command(execute_contract)
     tree.add_command(history)
     tree.add_command(currency_group)
