@@ -280,7 +280,7 @@ class RapidWire:
         return UserModel(user_id, self.db)
 
     async def _compound_interest(self, cursor, user_id: int, currency_id: int) -> Stake:
-        stake = await self.Stakes.get(user_id, currency_id)
+        stake = await self.Stakes.get(user_id, currency_id, cursor=cursor)
         if not stake:
             return None
 
@@ -303,9 +303,30 @@ class RapidWire:
             await self.Stakes.update_amount(cursor, user_id, currency_id, new_amount, new_last_updated_at)
             # Update the supply
             await self.Currencies.update_supply(cursor, currency_id, reward)
-            return await self.Stakes.get(user_id, currency_id)
+            return await self.Stakes.get(user_id, currency_id, cursor=cursor)
 
         return stake
+
+    async def update_stale_stakes(self):
+        """Updates stakes that haven't been updated for 3 hours or more."""
+        current_time = int(time())
+        # 3 hours ago
+        threshold_time = current_time - (3 * SECONDS_IN_AN_HOUR)
+
+        try:
+            stale_stakes = await self.Stakes.get_stale_stakes(threshold_time)
+
+            if not stale_stakes:
+                return
+
+            async with self.db as cursor:
+                for stake in stale_stakes:
+                    try:
+                        await self._compound_interest(cursor, stake.user_id, stake.currency_id)
+                    except Exception as e:
+                        print(f"Error updating stake for user {stake.user_id}, currency {stake.currency_id}: {e}")
+        except Exception as e:
+            print(f"Error in update_stale_stakes: {e}")
 
     def _calculate_contract_cost(self, script: str) -> int:
         try:

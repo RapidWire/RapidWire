@@ -263,15 +263,26 @@ class StakeModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    async def get(self, user_id: int, currency_id: int) -> Optional[Stake]:
-        async with self.db as cursor:
+    async def get(self, user_id: int, currency_id: int, cursor=None) -> Optional[Stake]:
+        if cursor:
             await cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
             result = await cursor.fetchone()
             return Stake(**result) if result else None
+        else:
+            async with self.db as cursor:
+                await cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+                result = await cursor.fetchone()
+                return Stake(**result) if result else None
 
     async def get_for_user(self, user_id: int) -> List[Stake]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM staking WHERE user_id = %s", (user_id,))
+            results = await cursor.fetchall()
+            return [Stake(**row) for row in results]
+
+    async def get_stale_stakes(self, threshold_timestamp: int) -> List[Stake]:
+        async with self.db as cursor:
+            await cursor.execute("SELECT * FROM staking WHERE last_updated_at <= %s", (threshold_timestamp,))
             results = await cursor.fetchall()
             return [Stake(**row) for row in results]
 
