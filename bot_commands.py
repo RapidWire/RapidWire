@@ -543,7 +543,7 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
 
         int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
         stake = await Rapid.stake_deposit(interaction.user.id, currency.currency_id, int_amount)
-        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキング（または追加預け入れ）が完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
+        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキングが完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
         await interaction.followup.send(embed=create_success_embed(desc, "ステーキング完了"))
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("ステーキングするための残高が不足しています。"))
