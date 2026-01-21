@@ -110,8 +110,8 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `get_allowance(owner: int, spender: int, currency: int) -> int`: 指定したユーザーがスペンダーに対して許可している送金可能額を取得します。
 - `get_transaction(tx_id: int) -> Transaction`: トランザクション情報を取得します。
 - `swap(from_currency_id: int, to_currency_id: int, amount: int) -> Transaction`: 通貨を交換します。
-- `add_liquidity(currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> Any`: 流動性を提供します。
-- `remove_liquidity(currency_a_id: int, currency_b_id: int, shares: int) -> Any`: 流動性を削除します。
+- `add_liquidity(currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int`: 流動性を提供します。
+- `remove_liquidity(currency_a_id: int, currency_b_id: int, shares: int) -> list[int]`: 流動性を削除します。
 
 ### 請求
 
