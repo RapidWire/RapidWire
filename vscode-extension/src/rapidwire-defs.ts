@@ -17,7 +17,7 @@ export const sdkDefs = {
     },
     {
       "name": "storage",
-      "type": "Dict[str, str]",
+      "type": "dict[str, str]",
       "doc": ""
     }
   ],
@@ -330,7 +330,7 @@ export const sdkDefs = {
       "args": [
         {
           "name": "val",
-          "type": "Any"
+          "type": "str"
         }
       ],
       "returnType": "int",

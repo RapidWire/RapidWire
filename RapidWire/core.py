@@ -2,7 +2,7 @@ import aiomysql
 import json
 import httpx
 from time import time
-from typing import Optional, Dict, Any, List, Tuple, Literal
+from typing import Optional
 from decimal import Decimal
 import hashlib
 import zlib
@@ -71,7 +71,7 @@ class ContractAPI:
         allowance = await self.core.Allowances.get(owner, spender, currency)
         return allowance.amount if allowance else 0
 
-    async def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> List[Transfer]:
+    async def search_transfers(self, source: Optional[int] = None, dest: Optional[int] = None, currency: Optional[int] = None, page: int = 1) -> list[Transfer]:
         return await self.core.search_transfers(source_id=source, dest_id=dest, currency_id=currency, page=page, limit=10)
 
     async def get_transaction(self, tx_id: int) -> Optional[Transfer]:
@@ -114,7 +114,7 @@ class ContractAPI:
 
         return await self.core.add_liquidity(curr_a.symbol, curr_b.symbol, amount_a, amount_b, self.ctx.contract_owner_id)
 
-    async def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> List[int]:
+    async def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> list[int]:
         curr_a = await self.core.Currencies.get(currency_a_id)
         curr_b = await self.core.Currencies.get(currency_b_id)
         if not curr_a or not curr_b:
@@ -348,7 +348,7 @@ class RapidWire:
 
         return calculate_block_cost(ops)
 
-    async def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, chain_context: Optional[ChainContext] = None) -> Tuple[int, str | None]:
+    async def execute_contract(self, caller_id: int, contract_owner_id: int, input_data: Optional[str] = None, chain_context: Optional[ChainContext] = None) -> tuple[int, str | None]:
         if input_data and len(input_data) > 127:
             raise ValueError("Input data is too long (max 127 characters).")
         if input_data and "\\" in input_data:
@@ -492,7 +492,7 @@ class RapidWire:
                 if not created_context:
                     chain_context.depth -= 1
 
-    async def execute_transfer_from(self, caller_id: int, source_id: int, destination_id: int, currency_id: int, amount: int) -> Tuple[int, Transfer]:
+    async def execute_transfer_from(self, caller_id: int, source_id: int, destination_id: int, currency_id: int, amount: int) -> tuple[int, Transfer]:
         input_data = f"transfer_from source:{source_id} dest:{destination_id} cur:{currency_id} amt:{amount}"
         if len(input_data) > 127:
             input_data = input_data[:127]
@@ -580,7 +580,7 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during transfer: {err}")
 
-    async def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, hourly_interest_rate: int) -> Tuple[Currency, Optional[Transfer]]:
+    async def create_currency(self, guild_id: int, name: str, symbol: str, supply: int, issuer_id: int, hourly_interest_rate: int) -> tuple[Currency, Optional[Transfer]]:
         if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*[a-zA-Z0-9]$', name) and not re.match(r'^[a-zA-Z]$', name):
              raise ValueError("Names must start with a letter, end with an alphanumeric character, and contain only alphanumeric characters and underscores.")
         if name.count('_') > 5:
@@ -645,7 +645,7 @@ class RapidWire:
 
         return await self.Currencies.request_delete(currency_id)
 
-    async def finalize_delete_currency(self, currency_id: int, user_id: int) -> List[Transfer]:
+    async def finalize_delete_currency(self, currency_id: int, user_id: int) -> list[Transfer]:
         currency = await self.Currencies.get(currency_id)
         if not currency:
             raise CurrencyNotFound("Currency not found.")
@@ -671,7 +671,7 @@ class RapidWire:
 
         return await self.delete_currency(currency_id)
 
-    async def delete_currency(self, currency_id: int) -> List[Transfer]:
+    async def delete_currency(self, currency_id: int) -> list[Transfer]:
         holders = await self.Currencies.get_all_holders(currency_id)
         transactions = []
 
@@ -965,7 +965,7 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
 
-    async def remove_liquidity(self, symbol_a: str, symbol_b: str, shares: int, user_id: int) -> Tuple[int, int]:
+    async def remove_liquidity(self, symbol_a: str, symbol_b: str, shares: int, user_id: int) -> tuple[int, int]:
         pool = await self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
         if not pool:
             raise ValueError("Liquidity pool not found.")
@@ -1001,10 +1001,10 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error while removing liquidity: {err}")
 
-    async def search_transfers(self, **kwargs) -> List[Transfer]:
+    async def search_transfers(self, **kwargs) -> list[Transfer]:
         return await self.Transfers.search(**kwargs)
 
-    async def find_swap_route(self, from_symbol: str, to_symbol: str) -> List[LiquidityPool]:
+    async def find_swap_route(self, from_symbol: str, to_symbol: str) -> list[LiquidityPool]:
         from_currency = await self.Currencies.get_by_symbol(from_symbol)
         to_currency = await self.Currencies.get_by_symbol(to_symbol)
         if not from_currency or not to_currency:
@@ -1046,7 +1046,7 @@ class RapidWire:
 
         raise ValueError("No swap route found between the specified currencies.")
 
-    def get_swap_rate(self, amount_in: int, route: List[LiquidityPool], from_currency_id: int) -> int:
+    def get_swap_rate(self, amount_in: int, route: list[LiquidityPool], from_currency_id: int) -> int:
         current_amount = amount_in
         current_currency_id = from_currency_id
 
@@ -1068,7 +1068,7 @@ class RapidWire:
 
         return current_amount
 
-    async def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> Tuple[int, int]:
+    async def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> tuple[int, int]:
         # Initial route finding (optimistic)
         initial_route = await self.find_swap_route(from_symbol, to_symbol)
         from_currency = await self.Currencies.get_by_symbol(from_symbol)

@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import Optional, Literal
 from time import time
 import aiomysql
 import secrets
@@ -44,7 +44,7 @@ class UserModel:
                     return Balance(user_id=self.user_id, currency_id=currency_id, amount=0)
                 return Balance(**result)
 
-    async def get_all_balances(self) -> List[Balance]:
+    async def get_all_balances(self) -> list[Balance]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM balance WHERE user_id = %s AND amount > 0", (self.user_id,))
             results = await cursor.fetchall()
@@ -78,7 +78,7 @@ class CurrencyModel:
             result = await cursor.fetchone()
             return Currency(**result) if result else None
 
-    async def get_all_holders(self, currency_id: int) -> List[Balance]:
+    async def get_all_holders(self, currency_id: int) -> list[Balance]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM balance WHERE currency_id = %s AND amount > 0 AND user_id != 0", (currency_id,))
             results = await cursor.fetchall()
@@ -224,7 +224,7 @@ class ClaimModel:
             result = await cursor.fetchone()
             return Claim(**result) if result else None
 
-    async def get_for_user(self, user_id: int, page: int = 1, limit: int = 10) -> List[Claim]:
+    async def get_for_user(self, user_id: int, page: int = 1, limit: int = 10) -> list[Claim]:
         offset = (page - 1) * limit
         async with self.db as cursor:
             await cursor.execute(
@@ -234,7 +234,7 @@ class ClaimModel:
             results = await cursor.fetchall()
             return [Claim(**row) for row in results]
 
-    async def get_claims_created_after(self, timestamp: int) -> List[Claim]:
+    async def get_claims_created_after(self, timestamp: int) -> list[Claim]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM claims WHERE created_at > %s", (timestamp,))
             results = await cursor.fetchall()
@@ -274,13 +274,13 @@ class StakeModel:
                 result = await cursor.fetchone()
                 return Stake(**result) if result else None
 
-    async def get_for_user(self, user_id: int) -> List[Stake]:
+    async def get_for_user(self, user_id: int) -> list[Stake]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM staking WHERE user_id = %s", (user_id,))
             results = await cursor.fetchall()
             return [Stake(**row) for row in results]
 
-    async def get_stale_stakes(self, threshold_timestamp: int) -> List[Stake]:
+    async def get_stale_stakes(self, threshold_timestamp: int) -> list[Stake]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM staking WHERE last_updated_at <= %s", (threshold_timestamp,))
             results = await cursor.fetchall()
@@ -320,7 +320,7 @@ class LiquidityPoolModel:
             result = await cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
-    async def get_all(self) -> List[LiquidityPool]:
+    async def get_all(self) -> list[LiquidityPool]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM liquidity_pool")
             results = await cursor.fetchall()
@@ -442,7 +442,7 @@ class ContractVariableModel:
                 (user_id, key, str(value))
             )
 
-    async def get_all_for_user(self, user_id: int) -> List[ContractVariable]:
+    async def get_all_for_user(self, user_id: int) -> list[ContractVariable]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM contract_storage WHERE user_id = %s", (user_id,))
             results = await cursor.fetchall()
@@ -466,7 +466,7 @@ class NotificationPermissionModel:
                 (user_id, allowed_user_id)
             )
 
-    async def get_for_user(self, user_id: int) -> List[NotificationPermission]:
+    async def get_for_user(self, user_id: int) -> list[NotificationPermission]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM notification_permissions WHERE user_id = %s", (user_id,))
             results = await cursor.fetchall()
@@ -548,7 +548,7 @@ class TransferModel:
         limit: int = 10,
         sort_by: str = "transfer_id",
         sort_order: str = "desc"
-    ) -> List[Transfer]:
+    ) -> list[Transfer]:
         offset = (page - 1) * limit
         conditions = []
         params = []
@@ -637,7 +637,7 @@ class ContractHistoryModel:
             (execution_id, user_id, script_hash, cost, int(time()))
         )
 
-    async def get_for_user(self, user_id: int) -> List[ContractHistory]:
+    async def get_for_user(self, user_id: int) -> list[ContractHistory]:
         async with self.db as cursor:
             await cursor.execute("SELECT * FROM contract_history WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
             results = await cursor.fetchall()
@@ -719,7 +719,7 @@ class DiscordPermissionModel:
             await cursor.execute("SELECT 1 FROM discord_permissions WHERE guild_id = %s AND user_id = %s", (guild_id, user_id))
             return await cursor.fetchone() is not None
 
-    async def get_all(self, guild_id: int) -> List[DiscordPermission]:
+    async def get_all(self, guild_id: int) -> list[DiscordPermission]:
          async with self.db as cursor:
             await cursor.execute("SELECT * FROM discord_permissions WHERE guild_id = %s", (guild_id,))
             results = await cursor.fetchall()
