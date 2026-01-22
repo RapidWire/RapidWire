@@ -207,7 +207,7 @@ class SwapRateResponse(BaseModel):
 
 class SwapResponse(BaseModel):
     amount_out: str
-    currency_out_symbol: str
+    currency_out_id: str
     execution_id: int
 
 class RouteResponse(BaseModel):
@@ -582,7 +582,7 @@ async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_
     try:
         execution_id, amount_out, currency_out_id = await Rapid.execute_swap(user_id, currency_from.currency_id, currency_to.currency_id, request.amount)
         currency_out = await Rapid.Currencies.get(currency_out_id)
-        return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol, execution_id=execution_id)
+        return SwapResponse(amount_out=str(amount_out), currency_out_id=currency_out.currency_id, execution_id=execution_id)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
