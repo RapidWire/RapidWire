@@ -135,9 +135,19 @@ class TransferRequest(BaseModel):
     currency_id: int = Field(..., description="The ID of the currency to transfer.")
     amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
 
+class TransferFromResponse(BaseModel):
+    transfer: Transfer
+    execution_id: int
+
 class ContractExecutionRequest(BaseModel):
     contract_owner_id: int = Field(..., description="The Discord user ID of the contract owner.")
     input_data: Optional[str] = Field(None, max_length=127, description="Alphanumeric data for the contract.")
+
+class TransferFromRequest(BaseModel):
+    source_id: int = Field(..., description="The Discord user ID of the source.")
+    destination_id: int = Field(..., description="The Discord user ID of the recipient.")
+    currency_id: int = Field(..., description="The ID of the currency to transfer.")
+    amount: int = Field(..., gt=0, description="The amount of currency to transfer.")
 
 class TransferResponse(BaseModel):
     transfer: Optional[Transfer] = None
@@ -203,10 +213,19 @@ class SwapRateResponse(BaseModel):
 
 class SwapResponse(BaseModel):
     amount_out: str
-    currency_out_symbol: str
+    currency_out_id: str
+    execution_id: int
 
 class RouteResponse(BaseModel):
     route: List[LiquidityPool]
+
+class ContractUpdateRequest(BaseModel):
+    script: str
+    max_cost: Optional[int] = None
+    lock_hours: Optional[int] = None
+
+class ContractUpdateResponse(BaseModel):
+    contract: Contract
 
 class ApproveRequest(BaseModel):
     spender_id: int
@@ -307,6 +326,17 @@ class RapidWireClient:
         resp.raise_for_status()
         return TransferResponse(**resp.json())
 
+    def transfer_from_currency(self, source_id: int, destination_id: int, currency_id: int, amount: int) -> TransferFromResponse:
+        request = TransferFromRequest(
+            source_id=source_id,
+            destination_id=destination_id,
+            currency_id=currency_id,
+            amount=amount
+        )
+        resp = self.client.post("/currency/transfer_from", json=request.model_dump())
+        resp.raise_for_status()
+        return TransferFromResponse(**resp.json())
+
     def approve_allowance(self, spender_id: int, currency_id: int, amount: int) -> SuccessResponse:
         request = ApproveRequest(spender_id=spender_id, currency_id=currency_id, amount=amount)
         resp = self.client.post("/currency/approve", json=request.model_dump())
@@ -333,6 +363,12 @@ class RapidWireClient:
         resp = self.client.get("/claims", params={"page": page})
         resp.raise_for_status()
         return [Claim(**item) for item in resp.json()]
+
+    def update_contract(self, script: str, max_cost: Optional[int] = None, lock_hours: Optional[int] = None) -> ContractUpdateResponse:
+        request = ContractUpdateRequest(script=script, max_cost=max_cost, lock_hours=lock_hours)
+        resp = self.client.post("/contract/update", json=request.model_dump())
+        resp.raise_for_status()
+        return ContractUpdateResponse(**resp.json())
 
     def get_claim(self, claim_id: int) -> Claim:
         resp = self.client.get(f"/claims/{claim_id}")

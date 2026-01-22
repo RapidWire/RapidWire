@@ -365,7 +365,8 @@ class RapidWire:
                         raise InsufficientFunds(f"Insufficient funds for estimated gas fee. Required: {initial_gas_deduction}, Available: {balance.amount}")
 
                     # Deduct now
-                    await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction, execution_id=execution_id)
+                    if initial_gas_deduction > 0:
+                        await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, initial_gas_deduction, execution_id=execution_id)
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during contract preparation: {err}")
         except Exception:
