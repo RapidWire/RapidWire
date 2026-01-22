@@ -98,29 +98,14 @@ class ContractAPI:
         return claim
 
     async def swap(self, from_currency_id: int, to_currency_id: int, amount: int) -> int:
-        from_currency = await self.core.Currencies.get(from_currency_id)
-        to_currency = await self.core.Currencies.get(to_currency_id)
-        if not from_currency or not to_currency:
-            raise CurrencyNotFound("One of the currencies was not found.")
-
-        amount_out, _ = await self.core.swap(from_currency.symbol, to_currency.symbol, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
+        amount_out, _ = await self.core.swap(from_currency_id, to_currency_id, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
         return amount_out
 
     async def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int:
-        curr_a = await self.core.Currencies.get(currency_a_id)
-        curr_b = await self.core.Currencies.get(currency_b_id)
-        if not curr_a or not curr_b:
-            raise CurrencyNotFound("One of the currencies was not found.")
-
-        return await self.core.add_liquidity(curr_a.symbol, curr_b.symbol, amount_a, amount_b, self.ctx.contract_owner_id)
+        return await self.core.add_liquidity(currency_a_id, currency_b_id, amount_a, amount_b, self.ctx.contract_owner_id)
 
     async def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> list[int]:
-        curr_a = await self.core.Currencies.get(currency_a_id)
-        curr_b = await self.core.Currencies.get(currency_b_id)
-        if not curr_a or not curr_b:
-            raise CurrencyNotFound("One of the currencies was not found.")
-
-        amount_a, amount_b = await self.core.remove_liquidity(curr_a.symbol, curr_b.symbol, shares, self.ctx.contract_owner_id)
+        amount_a, amount_b = await self.core.remove_liquidity(currency_a_id, currency_b_id, shares, self.ctx.contract_owner_id)
         return [amount_a, amount_b]
 
     async def execute_contract(self, destination_id: int, input_data: Optional[str] = None) -> Optional[str]:
@@ -921,8 +906,8 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during liquidity pool creation: {err}")
 
-    async def add_liquidity(self, symbol_a: str, symbol_b: str, amount_a_desired: int, amount_b_desired: int, user_id: int) -> int:
-        pool = await self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
+    async def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a_desired: int, amount_b_desired: int, user_id: int) -> int:
+        pool = await self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id)
         if not pool:
             raise ValueError("Liquidity pool not found.")
 
@@ -965,8 +950,8 @@ class RapidWire:
         except aiomysql.Error as err:
             raise TransactionError(f"Database error while adding liquidity: {err}")
 
-    async def remove_liquidity(self, symbol_a: str, symbol_b: str, shares: int, user_id: int) -> tuple[int, int]:
-        pool = await self.LiquidityPools.get_by_symbols(symbol_a, symbol_b)
+    async def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int, user_id: int) -> tuple[int, int]:
+        pool = await self.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id)
         if not pool:
             raise ValueError("Liquidity pool not found.")
 
@@ -1004,16 +989,11 @@ class RapidWire:
     async def search_transfers(self, **kwargs) -> list[Transfer]:
         return await self.Transfers.search(**kwargs)
 
-    async def find_swap_route(self, from_symbol: str, to_symbol: str) -> list[LiquidityPool]:
-        from_currency = await self.Currencies.get_by_symbol(from_symbol)
-        to_currency = await self.Currencies.get_by_symbol(to_symbol)
-        if not from_currency or not to_currency:
-            raise CurrencyNotFound("One of the currencies for the swap was not found.")
-
+    async def find_swap_route(self, from_currency_id: int, to_currency_id: int) -> list[LiquidityPool]:
         all_pools = await self.LiquidityPools.get_all()
 
         # Quick check for a direct pool
-        direct_pool = await self.LiquidityPools.get_by_symbols(from_symbol, to_symbol)
+        direct_pool = await self.LiquidityPools.get_by_currency_pair(from_currency_id, to_currency_id)
         if direct_pool:
             return [direct_pool]
 
@@ -1028,13 +1008,13 @@ class RapidWire:
             graph[pool.currency_b_id].append((pool.currency_a_id, pool))
 
         # BFS to find the shortest path
-        queue = [(from_currency.currency_id, [])]
-        visited = {from_currency.currency_id}
+        queue = [(from_currency_id, [])]
+        visited = {from_currency_id}
 
         while queue:
             current_currency_id, path = queue.pop(0)
 
-            if current_currency_id == to_currency.currency_id:
+            if current_currency_id == to_currency_id:
                 return path
 
             if current_currency_id in graph:
@@ -1068,10 +1048,9 @@ class RapidWire:
 
         return current_amount
 
-    async def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int, execution_id: Optional[int] = None) -> tuple[int, int]:
+    async def swap(self, from_currency_id: int, to_currency_id: int, amount: int, user_id: int, execution_id: Optional[int] = None) -> tuple[int, int]:
         # Initial route finding (optimistic)
-        initial_route = await self.find_swap_route(from_symbol, to_symbol)
-        from_currency = await self.Currencies.get_by_symbol(from_symbol)
+        initial_route = await self.find_swap_route(from_currency_id, to_currency_id)
 
         try:
             async with self.db as cursor:
@@ -1090,9 +1069,9 @@ class RapidWire:
                 locked_route = [locked_pools_map[p.pool_id] for p in initial_route]
 
                 # Recalculate amount_out with locked values
-                amount_out = self.get_swap_rate(amount, locked_route, from_currency.currency_id)
+                amount_out = self.get_swap_rate(amount, locked_route, from_currency_id)
 
-                current_currency_id = from_currency.currency_id
+                current_currency_id = from_currency_id
                 amount_in = amount
 
                 user = self.get_user(user_id)
@@ -1118,14 +1097,14 @@ class RapidWire:
 
                 await user._update_balance(cursor, current_currency_id, amount_out)
 
-                await self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, execution_id=execution_id)
+                await self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency_id, amount, execution_id=execution_id)
                 await self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, current_currency_id, amount_out, execution_id=execution_id)
             return amount_out, current_currency_id
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during swap: {err}")
 
-    async def execute_swap(self, user_id: int, from_symbol: str, to_symbol: str, amount: int) -> tuple[int, int, int]:
-        input_data = f"swap from:{from_symbol} to:{to_symbol} amt:{amount}"
+    async def execute_swap(self, user_id: int, from_currency_id: int, to_currency_id: int, amount: int) -> tuple[int, int, int]:
+        input_data = f"swap from:{from_currency_id} to:{to_currency_id} amt:{amount}"
         if len(input_data) > 127:
             input_data = input_data[:127]
 
@@ -1137,7 +1116,7 @@ class RapidWire:
             raise TransactionError(f"Database error during execution creation: {err}")
 
         try:
-            amount_out, currency_id = await self.swap(from_symbol, to_symbol, amount, user_id, execution_id=execution_id)
+            amount_out, currency_id = await self.swap(from_currency_id, to_currency_id, amount, user_id, execution_id=execution_id)
 
             async with self.db as cursor:
                 await self.Executions.update(cursor, execution_id, None, 0, 'success')
