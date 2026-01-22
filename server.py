@@ -521,7 +521,7 @@ async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        shares = await Rapid.add_liquidity(currency_a.symbol, currency_b.symbol, request.amount_a, request.amount_b, user_id)
+        shares = await Rapid.add_liquidity(currency_a.currency_id, currency_b.currency_id, request.amount_a, request.amount_b, user_id)
         return AddLiquidityResponse(shares_minted=str(shares))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -536,7 +536,7 @@ async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depen
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        amount_a, amount_b = await Rapid.remove_liquidity(currency_a.symbol, currency_b.symbol, request.shares, user_id)
+        amount_a, amount_b = await Rapid.remove_liquidity(currency_a.currency_id, currency_b.currency_id, request.shares, user_id)
         return RemoveLiquidityResponse(amount_a_received=str(amount_a), amount_b_received=str(amount_b))
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -566,7 +566,7 @@ async def get_swap_rate(request: SwapRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        route = await Rapid.find_swap_route(currency_from.symbol, currency_to.symbol)
+        route = await Rapid.find_swap_route(currency_from.currency_id, currency_to.currency_id)
         amount_out = Rapid.get_swap_rate(request.amount, route, request.currency_from_id)
         return SwapRateResponse(amount_out=str(amount_out))
     except (ValueError, exceptions.CurrencyNotFound) as e:
@@ -580,7 +580,7 @@ async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        execution_id, amount_out, currency_out_id = await Rapid.execute_swap(user_id, currency_from.symbol, currency_to.symbol, request.amount)
+        execution_id, amount_out, currency_out_id = await Rapid.execute_swap(user_id, currency_from.currency_id, currency_to.currency_id, request.amount)
         currency_out = await Rapid.Currencies.get(currency_out_id)
         return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol, execution_id=execution_id)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
@@ -596,7 +596,7 @@ async def get_swap_route(currency_from_id: int, currency_to_id: int):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        route = await Rapid.find_swap_route(currency_from.symbol, currency_to.symbol)
+        route = await Rapid.find_swap_route(currency_from.currency_id, currency_to.currency_id)
         return RouteResponse(route=route)
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
