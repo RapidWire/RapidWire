@@ -103,7 +103,7 @@ class ContractAPI:
         if not from_currency or not to_currency:
             raise CurrencyNotFound("One of the currencies was not found.")
 
-        amount_out, _ = await self.core.swap(from_currency.symbol, to_currency.symbol, amount, self.ctx.contract_owner_id)
+        amount_out, _ = await self.core.swap(from_currency.symbol, to_currency.symbol, amount, self.ctx.contract_owner_id, execution_id=self.ctx.execution_id)
         return amount_out
 
     async def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int:
@@ -1068,7 +1068,7 @@ class RapidWire:
 
         return current_amount
 
-    async def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int) -> tuple[int, int]:
+    async def swap(self, from_symbol: str, to_symbol: str, amount: int, user_id: int, execution_id: Optional[int] = None) -> tuple[int, int]:
         # Initial route finding (optimistic)
         initial_route = await self.find_swap_route(from_symbol, to_symbol)
         from_currency = await self.Currencies.get_by_symbol(from_symbol)
@@ -1118,8 +1118,41 @@ class RapidWire:
 
                 await user._update_balance(cursor, current_currency_id, amount_out)
 
-                await self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency.currency_id, amount)
-                await self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, current_currency_id, amount_out)
+                await self.Transfers.create(cursor, user_id, SYSTEM_USER_ID, from_currency.currency_id, amount, execution_id=execution_id)
+                await self.Transfers.create(cursor, SYSTEM_USER_ID, user_id, current_currency_id, amount_out, execution_id=execution_id)
             return amount_out, current_currency_id
         except aiomysql.Error as err:
             raise TransactionError(f"Database error during swap: {err}")
+
+    async def execute_swap(self, user_id: int, from_symbol: str, to_symbol: str, amount: int) -> tuple[int, int, int]:
+        input_data = f"swap from:{from_symbol} to:{to_symbol} amt:{amount}"
+        if len(input_data) > 127:
+            input_data = input_data[:127]
+
+        execution_id = None
+        try:
+            async with self.db as cursor:
+                execution_id = await self.Executions.create(cursor, user_id, SYSTEM_USER_ID, input_data, 'pending')
+        except aiomysql.Error as err:
+            raise TransactionError(f"Database error during execution creation: {err}")
+
+        try:
+            amount_out, currency_id = await self.swap(from_symbol, to_symbol, amount, user_id, execution_id=execution_id)
+
+            async with self.db as cursor:
+                await self.Executions.update(cursor, execution_id, None, 0, 'success')
+
+            return execution_id, amount_out, currency_id
+
+        except Exception as e:
+            error_message = str(e)
+            if len(error_message) > 127:
+                error_message = error_message[:124] + "..."
+
+            try:
+                async with self.db as cursor:
+                    await self.Executions.update(cursor, execution_id, error_message, 0, 'failed')
+            except Exception:
+                pass
+
+            raise e

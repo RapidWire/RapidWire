@@ -52,10 +52,11 @@ class SwapConfirmationView(discord.ui.View):
                 self.stop()
                 return
 
-            amount_out, _ = await Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
+            execution_id, amount_out, _ = await Rapid.execute_swap(interaction.user.id, self.from_symbol, self.to_symbol, self.amount_in)
             self.swap_executed = True
             desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(amount_out)} {self.to_symbol}` にスワップしました。"
-            await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了"), view=None)
+            fields = [EmbedField("実行ID", f"`{execution_id}`", False)]
+            await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了", fields=fields), view=None)
         except Exception as e:
             await interaction.response.edit_message(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"), view=None)
         self.stop()
