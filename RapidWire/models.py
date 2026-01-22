@@ -377,6 +377,12 @@ class LiquidityProviderModel:
                 result = await cursor.fetchone()
                 return LiquidityProvider(**result) if result else None
 
+    async def get_for_user(self, user_id: int) -> list[LiquidityProvider]:
+        async with self.db as cursor:
+            await cursor.execute("SELECT * FROM liquidity_provider WHERE user_id = %s", (user_id,))
+            results = await cursor.fetchall()
+            return [LiquidityProvider(**row) for row in results]
+
     async def add_shares(self, cursor, pool_id: int, user_id: int, shares_change: int):
         await cursor.execute(
             """

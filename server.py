@@ -547,16 +547,16 @@ async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depen
 async def get_all_pools():
     return await Rapid.LiquidityPools.get_all()
 
+@app.get("/pools/provider/{user_id}", response_model=List[structs.LiquidityProvider], tags=["DEX"])
+async def get_provider_info(user_id: int):
+    return await Rapid.LiquidityProviders.get_for_user(user_id)
+
 @app.get("/pools/{currency_a_id}/{currency_b_id}", response_model=structs.LiquidityPool, tags=["DEX"])
 async def get_pool(currency_a_id: int, currency_b_id: int):
     pool = await Rapid.LiquidityPools.get_by_currency_pair(currency_a_id, currency_b_id)
     if not pool:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Liquidity pool not found")
     return pool
-
-@app.get("/pools/provider/{user_id}", response_model=List[structs.LiquidityProvider], tags=["DEX"])
-async def get_provider_info(user_id: int):
-    return await Rapid.LiquidityProviders.get_for_user(user_id)
 
 @app.post("/swap/rate", response_model=SwapRateResponse, tags=["DEX"])
 async def get_swap_rate(request: SwapRequest):
