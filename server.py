@@ -207,7 +207,7 @@ class SwapRateResponse(BaseModel):
 
 class SwapResponse(BaseModel):
     amount_out: str
-    currency_out_id: str
+    currency_out_id: int
     execution_id: int
 
 class RouteResponse(BaseModel):

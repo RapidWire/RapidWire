@@ -2,6 +2,13 @@ from typing import List, Optional, Literal, Dict, Union
 from pydantic import BaseModel, Field, field_serializer
 import httpx
 
+class RapidWireAPIError(Exception):
+    def __init__(self, status_code: int, message: str, details: Optional[dict] = None):
+        self.status_code = status_code
+        self.message = message
+        self.details = details
+        super().__init__(f"[{status_code}] {message}")
+
 # --- Structs (from RapidWire/structs.py) ---
 
 class Currency(BaseModel):
@@ -213,7 +220,7 @@ class SwapRateResponse(BaseModel):
 
 class SwapResponse(BaseModel):
     amount_out: str
-    currency_out_id: str
+    currency_out_id: int
     execution_id: int
 
 class RouteResponse(BaseModel):
@@ -240,80 +247,88 @@ class RapidWireClient:
         self.headers = {"API-Key": api_key}
         self.client = httpx.Client(headers=self.headers, base_url=self.base_url, timeout=30.0)
 
+    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        try:
+            resp = self.client.request(method, url, **kwargs)
+            if resp.is_error:
+                try:
+                    data = resp.json()
+                    detail = data.get("detail")
+                    if detail:
+                        if isinstance(detail, dict):
+                             msg = str(detail)
+                        else:
+                             msg = str(detail)
+                    else:
+                        msg = resp.text
+                    raise RapidWireAPIError(resp.status_code, msg)
+                except ValueError:
+                    # JSON decode failed
+                    resp.raise_for_status()
+            return resp
+        except httpx.HTTPStatusError as e:
+            # Fallback for unexpected status codes that didn't raise above
+             raise RapidWireAPIError(e.response.status_code, str(e))
+
     def get_version(self) -> SuccessResponse:
-        resp = self.client.get("/version")
-        resp.raise_for_status()
+        resp = self._request("GET", "/version")
         return SuccessResponse(**resp.json())
 
     def get_config(self) -> ConfigResponse:
-        resp = self.client.get("/config")
-        resp.raise_for_status()
+        resp = self._request("GET", "/config")
         return ConfigResponse(**resp.json())
 
     def get_user_name(self, user_id: int) -> UserNameResponse:
-        resp = self.client.get(f"/user/{user_id}/name")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/user/{user_id}/name")
         return UserNameResponse(**resp.json())
 
     def get_user_stats(self, user_id: int) -> UserStatsResponse:
-        resp = self.client.get(f"/user/{user_id}/stats")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/user/{user_id}/stats")
         return UserStatsResponse(**resp.json())
 
     def get_balance(self, user_id: int) -> List[BalanceResponse]:
-        resp = self.client.get(f"/balance/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/balance/{user_id}")
         return [BalanceResponse(**item) for item in resp.json()]
 
     def get_stakes(self, user_id: int) -> List[StakeResponse]:
-        resp = self.client.get(f"/stakes/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/stakes/{user_id}")
         return [StakeResponse(**item) for item in resp.json()]
 
     def get_account_history(self, page: int = 1) -> List[Transfer]:
-        resp = self.client.get("/account/history", params={"page": page})
-        resp.raise_for_status()
+        resp = self._request("GET", "/account/history", params={"page": page})
         return [Transfer(**item) for item in resp.json()]
 
     def get_contract_script(self, user_id: int) -> ContractScriptResponse:
-        resp = self.client.get(f"/script/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/script/{user_id}")
         return ContractScriptResponse(**resp.json())
 
     def execute_contract(self, contract_owner_id: int, input_data: Optional[str] = None) -> ContractExecutionResponse:
         request = ContractExecutionRequest(contract_owner_id=contract_owner_id, input_data=input_data)
-        resp = self.client.post("/contract/execute", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/contract/execute", json=request.model_dump())
         return ContractExecutionResponse(**resp.json())
 
     def get_contract_variables(self, user_id: int) -> List[ContractVariable]:
-        resp = self.client.get(f"/contract/variables/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/contract/variables/{user_id}")
         return [ContractVariable(**item) for item in resp.json()]
 
     def get_contract_variable(self, user_id: int, key: str) -> ContractVariable:
-        resp = self.client.get(f"/contract/variable/{user_id}/{key}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/contract/variable/{user_id}/{key}")
         return ContractVariable(**resp.json())
 
     def get_contract_history(self, user_id: int) -> List[ContractHistory]:
-        resp = self.client.get(f"/contract/history/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/contract/history/{user_id}")
         return [ContractHistory(**item) for item in resp.json()]
 
     def get_execution(self, execution_id: int) -> Execution:
-        resp = self.client.get(f"/executions/{execution_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/executions/{execution_id}")
         return Execution(**resp.json())
 
     def get_currency(self, currency_id: int) -> Currency:
-        resp = self.client.get(f"/currency/{currency_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/currency/{currency_id}")
         return Currency(**resp.json())
 
     def get_currency_by_symbol(self, symbol: str) -> Currency:
-        resp = self.client.get(f"/currency/symbol/{symbol}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/currency/symbol/{symbol}")
         return Currency(**resp.json())
 
     def transfer_currency(self, destination_id: int, currency_id: int, amount: int) -> TransferResponse:
@@ -322,8 +337,7 @@ class RapidWireClient:
             currency_id=currency_id,
             amount=amount
         )
-        resp = self.client.post("/currency/transfer", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/currency/transfer", json=request.model_dump())
         return TransferResponse(**resp.json())
 
     def transfer_from_currency(self, source_id: int, destination_id: int, currency_id: int, amount: int) -> TransferFromResponse:
@@ -333,19 +347,16 @@ class RapidWireClient:
             currency_id=currency_id,
             amount=amount
         )
-        resp = self.client.post("/currency/transfer_from", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/currency/transfer_from", json=request.model_dump())
         return TransferFromResponse(**resp.json())
 
     def approve_allowance(self, spender_id: int, currency_id: int, amount: int) -> SuccessResponse:
         request = ApproveRequest(spender_id=spender_id, currency_id=currency_id, amount=amount)
-        resp = self.client.post("/currency/approve", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/currency/approve", json=request.model_dump())
         return SuccessResponse(**resp.json())
 
     def get_allowance(self, owner_id: int, spender_id: int, currency_id: int) -> Allowance:
-        resp = self.client.get(f"/currency/allowance/{owner_id}/{spender_id}/{currency_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/currency/allowance/{owner_id}/{spender_id}/{currency_id}")
         return Allowance(**resp.json())
 
     def create_claim(self, payer_id: int, currency_id: int, amount: int, description: Optional[str] = None) -> Claim:
@@ -355,34 +366,28 @@ class RapidWireClient:
             amount=amount,
             description=description
         )
-        resp = self.client.post("/claims/create", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/claims/create", json=request.model_dump())
         return Claim(**resp.json())
 
     def get_claims(self, page: int = 1) -> List[Claim]:
-        resp = self.client.get("/claims", params={"page": page})
-        resp.raise_for_status()
+        resp = self._request("GET", "/claims", params={"page": page})
         return [Claim(**item) for item in resp.json()]
 
     def update_contract(self, script: str, max_cost: Optional[int] = None, lock_hours: Optional[int] = None) -> ContractUpdateResponse:
         request = ContractUpdateRequest(script=script, max_cost=max_cost, lock_hours=lock_hours)
-        resp = self.client.post("/contract/update", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/contract/update", json=request.model_dump())
         return ContractUpdateResponse(**resp.json())
 
     def get_claim(self, claim_id: int) -> Claim:
-        resp = self.client.get(f"/claims/{claim_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/claims/{claim_id}")
         return Claim(**resp.json())
 
     def pay_claim(self, claim_id: int) -> Transfer:
-        resp = self.client.post(f"/claims/{claim_id}/pay")
-        resp.raise_for_status()
+        resp = self._request("POST", f"/claims/{claim_id}/pay")
         return Transfer(**resp.json())
 
     def cancel_claim(self, claim_id: int) -> Claim:
-        resp = self.client.post(f"/claims/{claim_id}/cancel")
-        resp.raise_for_status()
+        resp = self._request("POST", f"/claims/{claim_id}/cancel")
         return Claim(**resp.json())
 
     def search_transfers(self,
@@ -418,57 +423,47 @@ class RapidWireClient:
         # Filter out None values
         params = {k: v for k, v in params.items() if v is not None}
         
-        resp = self.client.get("/transfers/search", params=params)
-        resp.raise_for_status()
+        resp = self._request("GET", "/transfers/search", params=params)
         return [Transfer(**item) for item in resp.json()]
 
     def get_transfer(self, transfer_id: int) -> Transfer:
-        resp = self.client.get(f"/transfer/{transfer_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/transfer/{transfer_id}")
         return Transfer(**resp.json())
 
     def add_liquidity(self, currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> AddLiquidityResponse:
         request = AddLiquidityRequest(currency_a_id=currency_a_id, currency_b_id=currency_b_id, amount_a=amount_a, amount_b=amount_b)
-        resp = self.client.post("/pools/add_liquidity", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/pools/add_liquidity", json=request.model_dump())
         return AddLiquidityResponse(**resp.json())
 
     def remove_liquidity(self, currency_a_id: int, currency_b_id: int, shares: int) -> RemoveLiquidityResponse:
         request = RemoveLiquidityRequest(currency_a_id=currency_a_id, currency_b_id=currency_b_id, shares=shares)
-        resp = self.client.post("/pools/remove_liquidity", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/pools/remove_liquidity", json=request.model_dump())
         return RemoveLiquidityResponse(**resp.json())
 
     def get_pools(self) -> List[LiquidityPool]:
-        resp = self.client.get("/pools")
-        resp.raise_for_status()
+        resp = self._request("GET", "/pools")
         return [LiquidityPool(**item) for item in resp.json()]
 
     def get_pool(self, currency_a_id: int, currency_b_id: int) -> LiquidityPool:
-        resp = self.client.get(f"/pools/{currency_a_id}/{currency_b_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/pools/{currency_a_id}/{currency_b_id}")
         return LiquidityPool(**resp.json())
 
     def get_provider_info(self, user_id: int) -> List[LiquidityProvider]:
-        resp = self.client.get(f"/pools/provider/{user_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/pools/provider/{user_id}")
         return [LiquidityProvider(**item) for item in resp.json()]
 
     def get_swap_rate(self, currency_from_id: int, currency_to_id: int, amount: int) -> SwapRateResponse:
         request = SwapRequest(currency_from_id=currency_from_id, currency_to_id=currency_to_id, amount=amount)
-        resp = self.client.post("/swap/rate", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/swap/rate", json=request.model_dump())
         return SwapRateResponse(**resp.json())
 
     def swap(self, currency_from_id: int, currency_to_id: int, amount: int) -> SwapResponse:
         request = SwapRequest(currency_from_id=currency_from_id, currency_to_id=currency_to_id, amount=amount)
-        resp = self.client.post("/swap", json=request.model_dump())
-        resp.raise_for_status()
+        resp = self._request("POST", "/swap", json=request.model_dump())
         return SwapResponse(**resp.json())
 
     def get_swap_route(self, currency_from_id: int, currency_to_id: int) -> RouteResponse:
-        resp = self.client.get(f"/swap/route/{currency_from_id}/{currency_to_id}")
-        resp.raise_for_status()
+        resp = self._request("GET", f"/swap/route/{currency_from_id}/{currency_to_id}")
         return RouteResponse(**resp.json())
 
     def close(self):
