@@ -208,6 +208,7 @@ class SwapRateResponse(BaseModel):
 class SwapResponse(BaseModel):
     amount_out: str
     currency_out_symbol: str
+    execution_id: int
 
 class RouteResponse(BaseModel):
     route: List[structs.LiquidityPool]
@@ -579,9 +580,9 @@ async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="One or more currencies not found")
 
     try:
-        amount_out, currency_out_id = await Rapid.swap(currency_from.symbol, currency_to.symbol, request.amount, user_id)
+        execution_id, amount_out, currency_out_id = await Rapid.execute_swap(user_id, currency_from.symbol, currency_to.symbol, request.amount)
         currency_out = await Rapid.Currencies.get(currency_out_id)
-        return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol)
+        return SwapResponse(amount_out=str(amount_out), currency_out_symbol=currency_out.symbol, execution_id=execution_id)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
