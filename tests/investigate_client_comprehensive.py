@@ -1,8 +1,11 @@
-import asyncio
-import sys
 import logging
-import random
-from client import RapidWireClient, Currency, Balance, RapidWireAPIError, Contract
+import sys
+from pathlib import Path
+
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+
+from client import RapidWireClient, RapidWireAPIError
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
