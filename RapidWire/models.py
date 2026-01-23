@@ -263,14 +263,18 @@ class StakeModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    async def get(self, user_id: int, currency_id: int, cursor=None) -> Optional[Stake]:
+    async def get(self, user_id: int, currency_id: int, for_update: bool = False, cursor=None) -> Optional[Stake]:
+        query = "SELECT * FROM staking WHERE user_id = %s AND currency_id = %s"
+        if for_update:
+            query += " FOR UPDATE"
+
         if cursor:
-            await cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+            await cursor.execute(query, (user_id, currency_id))
             result = await cursor.fetchone()
             return Stake(**result) if result else None
         else:
             async with self.db as cursor:
-                await cursor.execute("SELECT * FROM staking WHERE user_id = %s AND currency_id = %s", (user_id, currency_id))
+                await cursor.execute(query, (user_id, currency_id))
                 result = await cursor.fetchone()
                 return Stake(**result) if result else None
 
@@ -335,22 +339,6 @@ class LiquidityPoolModel:
             result = await cursor.fetchone()
             return LiquidityPool(**result) if result else None
 
-    async def get_by_symbols(self, symbol_a: str, symbol_b: str) -> Optional[LiquidityPool]:
-        async with self.db as cursor:
-            await cursor.execute(
-                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_a,)
-            )
-            res_a = await cursor.fetchone()
-            await cursor.execute(
-                "SELECT currency_id FROM currency WHERE symbol = %s", (symbol_b,)
-            )
-            res_b = await cursor.fetchone()
-
-            if not res_a or not res_b:
-                return None
-
-            return await self.get_by_currency_pair(res_a["currency_id"], res_b["currency_id"])
-
     async def create(self, currency_a_id: int, currency_b_id: int, reserve_a: int, reserve_b: int, total_shares: int) -> LiquidityPool:
         async with self.db as cursor:
             await cursor.execute(
@@ -392,6 +380,12 @@ class LiquidityProviderModel:
                 await cursor.execute(query, (pool_id, user_id))
                 result = await cursor.fetchone()
                 return LiquidityProvider(**result) if result else None
+
+    async def get_for_user(self, user_id: int) -> list[LiquidityProvider]:
+        async with self.db as cursor:
+            await cursor.execute("SELECT * FROM liquidity_provider WHERE user_id = %s", (user_id,))
+            results = await cursor.fetchall()
+            return [LiquidityProvider(**row) for row in results]
 
     async def add_shares(self, cursor, pool_id: int, user_id: int, shares_change: int):
         await cursor.execute(
