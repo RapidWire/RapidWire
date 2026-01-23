@@ -265,7 +265,7 @@ class RapidWire:
         return UserModel(user_id, self.db)
 
     async def _compound_interest(self, cursor, user_id: int, currency_id: int) -> Stake:
-        stake = await self.Stakes.get(user_id, currency_id, cursor=cursor)
+        stake = await self.Stakes.get(user_id, currency_id, for_update=True, cursor=cursor)
         if not stake:
             return None
 
