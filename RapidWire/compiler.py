@@ -258,6 +258,7 @@ class Compiler:
                 'create_claim', 'pay_claim', 'cancel_claim', 'execute',
                 'discord_send', 'discord_role_add', 'has_role', 'length',
                 'split', 'to_str', 'to_int', 'now',
+                'swap', 'add_liquidity', 'remove_liquidity',
             ]
 
             op_obj = {

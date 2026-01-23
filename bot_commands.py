@@ -21,11 +21,11 @@ class EmbedField:
         self.inline: bool = inline
 
 class SwapConfirmationView(discord.ui.View):
-    def __init__(self, original_author: User, from_symbol: str, to_symbol: str, amount_in: int, amount_out_est: int):
+    def __init__(self, original_author: User, from_currency: structs.Currency, to_currency: structs.Currency, amount_in: int, amount_out_est: int):
         super().__init__(timeout=30)
         self.original_author = original_author
-        self.from_symbol = from_symbol
-        self.to_symbol = to_symbol
+        self.from_currency = from_currency
+        self.to_currency = to_currency
         self.amount_in = amount_in
         self.amount_out_est = amount_out_est
         self.swap_executed = False
@@ -40,9 +40,8 @@ class SwapConfirmationView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             # Slippage check (tolerance 1%)
-            route = await Rapid.find_swap_route(self.from_symbol, self.to_symbol)
-            from_currency = await Rapid.Currencies.get_by_symbol(self.from_symbol)
-            current_rate = Rapid.get_swap_rate(self.amount_in, route, from_currency.currency_id)
+            route = await Rapid.find_swap_route(self.from_currency.currency_id, self.to_currency.currency_id)
+            current_rate = Rapid.get_swap_rate(self.amount_in, route, self.from_currency.currency_id)
 
             slippage_tolerance = Decimal("0.01")
             min_amount_out = Decimal(self.amount_out_est) * (Decimal("1") - slippage_tolerance)
@@ -52,10 +51,11 @@ class SwapConfirmationView(discord.ui.View):
                 self.stop()
                 return
 
-            amount_out, _ = await Rapid.swap(self.from_symbol, self.to_symbol, self.amount_in, interaction.user.id)
+            execution_id, amount_out, _ = await Rapid.execute_swap(interaction.user.id, self.from_currency.currency_id, self.to_currency.currency_id, self.amount_in)
             self.swap_executed = True
-            desc = f"`{format_amount(self.amount_in)} {self.from_symbol}` を `{format_amount(amount_out)} {self.to_symbol}` にスワップしました。"
-            await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了"), view=None)
+            desc = f"`{format_amount(self.amount_in)} {self.from_currency.symbol}` を `{format_amount(amount_out)} {self.to_currency.symbol}` にスワップしました。"
+            fields = [EmbedField("実行ID", f"`{execution_id}`", False)]
+            await interaction.response.edit_message(embed=create_success_embed(desc, "スワップ完了", fields=fields), view=None)
         except Exception as e:
             await interaction.response.edit_message(embed=create_error_embed(f"スワップ中にエラーが発生しました: {e}"), view=None)
         self.stop()
@@ -189,6 +189,44 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
+    except exceptions.TransactionError as e:
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+
+@app_commands.command(name="transfer_from", description="他のユーザーのウォレットから送金します（要承認）。")
+@app_commands.describe(source="送金元ユーザー", destination="送金先ユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
+async def transfer_from(interaction: discord.Interaction, source: User, destination: User, amount: float, symbol: Optional[str] = None):
+    await interaction.response.defer(thinking=True)
+
+    if amount <= 0:
+        await interaction.followup.send(embed=create_error_embed("送金額は0より大きい必要があります。"))
+        return
+
+    try:
+        currency = await _get_currency(interaction, symbol)
+        if not currency:
+            await interaction.followup.send(embed=create_error_embed("対象の通貨が見つかりませんでした。サーバー内で実行するか、シンボルを正しく指定してください。"))
+            return
+
+        int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
+
+        execution_id, tx = await Rapid.execute_transfer_from(
+            caller_id=interaction.user.id,
+            source_id=source.id,
+            destination_id=destination.id,
+            currency_id=currency.currency_id,
+            amount=int_amount
+        )
+        desc = f"{source.mention} から {destination.mention} へ `{format_amount(int_amount)} {currency.symbol}` の代理送金が完了しました。"
+        fields = [
+            EmbedField("転送ID", f"`{tx.transfer_id}`", False),
+            EmbedField("実行ID", f"`{execution_id}`", False)
+        ]
+        await interaction.followup.send(embed=create_success_embed(desc, title="代理送金完了", fields=fields))
+
+    except exceptions.InsufficientFunds:
+        await interaction.followup.send(embed=create_error_embed("残高が不足しているか、承認額（Allowance）が不足しています。"))
     except exceptions.TransactionError as e:
         await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
     except Exception as e:
@@ -804,10 +842,16 @@ async def lp_create(interaction: discord.Interaction, symbol_a: str, amount_a: f
 async def lp_add(interaction: discord.Interaction, symbol_a: str, amount_a: float, symbol_b: str, amount_b: float):
     await interaction.response.defer(thinking=True)
     try:
+        currency_a = await Rapid.Currencies.get_by_symbol(symbol_a.upper())
+        currency_b = await Rapid.Currencies.get_by_symbol(symbol_b.upper())
+        if not currency_a or not currency_b:
+            await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
+            return
+
         int_amount_a = int(Decimal(str(amount_a)) * (10**Rapid.Config.decimal_places))
         int_amount_b = int(Decimal(str(amount_b)) * (10**Rapid.Config.decimal_places))
 
-        shares = await Rapid.add_liquidity(symbol_a.upper(), symbol_b.upper(), int_amount_a, int_amount_b, interaction.user.id)
+        shares = await Rapid.add_liquidity(currency_a.currency_id, currency_b.currency_id, int_amount_a, int_amount_b, interaction.user.id)
         desc = f"`{format_amount(shares)}` シェアを受け取りました。"
         await interaction.followup.send(embed=create_success_embed(desc, "流動性追加完了"))
     except Exception as e:
@@ -818,11 +862,14 @@ async def lp_add(interaction: discord.Interaction, symbol_a: str, amount_a: floa
 async def lp_remove(interaction: discord.Interaction, symbol_a: str, symbol_b: str, shares: float):
     await interaction.response.defer(thinking=True)
     try:
-        int_shares = int(Decimal(str(shares)) * (10**Rapid.Config.decimal_places))
-        amount_a, amount_b = await Rapid.remove_liquidity(symbol_a.upper(), symbol_b.upper(), int_shares, interaction.user.id)
-
         currency_a = await Rapid.Currencies.get_by_symbol(symbol_a.upper())
         currency_b = await Rapid.Currencies.get_by_symbol(symbol_b.upper())
+        if not currency_a or not currency_b:
+            await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
+            return
+
+        int_shares = int(Decimal(str(shares)) * (10**Rapid.Config.decimal_places))
+        amount_a, amount_b = await Rapid.remove_liquidity(currency_a.currency_id, currency_b.currency_id, int_shares, interaction.user.id)
 
         desc = f"`{format_amount(amount_a)} {currency_a.symbol}` と `{format_amount(amount_b)} {currency_b.symbol}` を受け取りました。"
         await interaction.followup.send(embed=create_success_embed(desc, "流動性削除完了"))
@@ -833,7 +880,14 @@ async def lp_remove(interaction: discord.Interaction, symbol_a: str, symbol_b: s
 @app_commands.describe(symbol_a="通貨Aのシンボル", symbol_b="通貨Bのシンボル")
 async def lp_info(interaction: discord.Interaction, symbol_a: str, symbol_b: str):
     await interaction.response.defer(thinking=True)
-    pool = await Rapid.LiquidityPools.get_by_symbols(symbol_a.upper(), symbol_b.upper())
+
+    currency_a = await Rapid.Currencies.get_by_symbol(symbol_a.upper())
+    currency_b = await Rapid.Currencies.get_by_symbol(symbol_b.upper())
+    if not currency_a or not currency_b:
+        await interaction.followup.send(embed=create_error_embed("指定された通貨が見つかりませんでした。"))
+        return
+
+    pool = await Rapid.LiquidityPools.get_by_currency_pair(currency_a.currency_id, currency_b.currency_id)
     if not pool:
         await interaction.followup.send(embed=create_error_embed("指定された通貨ペアのプールは見つかりませんでした。"))
         return
@@ -856,7 +910,7 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
         int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
 
         try:
-            route = await Rapid.find_swap_route(from_symbol_upper, to_symbol_upper)
+            route = await Rapid.find_swap_route(from_currency.currency_id, to_currency.currency_id)
         except ValueError:
             await interaction.response.send_message(embed=create_error_embed("スワップルートが見つかりませんでした。"), ephemeral=True)
             return
@@ -866,7 +920,7 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
             await interaction.response.send_message(embed=create_error_embed("スワップで得られる通貨量が0以下です。"), ephemeral=True)
             return
 
-        route_symbols = [from_symbol_upper]
+        route_symbols = [from_currency.symbol]
         current_currency_id = from_currency.currency_id
         for pool in route:
             if pool.currency_a_id == current_currency_id:
@@ -886,7 +940,7 @@ async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: st
         embed.add_field(name="ルート", value=f"`{route_str}`", inline=False)
         embed.set_footer(text="このレートは30秒間有効です。")
 
-        view = SwapConfirmationView(interaction.user, from_symbol_upper, to_symbol_upper, int_amount, amount_out_est)
+        view = SwapConfirmationView(interaction.user, from_currency, to_currency, int_amount, amount_out_est)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         await view.wait()
@@ -1003,6 +1057,7 @@ def setup(tree: app_commands.CommandTree, rapid: RapidWire):
 
     tree.add_command(balance)
     tree.add_command(transfer)
+    tree.add_command(transfer_from)
     tree.add_command(execute_contract)
     tree.add_command(history)
     tree.add_command(currency_group)

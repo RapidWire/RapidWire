@@ -42,12 +42,21 @@ async def check_claims_and_notify():
 
     last_check_timestamp = current_time
 
+@tasks.loop(minutes=30)
+async def update_stakes_task():
+    try:
+        await Rapid.update_stale_stakes()
+    except Exception as e:
+        print(f"ステーキング更新タスクでエラーが発生しました: {e}")
+
 @client.event
 async def on_ready():
     await Rapid.initialize()
     Rapid.Config = config.RapidWireConfig
     if not check_claims_and_notify.is_running():
         check_claims_and_notify.start()
+    if not update_stakes_task.is_running():
+        update_stakes_task.start()
     print(f'"{client.user}" としてログインしました')
     try:
         await tree.sync()

@@ -1,4 +1,4 @@
-from typing import Any, List, Dict, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import asyncio
 import hashlib
 import random
@@ -13,7 +13,7 @@ class StopExecution(Exception):
     pass
 
 class RapidWireVM:
-    def __init__(self, script: List[Dict[str, Any]], api: 'ContractAPI', system_vars: Dict[str, Any]):
+    def __init__(self, script: list[dict[str, Any]], api: 'ContractAPI', system_vars: dict[str, Any]):
         self.script = script
         self.api = api
         self.vars = system_vars
@@ -58,7 +58,7 @@ class RapidWireVM:
         except Exception as e:
             self._raise_error(str(e))
 
-    async def _execute_block(self, block: List[Dict[str, Any]]):
+    async def _execute_block(self, block: list[dict[str, Any]]):
         for cmd in block:
             self.instruction_count += 1
             op = cmd.get('op')
@@ -89,7 +89,7 @@ class RapidWireVM:
         except RuntimeError:
             return None
 
-    async def _execute_op(self, op: str, args: List[Any], cmd: Dict[str, Any]) -> Any:
+    async def _execute_op(self, op: str, args: list[Any], cmd: dict[str, Any]) -> Any:
         # A. Calculation & Logic
         if op == 'add': return int(args[0]) + int(args[1])
         if op == 'sub': return int(args[0]) - int(args[1])

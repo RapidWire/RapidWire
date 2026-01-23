@@ -100,7 +100,7 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `cancel(reason: str) -> None`: 処理をキャンセルし、変更をロールバックします。
 - `exit() -> None`: 処理を正常終了します。
 
-### 通貨・送金
+### 通貨・送金・取引
 
 - `transfer(to: int, amount: int, currency: int) -> None`: 通貨を送金します。
 - `get_balance(user: int, currency: int) -> int`: ユーザーの残高を取得します。
@@ -109,6 +109,9 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `transfer_from(sender: int, recipient: int, amount: int, currency: int) -> Transaction`: 許可された範囲で代理送金を行います。
 - `get_allowance(owner: int, spender: int, currency: int) -> int`: 指定したユーザーがスペンダーに対して許可している送金可能額を取得します。
 - `get_transaction(tx_id: int) -> Transaction`: トランザクション情報を取得します。
+- `swap(from_currency_id: int, to_currency_id: int, amount: int) -> Transaction`: 通貨を交換します。
+- `add_liquidity(currency_a_id: int, currency_b_id: int, amount_a: int, amount_b: int) -> int`: 流動性を提供します。
+- `remove_liquidity(currency_a_id: int, currency_b_id: int, shares: int) -> list[int]`: 流動性を削除します。
 
 ### 請求
 
@@ -122,6 +125,10 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 - `random(min_val: int, max_val: int) -> int`: 範囲内のランダムな整数を生成します。
 - `concat(a: str, b: str) -> str`: 文字列を結合します。
 - `length(val: Any) -> int`: オブジェクトの長さ（文字数など）を返します。Python標準の `len()` も使用できます。
+- `split(val: str, separator: str) -> list[str]`: 文字列を指定した区切り文字で分割します。
+- `to_str(val: int) -> str`: 整数を文字列に変換します。
+- `to_int(val: str) -> int`: 文字列を整数に変換します。
+- `now() -> int`: 現在のUnixタイムスタンプを取得します。
 - `execute(destination_id: int, input_data: str = None) -> str`: 他のコントラクトを実行します。
 
 ### スライス
