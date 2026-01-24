@@ -457,16 +457,16 @@ class RapidWire:
                         error_message = error_message[:124] + "..."
                     await self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
 
-                    # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
-                    if created_context:
-                        final_fee = chain_context.total_cost * gas_price
-                        if caller_id != SYSTEM_USER_ID and gas_price > 0:
-                            refund = initial_gas_deduction - final_fee
-                            if refund > 0:
-                                await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
-                            elif refund < 0:
-                                additional_charge = abs(refund)
-                                await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+                # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
+                if created_context:
+                    final_fee = chain_context.total_cost * gas_price
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                        refund = initial_gas_deduction - final_fee
+                        if refund > 0:
+                            await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
+                        elif refund < 0:
+                            additional_charge = abs(refund)
+                            await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
             except Exception as update_err:
                 print(f"Error updating execution record after failure: {update_err}")
 
