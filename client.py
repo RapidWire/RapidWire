@@ -1,5 +1,5 @@
-from typing import List, Optional, Literal, Dict, Union
-from pydantic import BaseModel, Field, field_serializer
+from typing import Optional, Literal, Union
+from pydantic import BaseModel, Field
 import httpx
 
 class RapidWireAPIError(Exception):
@@ -74,13 +74,9 @@ class ContractHistory(BaseModel):
     history_id: int
     execution_id: int
     user_id: int
-    script_hash: bytes
+    script_hash: str
     cost: int
     created_at: int
-    
-    @field_serializer('script_hash')
-    def serialize_bytes(self, value: bytes, _info):
-        return value.hex()
 
 class Allowance(BaseModel):
     owner_id: int
@@ -135,7 +131,7 @@ class ConfigResponse(BaseModel):
 
 class BalanceResponse(BaseModel):
     currency: Currency
-    amount: str
+    amount: int
 
 class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
@@ -209,22 +205,22 @@ class SwapRequest(BaseModel):
     amount: int = Field(..., gt=0)
 
 class AddLiquidityResponse(BaseModel):
-    shares_minted: str
+    shares_minted: int
 
 class RemoveLiquidityResponse(BaseModel):
-    amount_a_received: str
-    amount_b_received: str
+    amount_a_received: int
+    amount_b_received: int
 
 class SwapRateResponse(BaseModel):
-    amount_out: str
+    amount_out: int
 
 class SwapResponse(BaseModel):
-    amount_out: str
+    amount_out: int
     currency_out_id: int
     execution_id: int
 
 class RouteResponse(BaseModel):
-    route: List[LiquidityPool]
+    route: list[LiquidityPool]
 
 class ContractUpdateRequest(BaseModel):
     script: str
@@ -286,15 +282,15 @@ class RapidWireClient:
         resp = self._request("GET", f"/user/{user_id}/stats")
         return UserStatsResponse(**resp.json())
 
-    def get_balance(self, user_id: int) -> List[BalanceResponse]:
+    def get_balance(self, user_id: int) -> list[BalanceResponse]:
         resp = self._request("GET", f"/balance/{user_id}")
         return [BalanceResponse(**item) for item in resp.json()]
 
-    def get_stakes(self, user_id: int) -> List[StakeResponse]:
+    def get_stakes(self, user_id: int) -> list[StakeResponse]:
         resp = self._request("GET", f"/stakes/{user_id}")
         return [StakeResponse(**item) for item in resp.json()]
 
-    def get_account_history(self, page: int = 1) -> List[Transfer]:
+    def get_account_history(self, page: int = 1) -> list[Transfer]:
         resp = self._request("GET", "/account/history", params={"page": page})
         return [Transfer(**item) for item in resp.json()]
 
@@ -307,7 +303,7 @@ class RapidWireClient:
         resp = self._request("POST", "/contract/execute", json=request.model_dump())
         return ContractExecutionResponse(**resp.json())
 
-    def get_contract_variables(self, user_id: int) -> List[ContractVariable]:
+    def get_contract_variables(self, user_id: int) -> list[ContractVariable]:
         resp = self._request("GET", f"/contract/variables/{user_id}")
         return [ContractVariable(**item) for item in resp.json()]
 
@@ -315,7 +311,7 @@ class RapidWireClient:
         resp = self._request("GET", f"/contract/variable/{user_id}/{key}")
         return ContractVariable(**resp.json())
 
-    def get_contract_history(self, user_id: int) -> List[ContractHistory]:
+    def get_contract_history(self, user_id: int) -> list[ContractHistory]:
         resp = self._request("GET", f"/contract/history/{user_id}")
         return [ContractHistory(**item) for item in resp.json()]
 
@@ -369,7 +365,7 @@ class RapidWireClient:
         resp = self._request("POST", "/claims/create", json=request.model_dump())
         return Claim(**resp.json())
 
-    def get_claims(self, page: int = 1) -> List[Claim]:
+    def get_claims(self, page: int = 1) -> list[Claim]:
         resp = self._request("GET", "/claims", params={"page": page})
         return [Claim(**item) for item in resp.json()]
 
@@ -404,7 +400,7 @@ class RapidWireClient:
                          limit: int = 10,
                          sort_by: Literal["transfer_id", "timestamp", "amount"] = "transfer_id",
                          sort_order: Literal["ASC", "DESC", "asc", "desc"] = "desc"
-                         ) -> List[Transfer]:
+                         ) -> list[Transfer]:
         params = {
             "source_id": source_id,
             "dest_id": dest_id,
@@ -440,7 +436,7 @@ class RapidWireClient:
         resp = self._request("POST", "/pools/remove_liquidity", json=request.model_dump())
         return RemoveLiquidityResponse(**resp.json())
 
-    def get_pools(self) -> List[LiquidityPool]:
+    def get_pools(self) -> list[LiquidityPool]:
         resp = self._request("GET", "/pools")
         return [LiquidityPool(**item) for item in resp.json()]
 
@@ -448,7 +444,7 @@ class RapidWireClient:
         resp = self._request("GET", f"/pools/{currency_a_id}/{currency_b_id}")
         return LiquidityPool(**resp.json())
 
-    def get_provider_info(self, user_id: int) -> List[LiquidityProvider]:
+    def get_provider_info(self, user_id: int) -> list[LiquidityProvider]:
         resp = self._request("GET", f"/pools/provider/{user_id}")
         return [LiquidityProvider(**item) for item in resp.json()]
 
