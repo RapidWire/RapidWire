@@ -13,6 +13,12 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
+function parseHugeIntJson(jsonStr) {
+    if (!jsonStr) return jsonStr;
+    const processed = jsonStr.replace(/([\[:,]\s*)(-?\d{16,})(?=\s*[,\]}])/g, '$1"$2"');
+    return JSON.parse(processed);
+}
+
 async function fetchWithCache(url, ttl = 60000) { // Default TTL: 60 seconds
     const cachedString = sessionStorage.getItem(url);
     if (cachedString) {
@@ -36,7 +42,8 @@ async function fetchWithCache(url, ttl = 60000) { // Default TTL: 60 seconds
         if (!response.ok) {
             throw new Error(`Failed to fetch: ${url} (Status: ${response.status})`);
         }
-        const data = await response.json();
+        const text = await response.text();
+        const data = parseHugeIntJson(text);
 
         const cacheEntry = {
             expiry: Date.now() + ttl,
