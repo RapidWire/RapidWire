@@ -327,7 +327,7 @@ class RapidWireClient:
         resp = self._request("GET", f"/currency/symbol/{symbol}")
         return Currency(**resp.json())
 
-    def transfer_currency(self, destination_id: int, currency_id: int, amount: int) -> TransferResponse:
+    def transfer(self, destination_id: int, currency_id: int, amount: int) -> TransferResponse:
         request = TransferRequest(
             destination_id=destination_id,
             currency_id=currency_id,
@@ -336,7 +336,7 @@ class RapidWireClient:
         resp = self._request("POST", "/currency/transfer", json=request.model_dump())
         return TransferResponse(**resp.json())
 
-    def transfer_from_currency(self, source_id: int, destination_id: int, currency_id: int, amount: int) -> TransferFromResponse:
+    def transfer_from(self, source_id: int, destination_id: int, currency_id: int, amount: int) -> TransferFromResponse:
         request = TransferFromRequest(
             source_id=source_id,
             destination_id=destination_id,
