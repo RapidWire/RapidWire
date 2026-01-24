@@ -301,7 +301,8 @@
                 try {
                     const txResponse = await fetch(`${API_BASE_URL}/transfer/${currentSearchQuery}`);
                     if (txResponse.ok) {
-                        const tx = await txResponse.json();
+                        const txText = await txResponse.text();
+                        const tx = parseHugeIntJson(txText);
                         await displayTransfers([tx]);
                         nextButton.disabled = true;
                         return;
@@ -329,10 +330,12 @@
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorText = await response.text();
+                const errorData = parseHugeIntJson(errorText);
                 throw new Error(errorData.detail || `Request failed: ${response.status}`);
             }
-            const transfers = await response.json();
+            const transfersText = await response.text();
+            const transfers = parseHugeIntJson(transfersText);
 
             await displayTransfers(transfers);
             nextButton.disabled = (transfers.length < LIMIT);

@@ -30,7 +30,8 @@
         if (!response.ok) {
             throw new Error('Execution not found');
         }
-        return await response.json();
+        const text = await response.text();
+        return parseHugeIntJson(text);
     }
 
     async function fetchExecutionDetails(executionId) {

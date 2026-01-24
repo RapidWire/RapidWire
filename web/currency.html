@@ -208,7 +208,8 @@
         try {
             const txsResponse = await fetch(`${API_BASE_URL}/transfers/search?currency_id=${currencyId}&page=${currentPage}&limit=${LIMIT}`);
             if (!txsResponse.ok) throw new Error('Failed to fetch transfer history.');
-            const txsData = await txsResponse.json();
+            const txsText = await txsResponse.text();
+            const txsData = parseHugeIntJson(txsText);
             nextButton.disabled = (txsData.length < LIMIT);
             return txsData;
         } catch (error) {

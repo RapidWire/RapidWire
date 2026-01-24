@@ -118,7 +118,7 @@ class ConfigResponse(BaseModel):
 
 class BalanceResponse(BaseModel):
     currency: structs.Currency
-    amount: str
+    amount: int
 
 class TransferRequest(BaseModel):
     destination_id: int = Field(..., description="The Discord user ID of the recipient.")
@@ -171,10 +171,6 @@ class UserStatsResponse(BaseModel):
     first_transfer_timestamp: Optional[int] = None
     last_transfer_timestamp: Optional[int] = None
 
-    @field_serializer('total_transfers', 'first_transfer_timestamp', 'last_transfer_timestamp')
-    def serialize_integers(self, value: int, _info):
-        return str(value) if value is not None else None
-
 class StakeResponse(BaseModel):
     currency: structs.Currency
     stake: structs.Stake
@@ -196,17 +192,17 @@ class SwapRequest(BaseModel):
     amount: int = Field(..., gt=0)
 
 class AddLiquidityResponse(BaseModel):
-    shares_minted: str
+    shares_minted: int
 
 class RemoveLiquidityResponse(BaseModel):
-    amount_a_received: str
-    amount_b_received: str
+    amount_a_received: int
+    amount_b_received: int
 
 class SwapRateResponse(BaseModel):
-    amount_out: str
+    amount_out: int
 
 class SwapResponse(BaseModel):
-    amount_out: str
+    amount_out: int
     currency_out_id: int
     execution_id: int
 
@@ -276,7 +272,7 @@ async def get_my_balance(user_id: int):
             response.append(
                 BalanceResponse(
                     currency=currency,
-                    amount=str(bal.amount)
+                    amount=bal.amount
                 )
             )
     return response
@@ -522,7 +518,7 @@ async def add_liquidity(request: AddLiquidityRequest, user_id: int = Depends(get
 
     try:
         shares = await Rapid.add_liquidity(currency_a.currency_id, currency_b.currency_id, request.amount_a, request.amount_b, user_id)
-        return AddLiquidityResponse(shares_minted=str(shares))
+        return AddLiquidityResponse(shares_minted=shares)
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
@@ -537,7 +533,7 @@ async def remove_liquidity(request: RemoveLiquidityRequest, user_id: int = Depen
 
     try:
         amount_a, amount_b = await Rapid.remove_liquidity(currency_a.currency_id, currency_b.currency_id, request.shares, user_id)
-        return RemoveLiquidityResponse(amount_a_received=str(amount_a), amount_b_received=str(amount_b))
+        return RemoveLiquidityResponse(amount_a_received=amount_a, amount_b_received=amount_b)
     except (exceptions.InsufficientFunds, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
@@ -568,7 +564,7 @@ async def get_swap_rate(request: SwapRequest):
     try:
         route = await Rapid.find_swap_route(currency_from.currency_id, currency_to.currency_id)
         amount_out = Rapid.get_swap_rate(request.amount, route, request.currency_from_id)
-        return SwapRateResponse(amount_out=str(amount_out))
+        return SwapRateResponse(amount_out=amount_out)
     except (ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -582,7 +578,7 @@ async def execute_swap(request: SwapRequest, user_id: int = Depends(get_current_
     try:
         execution_id, amount_out, currency_out_id = await Rapid.execute_swap(user_id, currency_from.currency_id, currency_to.currency_id, request.amount)
         currency_out = await Rapid.Currencies.get(currency_out_id)
-        return SwapResponse(amount_out=str(amount_out), currency_out_id=currency_out.currency_id, execution_id=execution_id)
+        return SwapResponse(amount_out=amount_out, currency_out_id=currency_out.currency_id, execution_id=execution_id)
     except (exceptions.InsufficientFunds, ValueError, exceptions.CurrencyNotFound) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except exceptions.TransactionError as e:
