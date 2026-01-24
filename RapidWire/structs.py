@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, Literal
 from decimal import Decimal
 
@@ -78,6 +78,10 @@ class ContractHistory(BaseModel):
     script_hash: bytes
     cost: int
     created_at: int
+
+    @field_serializer('script_hash')
+    def serialize_bytes(self, value: bytes, _info):
+        return value.hex()
 
 class Allowance(BaseModel):
     owner_id: int

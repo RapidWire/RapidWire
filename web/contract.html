@@ -99,7 +99,8 @@
                 }
                 throw new Error('Failed to fetch contract script.');
             }
-            const data = await response.json();
+            const text = await response.text();
+            const data = parseHugeIntJson(text);
             if (data.script) {
                 try {
                     // Try to pretty print JSON
@@ -133,7 +134,8 @@
         try {
             const response = await fetch(`${API_BASE_URL}/contract/variables/${address}`);
             if (!response.ok) throw new Error('Failed to fetch variables.');
-            const variables = await response.json();
+            const text = await response.text();
+            const variables = parseHugeIntJson(text);
 
             if (variables.length === 0) {
                 container.innerHTML = '<p class="text-slate-500 italic">No variables found.</p>';
@@ -171,7 +173,8 @@
         try {
             const response = await fetch(`${API_BASE_URL}/contract/history/${address}`);
             if (!response.ok) throw new Error('Failed to fetch history.');
-            const history = await response.json();
+            const text = await response.text();
+            const history = parseHugeIntJson(text);
 
             if (history.length === 0) {
                 container.innerHTML = '<p class="text-slate-500 italic">No update history found.</p>';

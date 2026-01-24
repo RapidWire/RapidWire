@@ -302,7 +302,8 @@
         try {
             const response = await fetch(`${API_BASE_URL}/balance/${userId}`);
             if (!response.ok) throw new Error('Failed to fetch balances.');
-            const balances = await response.json();
+            const text = await response.text();
+            const balances = parseHugeIntJson(text);
 
             if (balances.length === 0) {
                 container.innerHTML = '<p class="text-slate-500 italic col-span-full p-6">No balances found for this address.</p>';
@@ -336,7 +337,8 @@
         try {
             const response = await fetch(`${API_BASE_URL}/stakes/${userId}`);
             if (!response.ok) throw new Error('Failed to fetch stakes.');
-            const stakes = await response.json();
+            const text = await response.text();
+            const stakes = parseHugeIntJson(text);
 
             if (stakes.length === 0) {
                 container.innerHTML = '<p class="text-slate-500 italic col-span-full p-6">No active stakes found for this address.</p>';
@@ -375,7 +377,8 @@
         try {
             const response = await fetch(`${API_BASE_URL}/script/${userId}`);
             if (response.ok) {
-                const data = await response.json();
+                const text = await response.text();
+                const data = parseHugeIntJson(text);
                 if (data.script) {
                     const badge = document.getElementById('contract-badge');
                     const btn = document.getElementById('view-contract-btn');
@@ -416,11 +419,13 @@
             ]);
 
             if (!statsResponse.ok) throw new Error('Failed to fetch address stats.');
-            const statsData = await statsResponse.json();
+            const statsText = await statsResponse.text();
+            const statsData = parseHugeIntJson(statsText);
             displayOverview(statsData);
 
             if (!txsResponse.ok) throw new Error('Failed to fetch transfer history.');
-            const txsData = await txsResponse.json();
+            const txsText = await txsResponse.text();
+            const txsData = parseHugeIntJson(txsText);
             
             if(currentPage == 1) {
                 displayBalances(userId);
