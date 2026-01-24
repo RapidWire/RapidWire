@@ -15,7 +15,10 @@ function escapeHtml(text) {
 
 function parseHugeIntJson(jsonStr) {
     if (!jsonStr) return jsonStr;
-    const processed = jsonStr.replace(/([\[:,]\s*)(-?\d{16,})(?=\s*[,\]}])/g, '$1"$2"');
+    const processed = jsonStr.replace(/("[^"\\]*(?:\\.[^"\\]*)*")|(-?\d{16,})(?![.eE\d])/g, (match, str, num) => {
+        if (str) return str;
+        return `"${num}"`;
+    });
     return JSON.parse(processed);
 }
 

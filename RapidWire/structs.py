@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from decimal import Decimal
 
@@ -13,12 +13,6 @@ class Currency(BaseModel):
     hourly_interest_rate: int
     new_hourly_interest_rate: Optional[int] = None
     rate_change_requested_at: Optional[int] = None
-
-    @field_serializer('currency_id', 'issuer_id', 'supply', 'delete_requested_at', 'rate_change_requested_at')
-    def serialize_integers(self, value: int|None, _info):
-        if value is None:
-            return value
-        return str(value)
 
 class Balance(BaseModel):
     user_id: int
@@ -36,10 +30,6 @@ class Contract(BaseModel):
     max_cost: int
     locked_until: int
 
-    @field_serializer('user_id', 'cost', 'max_cost', 'locked_until')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class Claim(BaseModel):
     claim_id: int
     claimant_id: int
@@ -50,19 +40,11 @@ class Claim(BaseModel):
     created_at: int
     description: Optional[str] = None
 
-    @field_serializer('claim_id', 'claimant_id', 'payer_id', 'currency_id', 'amount', 'created_at')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class Stake(BaseModel):
     user_id: int
     currency_id: int
     amount: int
     last_updated_at: int
-
-    @field_serializer('user_id', 'currency_id', 'amount', 'last_updated_at')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
 
 class ExecutionContext(BaseModel):
     caller_id: int
@@ -80,10 +62,6 @@ class Execution(BaseModel):
     status: Literal['pending', 'success', 'failed', 'reverted']
     timestamp: int
 
-    @field_serializer('execution_id', 'caller_id', 'contract_owner_id', 'cost', 'timestamp')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class Transfer(BaseModel):
     transfer_id: int
     execution_id: Optional[int]
@@ -93,12 +71,6 @@ class Transfer(BaseModel):
     amount: int
     timestamp: int
 
-    @field_serializer('transfer_id', 'execution_id', 'source_id', 'dest_id', 'currency_id', 'amount', 'timestamp')
-    def serialize_integers(self, value: int | None, _info):
-        if value is None:
-            return value
-        return str(value)
-
 class ContractHistory(BaseModel):
     history_id: int
     execution_id: int
@@ -107,24 +79,12 @@ class ContractHistory(BaseModel):
     cost: int
     created_at: int
 
-    @field_serializer('history_id', 'execution_id', 'user_id', 'cost', 'created_at')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
-    @field_serializer('script_hash')
-    def serialize_bytes(self, value: bytes, _info):
-        return value.hex()
-
 class Allowance(BaseModel):
     owner_id: int
     spender_id: int
     currency_id: int
     amount: int
     last_updated_at: int
-
-    @field_serializer('owner_id', 'spender_id', 'currency_id', 'amount', 'last_updated_at')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
 
 class AllowanceLog(BaseModel):
     log_id: int
@@ -134,12 +94,6 @@ class AllowanceLog(BaseModel):
     currency_id: int
     amount: int
     timestamp: int
-
-    @field_serializer('log_id', 'execution_id', 'owner_id', 'spender_id', 'currency_id', 'amount', 'timestamp')
-    def serialize_integers(self, value: int | None, _info):
-        if value is None:
-            return value
-        return str(value)
 
 class ChainContext(BaseModel):
     total_cost: int
@@ -155,19 +109,11 @@ class LiquidityPool(BaseModel):
     reserve_b: int
     total_shares: int
 
-    @field_serializer('pool_id', 'currency_a_id', 'currency_b_id', 'reserve_a', 'reserve_b', 'total_shares')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
-
 class LiquidityProvider(BaseModel):
     provider_id: int
     pool_id: int
     user_id: int
     shares: int
-
-    @field_serializer('provider_id', 'pool_id', 'user_id', 'shares')
-    def serialize_integers(self, value: int, _info):
-        return str(value)
 
 class ContractVariable(BaseModel):
     user_id: int
