@@ -457,16 +457,26 @@ class RapidWire:
                         error_message = error_message[:124] + "..."
                     await self.Executions.update(cursor, execution_id, error_message, chain_context.total_cost, error_status)
 
-                    # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
-                    if created_context:
-                        final_fee = chain_context.total_cost * gas_price
-                        if caller_id != SYSTEM_USER_ID and gas_price > 0:
-                            refund = initial_gas_deduction - final_fee
-                            if refund > 0:
-                                await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id)
-                            elif refund < 0:
-                                additional_charge = abs(refund)
-                                await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id)
+                # Refund excess gas (charge only for what was used up to failure) - ONLY AT TOP LEVEL
+                if created_context:
+                    final_fee = chain_context.total_cost * gas_price
+                    if caller_id != SYSTEM_USER_ID and gas_price > 0:
+                        refund = initial_gas_deduction - final_fee
+                        try:
+                            async with self.db as cursor:
+                                if refund > 0:
+                                    await self.transfer(SYSTEM_USER_ID, caller_id, gas_currency_id, refund, execution_id=execution_id, cursor=cursor)
+                                elif refund < 0:
+                                    additional_charge = abs(refund)
+                                    caller_user = self.get_user(caller_id)
+                                    balance = await caller_user.get_balance(gas_currency_id, for_update=True, cursor=cursor)
+                                    if additional_charge > balance.amount:
+                                        additional_charge = balance.amount
+
+                                    if additional_charge > 0:
+                                        await self.transfer(caller_id, SYSTEM_USER_ID, gas_currency_id, additional_charge, execution_id=execution_id, cursor=cursor)
+                        except Exception as gas_err:
+                            print(f"Error handling gas refund/charge: {gas_err}")
             except Exception as update_err:
                 print(f"Error updating execution record after failure: {update_err}")
 
@@ -518,48 +528,57 @@ class RapidWire:
         destination_id: int,
         currency_id: int,
         amount: int,
-        execution_id: Optional[int] = None
+        execution_id: Optional[int] = None,
+        cursor=None
     ) -> Transfer:
         if source_id == destination_id:
             raise ValueError("Source and destination cannot be the same.")
         if amount <= 0:
             raise ValueError("Transfer amount must be positive.")
 
+        async def _perform_transfer(cursor):
+            # Deadlock prevention: Lock users in consistent order (by ID)
+            first_id, second_id = sorted([source_id, destination_id])
+
+            # Lock both if they are not system, or lock system too if we update it.
+
+            if first_id != SYSTEM_USER_ID:
+                await self.get_user(first_id).get_balance(currency_id, for_update=True, cursor=cursor)
+            if second_id != SYSTEM_USER_ID:
+                await self.get_user(second_id).get_balance(currency_id, for_update=True, cursor=cursor)
+
+            source = self.get_user(source_id)
+            destination = self.get_user(destination_id)
+
+            # Check funds (Lock already acquired)
+            if source_id != SYSTEM_USER_ID:
+                # Reuse cursor for balance check
+                source_balance = await source.get_balance(currency_id, cursor=cursor)
+                if source_balance.amount < amount:
+                    raise InsufficientFunds("Source user has insufficient funds.")
+
+            if source_id == SYSTEM_USER_ID:
+                await self.Currencies.update_supply(cursor, currency_id, amount)
+                await destination._update_balance(cursor, currency_id, amount)
+            elif destination_id == SYSTEM_USER_ID:
+                await source._update_balance(cursor, currency_id, -amount)
+                await self.Currencies.update_supply(cursor, currency_id, -amount)
+            else:
+                await source._update_balance(cursor, currency_id, -amount)
+                await destination._update_balance(cursor, currency_id, amount)
+
+            transfer_id = await self.Transfers.create(cursor, source_id, destination_id, currency_id, amount, execution_id)
+            return transfer_id
+
         try:
-            async with self.db as cursor:
-                # Deadlock prevention: Lock users in consistent order (by ID)
-                first_id, second_id = sorted([source_id, destination_id])
+            if cursor:
+                transfer_id = await _perform_transfer(cursor)
+                transfer = await self.Transfers.get(transfer_id, cursor=cursor)
+            else:
+                async with self.db as cursor:
+                    transfer_id = await _perform_transfer(cursor)
+                    transfer = await self.Transfers.get(transfer_id, cursor=cursor)
 
-                # Lock both if they are not system, or lock system too if we update it.
-
-                if first_id != SYSTEM_USER_ID:
-                    await self.get_user(first_id).get_balance(currency_id, for_update=True, cursor=cursor)
-                if second_id != SYSTEM_USER_ID:
-                    await self.get_user(second_id).get_balance(currency_id, for_update=True, cursor=cursor)
-
-                source = self.get_user(source_id)
-                destination = self.get_user(destination_id)
-
-                # Check funds (Lock already acquired)
-                if source_id != SYSTEM_USER_ID:
-                    # Reuse cursor for balance check
-                    source_balance = await source.get_balance(currency_id, cursor=cursor)
-                    if source_balance.amount < amount:
-                        raise InsufficientFunds("Source user has insufficient funds.")
-
-                if source_id == SYSTEM_USER_ID:
-                    await self.Currencies.update_supply(cursor, currency_id, amount)
-                    await destination._update_balance(cursor, currency_id, amount)
-                elif destination_id == SYSTEM_USER_ID:
-                    await source._update_balance(cursor, currency_id, -amount)
-                    await self.Currencies.update_supply(cursor, currency_id, -amount)
-                else:
-                    await source._update_balance(cursor, currency_id, -amount)
-                    await destination._update_balance(cursor, currency_id, amount)
-
-                transfer_id = await self.Transfers.create(cursor, source_id, destination_id, currency_id, amount, execution_id)
-
-            transfer = await self.Transfers.get(transfer_id)
             if not transfer:
                 raise TransactionError("Failed to retrieve transfer record after creation.")
             return transfer

@@ -505,11 +505,16 @@ class TransferModel:
     def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
 
-    async def get(self, transfer_id: int) -> Optional[Transfer]:
-        async with self.db as cursor:
+    async def get(self, transfer_id: int, cursor=None) -> Optional[Transfer]:
+        if cursor:
             await cursor.execute("SELECT * FROM transfer WHERE transfer_id = %s", (transfer_id,))
             result = await cursor.fetchone()
             return Transfer(**result) if result else None
+        else:
+            async with self.db as cursor:
+                await cursor.execute("SELECT * FROM transfer WHERE transfer_id = %s", (transfer_id,))
+                result = await cursor.fetchone()
+                return Transfer(**result) if result else None
 
     async def create(self, cursor, source_id: int, dest_id: int, currency_id: int, amount: int, execution_id: Optional[int] = None) -> int:
         await cursor.execute("SELECT id FROM transfer_sequence WHERE id = 1 FOR UPDATE")
