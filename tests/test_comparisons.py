@@ -18,32 +18,32 @@ class TestRapidWireVMComparisons(unittest.IsolatedAsyncioTestCase):
         self.system_vars = {}
 
     async def test_lt(self):
-        script = [{'op': 'lt', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': '_res1'}, {'op': 'lt', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': '_res2'}, {'op': 'lt', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': '_res3'}]
+        script = [{'op': 'lt', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': 'res1'}, {'op': 'lt', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': 'res2'}, {'op': 'lt', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': 'res3'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res1'], 1)
-        self.assertEqual(vm.vars['_res2'], 0)
-        self.assertEqual(vm.vars['_res3'], 0)
+        self.assertEqual(vm.vars['res1'], 1)
+        self.assertEqual(vm.vars['res2'], 0)
+        self.assertEqual(vm.vars['res3'], 0)
 
     async def test_neq(self):
-        script = [{'op': 'neq', 'args': [{'t': 'str', 'v': 'a'}, {'t': 'str', 'v': 'b'}], 'out': '_res1'}, {'op': 'neq', 'args': [{'t': 'str', 'v': 'a'}, {'t': 'str', 'v': 'a'}], 'out': '_res2'}]
+        script = [{'op': 'neq', 'args': [{'t': 'str', 'v': 'a'}, {'t': 'str', 'v': 'b'}], 'out': 'res1'}, {'op': 'neq', 'args': [{'t': 'str', 'v': 'a'}, {'t': 'str', 'v': 'a'}], 'out': 'res2'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res1'], 1)
-        self.assertEqual(vm.vars['_res2'], 0)
+        self.assertEqual(vm.vars['res1'], 1)
+        self.assertEqual(vm.vars['res2'], 0)
 
     async def test_lte(self):
-        script = [{'op': 'lte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': '_res1'}, {'op': 'lte', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': '_res2'}, {'op': 'lte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': '_res3'}]
+        script = [{'op': 'lte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': 'res1'}, {'op': 'lte', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': 'res2'}, {'op': 'lte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': 'res3'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res1'], 1)
-        self.assertEqual(vm.vars['_res2'], 0)
-        self.assertEqual(vm.vars['_res3'], 1)
+        self.assertEqual(vm.vars['res1'], 1)
+        self.assertEqual(vm.vars['res2'], 0)
+        self.assertEqual(vm.vars['res3'], 1)
 
     async def test_gte(self):
-        script = [{'op': 'gte', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': '_res1'}, {'op': 'gte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': '_res2'}, {'op': 'gte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': '_res3'}]
+        script = [{'op': 'gte', 'args': [{'t': 'int', 'v': 20}, {'t': 'int', 'v': 10}], 'out': 'res1'}, {'op': 'gte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': 'res2'}, {'op': 'gte', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 10}], 'out': 'res3'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res1'], 1)
-        self.assertEqual(vm.vars['_res2'], 0)
-        self.assertEqual(vm.vars['_res3'], 1)
+        self.assertEqual(vm.vars['res1'], 1)
+        self.assertEqual(vm.vars['res2'], 0)
+        self.assertEqual(vm.vars['res3'], 1)

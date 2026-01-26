@@ -22,14 +22,14 @@ class TestRapidWireVM(unittest.IsolatedAsyncioTestCase):
         self.system_vars = {'_sender': 100, '_self': 200, '_input': 'test_input'}
 
     async def test_arithmetic(self):
-        script = [{'op': 'add', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': '_res'}, {'op': 'sub', 'args': [{'t': 'var', 'v': '_res'}, {'t': 'int', 'v': 5}], 'out': '_res2'}]
+        script = [{'op': 'add', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': 'res'}, {'op': 'sub', 'args': [{'t': 'var', 'v': 'res'}, {'t': 'int', 'v': 5}], 'out': 'res2'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], 30)
-        self.assertEqual(vm.vars['_res2'], 25)
+        self.assertEqual(vm.vars['res'], 30)
+        self.assertEqual(vm.vars['res2'], 25)
 
     async def test_arithmetic_cast(self):
-        script = [{'op': 'add', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': '_res'}, {'op': 'store_set', 'args': [{'t': 'str', 'v': 'temp'}, {'t': 'var', 'v': '_res'}]}, {'op': 'store_get', 'args': [{'t': 'str', 'v': 'temp'}], 'out': '_val'}, {'op': 'add', 'args': [{'t': 'var', 'v': '_val'}, {'t': 'int', 'v': 5}], 'out': '_final'}]
+        script = [{'op': 'add', 'args': [{'t': 'int', 'v': 10}, {'t': 'int', 'v': 20}], 'out': 'res'}, {'op': 'store_set', 'args': [{'t': 'str', 'v': 'temp'}, {'t': 'var', 'v': 'res'}]}, {'op': 'store_get', 'args': [{'t': 'str', 'v': 'temp'}], 'out': '_val'}, {'op': 'add', 'args': [{'t': 'var', 'v': '_val'}, {'t': 'int', 'v': 5}], 'out': '_final'}]
 
         async def side_effect(user, key):
             if key == 'temp':
@@ -41,13 +41,13 @@ class TestRapidWireVM(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(vm.vars['_final'], 35)
 
     async def test_getitem(self):
-        script = [{'op': 'getitem', 'args': [{'t': 'var', 'v': '_my_list'}, {'t': 'int', 'v': 1}], 'out': '_res1'}, {'op': 'getitem', 'args': [{'t': 'var', 'v': '_my_dict'}, {'t': 'str', 'v': 'key'}], 'out': '_res2'}]
+        script = [{'op': 'getitem', 'args': [{'t': 'var', 'v': '_my_list'}, {'t': 'int', 'v': 1}], 'out': 'res1'}, {'op': 'getitem', 'args': [{'t': 'var', 'v': '_my_dict'}, {'t': 'str', 'v': 'key'}], 'out': 'res2'}]
         self.system_vars['_my_list'] = ['a', 'b', 'c']
         self.system_vars['_my_dict'] = {'key': 'value'}
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res1'], 'b')
-        self.assertEqual(vm.vars['_res2'], 'value')
+        self.assertEqual(vm.vars['res1'], 'b')
+        self.assertEqual(vm.vars['res2'], 'value')
 
     async def test_flow_control(self):
         script = [{'op': 'eq', 'args': [{'t': 'var', 'v': '_input'}, {'t': 'str', 'v': 'test_input'}], 'out': '_is_match'}, {'op': 'if', 'args': [{'t': 'var', 'v': '_is_match'}], 'then': [{'op': 'output', 'args': [{'t': 'str', 'v': 'Matched'}]}], 'else': [{'op': 'output', 'args': [{'t': 'str', 'v': 'Not Matched'}]}]}]
@@ -90,60 +90,60 @@ class TestRapidWireVM(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(vm.vars['_val'], '123')
 
     async def test_sha256(self):
-        script = [{'op': 'sha256', 'args': [{'t': 'str', 'v': 'hello'}], 'out': '_res'}]
+        script = [{'op': 'sha256', 'args': [{'t': 'str', 'v': 'hello'}], 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
+        self.assertEqual(vm.vars['res'], '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824')
 
     async def test_random(self):
-        script = [{'op': 'random', 'args': [{'t': 'int', 'v': 1}, {'t': 'int', 'v': 10}], 'out': '_res'}]
+        script = [{'op': 'random', 'args': [{'t': 'int', 'v': 1}, {'t': 'int', 'v': 10}], 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertTrue(1 <= vm.vars['_res'] <= 10)
+        self.assertTrue(1 <= vm.vars['res'] <= 10)
 
     async def test_get_allowance(self):
-        script = [{'op': 'get_allowance', 'args': [{'t': 'int', 'v': 100}, {'t': 'int', 'v': 200}, {'t': 'int', 'v': 1}], 'out': '_res'}]
+        script = [{'op': 'get_allowance', 'args': [{'t': 'int', 'v': 100}, {'t': 'int', 'v': 200}, {'t': 'int', 'v': 1}], 'out': 'res'}]
         self.api.get_allowance.return_value = 500
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
         self.api.get_allowance.assert_called_with(100, 200, 1)
-        self.assertEqual(vm.vars['_res'], 500)
+        self.assertEqual(vm.vars['res'], 500)
 
     async def test_split(self):
-        script = [{'op': 'split', 'args': [{'t': 'str', 'v': 'a,b,c'}, {'t': 'str', 'v': ','}], 'out': '_res'}, {'op': 'getitem', 'args': [{'t': 'var', 'v': '_res'}, {'t': 'int', 'v': 1}], 'out': '_val'}]
+        script = [{'op': 'split', 'args': [{'t': 'str', 'v': 'a,b,c'}, {'t': 'str', 'v': ','}], 'out': 'res'}, {'op': 'getitem', 'args': [{'t': 'var', 'v': 'res'}, {'t': 'int', 'v': 1}], 'out': '_val'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], ['a', 'b', 'c'])
+        self.assertEqual(vm.vars['res'], ['a', 'b', 'c'])
         self.assertEqual(vm.vars['_val'], 'b')
 
     async def test_split_default(self):
-        script = [{'op': 'split', 'args': [{'t': 'str', 'v': 'hello world'}, {'t': 'str', 'v': ' '}], 'out': '_res'}]
+        script = [{'op': 'split', 'args': [{'t': 'str', 'v': 'hello world'}, {'t': 'str', 'v': ' '}], 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], ['hello', 'world'])
+        self.assertEqual(vm.vars['res'], ['hello', 'world'])
 
     async def test_to_str(self):
-        script = [{'op': 'to_str', 'args': [{'t': 'int', 'v': 123}], 'out': '_res'}]
+        script = [{'op': 'to_str', 'args': [{'t': 'int', 'v': 123}], 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], '123')
-        self.assertIsInstance(vm.vars['_res'], str)
+        self.assertEqual(vm.vars['res'], '123')
+        self.assertIsInstance(vm.vars['res'], str)
 
     async def test_to_int(self):
-        script = [{'op': 'to_int', 'args': [{'t': 'int', 'v': 456}], 'out': '_res'}]
+        script = [{'op': 'to_int', 'args': [{'t': 'int', 'v': 456}], 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         await vm.run()
-        self.assertEqual(vm.vars['_res'], 456)
-        self.assertIsInstance(vm.vars['_res'], int)
+        self.assertEqual(vm.vars['res'], 456)
+        self.assertIsInstance(vm.vars['res'], int)
 
     async def test_now(self):
-        script = [{'op': 'now', 'out': '_res'}]
+        script = [{'op': 'now', 'out': 'res'}]
         vm = RapidWireVM(script, self.api, self.system_vars)
         start_time = int(time.time())
         await vm.run()
         end_time = int(time.time())
-        self.assertIsInstance(vm.vars['_res'], int)
-        self.assertTrue(start_time <= vm.vars['_res'] <= end_time)
+        self.assertIsInstance(vm.vars['res'], int)
+        self.assertTrue(start_time <= vm.vars['res'] <= end_time)
 
     async def test_while_loop(self):
         script = [{'op': 'set', 'args': [{'t': 'int', 'v': 0}], 'out': '_i'}, {'op': 'gt', 'args': [{'t': 'int', 'v': 5}, {'t': 'var', 'v': '_i'}], 'out': '_cond'}, {'op': 'while', 'args': [{'t': 'var', 'v': '_cond'}], 'body': [{'op': 'add', 'args': [{'t': 'var', 'v': '_i'}, {'t': 'int', 'v': 1}], 'out': '_i'}, {'op': 'gt', 'args': [{'t': 'int', 'v': 5}, {'t': 'var', 'v': '_i'}], 'out': '_cond'}]}]

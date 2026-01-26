@@ -21,7 +21,7 @@ class Compiler:
     def _map_var(self, name):
         if name in self.var_map:
             return self.var_map[name]
-        return f"_{name}"
+        return name
 
     def _create_var_arg(self, name):
         return {"t": "var", "v": name}

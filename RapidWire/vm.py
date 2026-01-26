@@ -35,7 +35,7 @@ class RapidWireVM:
         return arg
 
     def _set_var(self, name: str, value: Any):
-        if name and isinstance(name, str) and name.startswith('_'):
+        if name and isinstance(name, str):
             # Security fix: Prevent overwriting system variables
             if name in ['_sender', '_self', '_input']:
                  self._raise_error(f"Cannot overwrite system variable '{name}'.")
