@@ -23,6 +23,15 @@ class Compiler:
             return self.var_map[name]
         return f"_{name}"
 
+    def _create_var_arg(self, name):
+        return {"t": "var", "v": name}
+
+    def _create_int_arg(self, val):
+        return {"t": "int", "v": val}
+
+    def _create_str_arg(self, val):
+        return {"t": "str", "v": val}
+
     def compile(self, source_code):
         tree = ast.parse(source_code)
         # Find the main function
@@ -47,7 +56,7 @@ class Compiler:
         instrs = []
         if isinstance(stmt, ast.If):
             # Condition
-            cond_var, cond_instrs = self._process_expr(stmt.test)
+            cond_arg, cond_instrs = self._process_expr(stmt.test)
             instrs.extend(cond_instrs)
 
             # Then block
@@ -58,7 +67,7 @@ class Compiler:
 
             if_op = {
                 "op": "if",
-                "args": [cond_var],
+                "args": [cond_arg] if cond_arg else [], # Guard against None? If needs condition, None is bad.
                 "then": then_instrs,
                 "else": else_instrs
             }
@@ -67,34 +76,29 @@ class Compiler:
         elif isinstance(stmt, ast.While):
             # While loop
 
-            # If condition is an expression (e.g. i < 10), we need to:
-            # 1. Evaluate it once before loop.
-            # 2. Re-evaluate it at the end of loop body.
-
-            cond_var, cond_instrs = self._process_expr(stmt.test)
-
-            # Initial evaluation instructions
+            cond_arg, cond_instrs = self._process_expr(stmt.test)
             instrs.extend(cond_instrs)
 
-            # Body instructions
             body_instrs = self._process_block(stmt.body)
 
-            # Re-evaluate condition at the end of body
-            # We need to reuse the same output variable 'cond_var' so the while loop checks it.
-            # Rerun the expression processing, but targeting cond_var.
-            res_var, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var)
+            cond_var_name = None
+            if cond_arg and cond_arg['t'] == 'var':
+                cond_var_name = cond_arg['v']
+
+            res_arg, recheck_instrs = self._process_expr(stmt.test, target_var=cond_var_name)
             body_instrs.extend(recheck_instrs)
 
-            if res_var != cond_var:
-                body_instrs.append({
-                    "op": "set",
-                    "args": [res_var],
-                    "out": cond_var
-                })
+            if cond_arg and cond_arg['t'] == 'var':
+                if res_arg is not None and res_arg != cond_arg:
+                    body_instrs.append({
+                        "op": "set",
+                        "args": [res_arg],
+                        "out": cond_arg['v']
+                    })
 
             while_op = {
                 "op": "while",
-                "args": [cond_var],
+                "args": [cond_arg] if cond_arg else [],
                 "body": body_instrs
             }
             instrs.append(while_op)
@@ -111,37 +115,41 @@ class Compiler:
             if isinstance(target, ast.Name):
                 # Variable assignment: x = ...
                 target_name = self._map_var(target.id)
-                res_var, res_instrs = self._process_expr(value_node, target_var=target_name)
+                res_arg, res_instrs = self._process_expr(value_node, target_var=target_name)
                 instrs.extend(res_instrs)
 
-                # If the result of expression is just a variable name (no instruction generated targeting target_name),
-                # we need to add an explicit assignment instruction.
-                if res_var != target_name:
-                     instrs.append({
-                        "op": "set",
-                        "args": [res_var],
-                        "out": target_name
-                     })
+                if res_arg is not None:
+                    # Check if res_arg is exactly the target variable
+                    is_same_var = (res_arg['t'] == 'var' and res_arg['v'] == target_name)
+
+                    if not is_same_var:
+                        instrs.append({
+                            "op": "set",
+                            "args": [res_arg],
+                            "out": target_name
+                        })
 
             elif isinstance(target, ast.Subscript):
                 # Storage assignment: storage["key"] = x
                 if isinstance(target.value, ast.Name):
                     storage_type = target.value.id
 
-                    # Check if it is storage assignment
                     if storage_type == 'storage':
-                        # For assignment, we evaluate the RHS value.
-                        val_var, val_instrs = self._process_expr(value_node)
+                        val_arg, val_instrs = self._process_expr(value_node)
                         instrs.extend(val_instrs)
 
-                        # Extract key value
-                        key_var, key_instrs = self._extract_key(target)
+                        key_arg, key_instrs = self._extract_key(target)
                         instrs.extend(key_instrs)
 
-                        instrs.append({
-                            "op": 'store_set',
-                            "args": [key_var, val_var]
-                        })
+                        # Guard val_arg None?
+                        if val_arg is None:
+                             # Assigning void result to storage?
+                             pass
+                        else:
+                            instrs.append({
+                                "op": 'store_set',
+                                "args": [key_arg, val_arg]
+                            })
                     else:
                         raise ValueError(f"Unsupported assignment target: {storage_type}")
                 else:
@@ -164,24 +172,29 @@ class Compiler:
         return self._process_expr(slice_node)
 
     def _process_expr(self, node, target_var=None):
-        # Returns (result_variable_name, list_of_instructions)
+        # Returns (result_arg, list_of_instructions)
+        # result_arg is {"t": "...", "v": ...}
         instrs = []
 
         if isinstance(node, ast.Constant):
             # Literal
             val = node.value
             if isinstance(val, bool):
-                return 1 if val else 0, []
-            return str(val), []
+                return self._create_int_arg(1 if val else 0), []
+            if isinstance(val, int):
+                return self._create_int_arg(val), []
+            if isinstance(val, str):
+                return self._create_str_arg(val), []
+            return self._create_str_arg(str(val)), []
 
         elif isinstance(node, ast.Name):
             # Variable reference
-            return self._map_var(node.id), []
+            return self._create_var_arg(self._map_var(node.id)), []
 
         elif isinstance(node, ast.BinOp):
             # Binary Operation
-            left_var, left_instrs = self._process_expr(node.left)
-            right_var, right_instrs = self._process_expr(node.right)
+            left_arg, left_instrs = self._process_expr(node.left)
+            right_arg, right_instrs = self._process_expr(node.right)
             instrs.extend(left_instrs)
             instrs.extend(right_instrs)
 
@@ -201,18 +214,18 @@ class Compiler:
             out_var = target_var if target_var else self._get_temp_var()
             instrs.append({
                 "op": op_name,
-                "args": [left_var, right_var],
+                "args": [left_arg, right_arg], # Assume left/right not None
                 "out": out_var
             })
-            return out_var, instrs
+            return self._create_var_arg(out_var), instrs
 
         elif isinstance(node, ast.Compare):
             # Comparison
             if len(node.ops) != 1 or len(node.comparators) != 1:
                 raise ValueError("Only single comparison supported")
 
-            left_var, left_instrs = self._process_expr(node.left)
-            right_var, right_instrs = self._process_expr(node.comparators[0])
+            left_arg, left_instrs = self._process_expr(node.left)
+            right_arg, right_instrs = self._process_expr(node.comparators[0])
             instrs.extend(left_instrs)
             instrs.extend(right_instrs)
 
@@ -229,19 +242,22 @@ class Compiler:
             out_var = target_var if target_var else self._get_temp_var()
             instrs.append({
                 "op": op_name,
-                "args": [left_var, right_var],
+                "args": [left_arg, right_arg],
                 "out": out_var
             })
-            return out_var, instrs
+            return self._create_var_arg(out_var), instrs
 
         elif isinstance(node, ast.Call):
             # Function call
             func_name = node.func.id
             args = []
             for arg in node.args:
-                arg_var, arg_instrs = self._process_expr(arg)
+                arg_val, arg_instrs = self._process_expr(arg)
                 instrs.extend(arg_instrs)
-                args.append(arg_var)
+                # Should we guard against arg_val being None here?
+                # If a function is called with a void result as argument, it's weird.
+                # But let's assume valid calls.
+                args.append(arg_val)
 
             func_map = {
                 'str': 'to_str',
@@ -251,7 +267,6 @@ class Compiler:
             op_name = func_map.get(func_name, func_name)
 
             # Ops that produce output
-            # Note: discord_send/role_add return int (success), transfer_from returns result.
             ops_with_out = [
                 'sha256', 'random', 'get_balance', 'concat',
                 'transfer_from', 'get_allowance', 'get_currency', 'get_transaction',
@@ -266,17 +281,18 @@ class Compiler:
                 "args": args
             }
 
-            res_var = None
+            res_arg = None
             if op_name in ops_with_out:
-                res_var = target_var if target_var else self._get_temp_var()
-                op_obj["out"] = res_var
+                out_var = target_var if target_var else self._get_temp_var()
+                op_obj["out"] = out_var
+                res_arg = self._create_var_arg(out_var)
 
             instrs.append(op_obj)
-            return res_var, instrs
+            return res_arg, instrs
 
         elif isinstance(node, ast.Attribute):
             # Attribute access: obj.prop -> attr(obj, prop)
-            obj_var, obj_instrs = self._process_expr(node.value)
+            obj_arg, obj_instrs = self._process_expr(node.value)
             instrs.extend(obj_instrs)
 
             prop_name = node.attr
@@ -284,107 +300,100 @@ class Compiler:
             out_var = target_var if target_var else self._get_temp_var()
             instrs.append({
                 "op": "attr",
-                "args": [obj_var, prop_name],
+                "args": [obj_arg, self._create_str_arg(prop_name)],
                 "out": out_var
             })
-            return out_var, instrs
+            return self._create_var_arg(out_var), instrs
 
         elif isinstance(node, ast.Subscript):
             # Subscript access: obj[key]
-            # First check if it's storage access (special case)
             is_storage = False
             if isinstance(node.value, ast.Name):
                 if node.value.id == 'storage':
                     is_storage = True
 
             if is_storage:
-                key_var, key_instrs = self._extract_key(node)
+                key_arg, key_instrs = self._extract_key(node)
                 instrs.extend(key_instrs)
 
                 out_var = target_var if target_var else self._get_temp_var()
                 instrs.append({
                     "op": 'store_get',
-                    "args": [key_var],
+                    "args": [key_arg],
                     "out": out_var
                 })
-                return out_var, instrs
+                return self._create_var_arg(out_var), instrs
             else:
                 # Generic getitem, attr access, or slice
-                obj_var, obj_instrs = self._process_expr(node.value)
+                obj_arg, obj_instrs = self._process_expr(node.value)
                 instrs.extend(obj_instrs)
 
-                # Check if this is a Slice
                 slice_node = node.slice
-                # Python < 3.9: Subscript(slice=Index(value=...)) for index
-                # Python < 3.9: Subscript(slice=Slice(...)) for slice (NO Index wrapper)
-                # Python >= 3.9: Subscript(slice=...)
-
                 is_slice = False
                 if isinstance(slice_node, ast.Slice):
                     is_slice = True
 
                 if is_slice:
-                    # Handle Slicing: [lower:upper:step]
-                    # Each part can be None (if omitted) or an expression.
-
                     def process_slice_part(part):
                         if part is None:
                             return None, []
                         return self._process_expr(part)
 
-                    lower_var, lower_instrs = process_slice_part(slice_node.lower)
+                    lower_arg, lower_instrs = process_slice_part(slice_node.lower)
                     instrs.extend(lower_instrs)
 
-                    upper_var, upper_instrs = process_slice_part(slice_node.upper)
+                    upper_arg, upper_instrs = process_slice_part(slice_node.upper)
                     instrs.extend(upper_instrs)
 
-                    step_var, step_instrs = process_slice_part(slice_node.step)
+                    step_arg, step_instrs = process_slice_part(slice_node.step)
                     instrs.extend(step_instrs)
 
                     out_var = target_var if target_var else self._get_temp_var()
+
+                    args_list = [obj_arg]
+                    args_list.append(lower_arg if lower_arg else None)
+                    args_list.append(upper_arg if upper_arg else None)
+                    args_list.append(step_arg if step_arg else None)
+
                     instrs.append({
                         "op": "slice",
-                        "args": [obj_var, lower_var, upper_var, step_var],
+                        "args": args_list,
                         "out": out_var
                     })
-                    return out_var, instrs
+                    return self._create_var_arg(out_var), instrs
 
                 else:
-                    # Normal Index/Key Access
                     idx_node = slice_node
                     if isinstance(idx_node, ast.Index):
                         idx_node = idx_node.value
 
-                    # Check if index is a string constant (Attribute access)
                     is_string_const = False
                     if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, str):
                         is_string_const = True
-                    elif isinstance(idx_node, ast.Str): # Python < 3.8
+                    elif isinstance(idx_node, ast.Str):
                         is_string_const = True
 
                     if is_string_const:
-                        # Treat as attribute access: obj['key'] -> attr(obj, 'key')
                         prop_name = idx_node.value if isinstance(idx_node, ast.Constant) else idx_node.s
 
                         out_var = target_var if target_var else self._get_temp_var()
                         instrs.append({
                             "op": "attr",
-                            "args": [obj_var, prop_name],
+                            "args": [obj_arg, self._create_str_arg(prop_name)],
                             "out": out_var
                         })
-                        return out_var, instrs
+                        return self._create_var_arg(out_var), instrs
 
-                    # For generic getitem, index can be expression
-                    idx_var, idx_instrs = self._process_expr(idx_node)
+                    idx_arg, idx_instrs = self._process_expr(idx_node)
                     instrs.extend(idx_instrs)
 
                     out_var = target_var if target_var else self._get_temp_var()
                     instrs.append({
                         "op": "getitem",
-                        "args": [obj_var, idx_var],
+                        "args": [obj_arg, idx_arg],
                         "out": out_var
                     })
-                    return out_var, instrs
+                    return self._create_var_arg(out_var), instrs
 
         elif isinstance(node, ast.BoolOp):
             # Boolean Operation (and, or)
@@ -393,38 +402,39 @@ class Compiler:
             out_var = target_var if target_var else self._get_temp_var()
 
             def process_bool_op(values, target):
-                # Helper to recursively process bool ops
                 if len(values) == 1:
-                    v_var, v_instrs = self._process_expr(values[0], target_var=target)
-                    # If process_expr didn't assign to target (e.g. constant/variable), generate set
-                    if v_var != target:
-                        v_instrs.append({"op": "set", "args": [v_var], "out": target})
+                    v_arg, v_instrs = self._process_expr(values[0], target_var=target)
+
+                    if v_arg is not None:
+                        is_same_var = (v_arg['t'] == 'var' and v_arg['v'] == target)
+                        if not is_same_var:
+                            v_instrs.append({"op": "set", "args": [v_arg], "out": target})
                     return v_instrs
 
                 head = values[0]
-                head_var, head_instrs = self._process_expr(head)
+                head_arg, head_instrs = self._process_expr(head)
 
-                # Assign head result to target initially
-                if head_var != target:
-                    head_instrs.append({"op": "set", "args": [head_var], "out": target})
+                if head_arg is not None:
+                    is_same_var = (head_arg['t'] == 'var' and head_arg['v'] == target)
+                    if not is_same_var:
+                        head_instrs.append({"op": "set", "args": [head_arg], "out": target})
 
-                # Recursively process the rest
+                target_arg = self._create_var_arg(target)
+
                 rest_instrs = process_bool_op(values[1:], target)
 
                 if op_type == ast.And:
-                    # if target (head) is true, evaluate rest. Else target remains head (false).
                     if_op = {
                         "op": "if",
-                        "args": [target],
+                        "args": [target_arg],
                         "then": rest_instrs,
                         "else": []
                     }
                     head_instrs.append(if_op)
                 elif op_type == ast.Or:
-                    # if target (head) is true, keep it. Else evaluate rest.
                     if_op = {
                         "op": "if",
-                        "args": [target],
+                        "args": [target_arg],
                         "then": [],
                         "else": rest_instrs
                     }
@@ -434,7 +444,7 @@ class Compiler:
 
                 return head_instrs
 
-            return out_var, process_bool_op(values, out_var)
+            return self._create_var_arg(out_var), process_bool_op(values, out_var)
 
         else:
              raise ValueError(f"Unsupported expression type: {type(node)}")

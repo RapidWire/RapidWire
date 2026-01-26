@@ -22,11 +22,16 @@ class RapidWireVM:
         self.current_op = None
 
     def _resolve_arg(self, arg: Any) -> Any:
-        if isinstance(arg, str):
-            if arg.startswith('_'):
-                return self.vars.get(arg)
-            if arg.replace('-', '', 1).isdigit():
-                return int(arg)
+        if isinstance(arg, dict):
+            t = arg.get('t')
+            v = arg.get('v')
+            if t == 'int':
+                return int(v)
+            if t == 'str':
+                return str(v)
+            if t == 'var':
+                return self.vars.get(v)
+            return v
         return arg
 
     def _set_var(self, name: str, value: Any):
