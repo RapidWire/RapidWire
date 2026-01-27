@@ -17,6 +17,14 @@
 - **amount**: 送金する通貨の量。
 - **symbol (任意)**: 送金する通貨のシンボル。指定しない場合は、コマンドが実行されたサーバーのデフォルト通貨が使用されます。
 
+### `/transfer_from <source> <destination> <amount> [symbol]`
+他のユーザーのウォレットから送金します（要承認）。
+事前に `/approve set` で送金元ユーザーから許可を得ている必要があります。
+- **source**: 送金元ユーザー。
+- **destination**: 送金先ユーザー。
+- **amount**: 送金する量。
+- **symbol (任意)**: 送金する通貨のシンボル。
+
 ### `/execute_contract <user> [input_data]`
 指定したユーザーのコントラクトを実行します。
 - **user**: コントラクトの所有者。
@@ -40,12 +48,12 @@
 
 ## 通貨管理コマンド (`/currency ...`)
 
-### `/currency create <name> <symbol> <supply> [daily_interest_rate]`
+### `/currency create <name> <symbol> <supply> [hourly_interest_rate]`
 現在のサーバーに新しい通貨を作成します。
 - **name**: 通貨の正式名称（例: "MyCoin"）。
 - **symbol**: 通貨のシンボル（例: "MYC"）。
 - **supply**: 初期供給量。
-- **daily_interest_rate (任意)**: ステーキングの日利（パーセント）。デフォルトは0です。
+- **hourly_interest_rate (任意)**: ステーキングの時利（パーセント）。デフォルトは0です。
 
 ### `/currency info [symbol]`
 指定した通貨（または現在のサーバーの通貨）の詳細情報を表示します。
@@ -68,8 +76,8 @@
 2. 7日後から10日後までの間に再度コマンドを実行すると、通貨が完全に削除されます。
 
 ### `/currency request-interest-change <rate>`
-**[管理者権限が必要]** ステーキングの日利変更を予約します。変更はタイムロック期間後に適用可能になります。
-- **rate**: 新しい日利（パーセント）。
+**[管理者権限が必要]** ステーキングの時利変更を予約します。変更はタイムロック期間後に適用可能になります。
+- **rate**: 新しい時利（パーセント）。
 
 ### `/currency apply-interest-change`
 **[管理者権限が必要]** 予約されている利率変更を適用します。
@@ -93,12 +101,29 @@
 
 ---
 
+## 承認コマンド (`/approve ...`)
+
+### `/approve set <user> <amount> [symbol]`
+指定したユーザーにあなたの資産の使用を許可します。
+このコマンドを実行すると、指定されたユーザーは `/transfer_from` を使用して、許可された額まであなたの資産を送金できるようになります。
+- **user**: 許可を与えるユーザー。
+- **amount**: 許可する量。
+- **symbol (任意)**: 通貨のシンボル。
+
+### `/approve info <user> [symbol]`
+指定したユーザーへの現在の許可額（Allowance）を確認します。
+- **user**: 確認するユーザー。
+- **symbol (任意)**: 通貨のシンボル。
+
+---
+
 ## コントラクトコマンド (`/contract ...`)
 
-### `/contract set <script> [max_cost]`
+### `/contract set <script> [max_cost] [lock_hours]`
 あなたのアカウントにスマートコントラクトを設定します。
 - **script**: Pythonで書かれたコントラクトコードのファイル（`.py`など）。
 - **max_cost (任意)**: このコントラクトの実行を許可する最大のコスト。0を指定すると無制限になります。
+- **lock_hours (任意)**: コントラクトの更新を禁止する期間（時間単位）。0でロックなし。
 
 ### `/contract get`
 現在あなたのアカウントに設定されているコントラクトのコードを取得します。
