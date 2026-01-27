@@ -126,7 +126,7 @@ SDKでは以下のクラスが定義されており、関数の戻り値とし�
 
 - `sha256(val: str) -> str`: 文字列のSHA-256ハッシュを計算します。
 - `random(min_val: int, max_val: int) -> int`: 範囲内のランダムな整数を生成します。
-- `concat(a: str, b: str) -> str`: 文字列を結合します。
+- `concat(*args: str) -> str`: 文字列を結合します（複数引数可）。
 - `length(val: Any) -> int`: オブジェクトの長さ（文字数など）を返します。Python標準の `len()` も使用できます。
 - `split(val: str, separator: str) -> list[str]`: 文字列を指定した区切り文字で分割します。
 - `to_str(val: int) -> str`: 整数を文字列に変換します。

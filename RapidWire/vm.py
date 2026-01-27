@@ -135,7 +135,7 @@ class RapidWireVM:
         if op == 'mul': return int(args[0]) * int(args[1])
         if op == 'div': return int(args[0]) // int(args[1])
         if op == 'mod': return int(args[0]) % int(args[1])
-        if op == 'concat': return str(args[0]) + str(args[1])
+        if op == 'concat': return "".join([str(arg) for arg in args])
         if op == 'eq': return 1 if str(args[0]) == str(args[1]) else 0
         if op == 'neq': return 1 if str(args[0]) != str(args[1]) else 0
         if op == 'gt': return 1 if int(args[0]) > int(args[1]) else 0

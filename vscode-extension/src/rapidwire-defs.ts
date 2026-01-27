@@ -114,11 +114,7 @@ export const sdkDefs = {
       "name": "concat",
       "args": [
         {
-          "name": "a",
-          "type": "str"
-        },
-        {
-          "name": "b",
+          "name": "*args",
           "type": "str"
         }
       ],
