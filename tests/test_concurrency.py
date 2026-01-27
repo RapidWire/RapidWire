@@ -1,8 +1,14 @@
 import unittest
-import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
-from RapidWire.database import DatabaseConnection
+import asyncio
 import aiomysql
+
+import sys
+from pathlib import Path
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+
+from RapidWire.database import DatabaseConnection
 
 class TestDatabaseConcurrency(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_access(self):

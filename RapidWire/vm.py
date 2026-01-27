@@ -4,7 +4,7 @@ import hashlib
 import random
 import time
 from .exceptions import ContractError, TransactionCanceledByContract
-from .constants import CONTRACT_OP_COSTS
+from .constants import CONTRACT_OP_COSTS, MAX_VM_MEMORY
 
 if TYPE_CHECKING:
     from .core import ContractAPI
@@ -20,17 +20,44 @@ class RapidWireVM:
         self.output = None
         self.instruction_count = 0
         self.current_op = None
+        self.memory_usage = 0
+
+        for k, v in self.vars.items():
+            self.memory_usage += self._calculate_size(k) + self._calculate_size(v)
+
+    def _calculate_size(self, value: Any) -> int:
+        size = 0
+        if isinstance(value, int):
+            size = 8
+        elif isinstance(value, str):
+            size = len(value)
+        elif isinstance(value, list):
+            for item in value:
+                size += self._calculate_size(item)
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                size += self._calculate_size(k) + self._calculate_size(v)
+        elif value is None:
+            size = 0
+        else:
+            size = len(str(value))
+        return size
 
     def _resolve_arg(self, arg: Any) -> Any:
-        if isinstance(arg, str):
-            if arg.startswith('_'):
-                return self.vars.get(arg)
-            if arg.replace('-', '', 1).isdigit():
-                return int(arg)
+        if isinstance(arg, dict):
+            t = arg.get('t')
+            v = arg.get('v')
+            if t == 'int':
+                return int(v)
+            if t == 'str':
+                return str(v)
+            if t == 'var':
+                return self.vars.get(v)
+            return v
         return arg
 
     def _set_var(self, name: str, value: Any):
-        if name and isinstance(name, str) and name.startswith('_'):
+        if name and isinstance(name, str):
             # Security fix: Prevent overwriting system variables
             if name in ['_sender', '_self', '_input']:
                  self._raise_error(f"Cannot overwrite system variable '{name}'.")
@@ -41,6 +68,18 @@ class RapidWireVM:
             elif isinstance(value, str):
                 if len(value) > 127:
                     self._raise_error(f"Variable '{name}' exceeded string length limit.")
+
+            new_size = self._calculate_size(value)
+            old_size = 0
+            if name in self.vars:
+                old_size = self._calculate_size(self.vars[name])
+            else:
+                new_size += self._calculate_size(name)
+
+            if self.memory_usage - old_size + new_size > MAX_VM_MEMORY:
+                self._raise_error("Memory limit exceeded.")
+
+            self.memory_usage = self.memory_usage - old_size + new_size
             self.vars[name] = value
 
     def _raise_error(self, message: str):
