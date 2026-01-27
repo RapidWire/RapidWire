@@ -25,7 +25,7 @@ class APIServer:
 
 class RapidWireConfig:
     class Contract:
-        max_cost: int = 100
+        max_cost: int = 128
         max_script_length: int = 10000
         max_script_size: int = 4096
         max_recursion_depth: int = 6
