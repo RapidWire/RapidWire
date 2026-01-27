@@ -169,11 +169,11 @@ class TestRapidWireVM(unittest.IsolatedAsyncioTestCase):
 
     async def test_memory_limit_exceeded(self):
         # Accumulate variables until memory limit is exceeded.
-        # MAX_VM_MEMORY is 4096.
+        # MAX_VM_MEMORY is 8192.
         script = []
-        for i in range(50):
+        for i in range(100):
             # Each variable: key "var_X" (~5 bytes) + value 100 bytes = ~105 bytes.
-            # 50 * 105 = 5250 > 4096
+            # 100 * 105 = 10500 > 8192
             script.append({'op': 'set', 'args': [{'t': 'str', 'v': 'a' * 100}], 'out': f'var_{i}'})
 
         vm = RapidWireVM(script, self.api, self.system_vars)
