@@ -158,7 +158,7 @@ async def balance(interaction: discord.Interaction, user: Optional[User] = None)
         await interaction.followup.send(embed=embed)
 
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"残高の取得中に予期せぬエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"残高の取得中に予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @app_commands.command(name="transfer", description="指定したユーザーに通貨を送金します。")
 @app_commands.describe(user="送金先のユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
@@ -190,9 +190,9 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しています。"))
     except exceptions.TransactionError as e:
-        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n```{e}```"))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @app_commands.command(name="transfer_from", description="他のユーザーのウォレットから送金します（要承認）。")
 @app_commands.describe(source="送金元ユーザー", destination="送金先ユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
@@ -228,9 +228,9 @@ async def transfer_from(interaction: discord.Interaction, source: User, destinat
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("残高が不足しているか、承認額（Allowance）が不足しています。"))
     except exceptions.TransactionError as e:
-        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n```{e}```"))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @app_commands.command(name="execute_contract", description="指定したユーザーのコントラクトを実行します。")
 @app_commands.describe(user="コントラクトの所有者", input_data="コントラクトに渡すデータ")
@@ -254,10 +254,12 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
         await interaction.followup.send(embed=create_success_embed(desc, title="コントラクト実行完了", fields=fields))
     except exceptions.ContractError as e:
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの処理中にエラーが発生しました。\n```{e}```"))
+    except exceptions.TransactionCanceledByContract as e:
+        await interaction.followup.send(embed=create_error_embed(f"取引はコントラクトによってキャンセルされました。\n```{e}```"))
     except exceptions.TransactionError as e:
-        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n```{e}```"))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @app_commands.command(name="history", description="転送履歴を表示します。")
 @app_commands.describe(
@@ -380,7 +382,7 @@ async def history(
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"履歴の取得中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"履歴の取得中にエラーが発生しました。\n```{e}```"))
 
 currency_group = app_commands.Group(name="currency", description="通貨に関連するコマンド")
 
@@ -408,7 +410,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
     except exceptions.DuplicateEntryError:
         await interaction.followup.send(embed=create_error_embed("このサーバーには既に通貨が存在するか、そのシンボルは使用済みです。"))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"通貨の作成中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"通貨の作成中にエラーが発生しました。\n```{e}```"))
 
 @currency_group.command(name="info", description="通貨の詳細情報を表示します。")
 @app_commands.describe(symbol="情報を表示する通貨のシンボル (任意)")
@@ -551,7 +553,7 @@ async def currency_request_interest_change(interaction: discord.Interaction, rat
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @currency_group.command(name="apply-interest-change", description="[管理者] 予約されている利率変更を適用します。")
 async def currency_apply_interest_change(interaction: discord.Interaction):
@@ -565,7 +567,7 @@ async def currency_apply_interest_change(interaction: discord.Interaction):
     except (ValueError, PermissionError, exceptions.CurrencyNotFound) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました: {e}"))
+        await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 stake_group = app_commands.Group(name="stake", description="ステーキングに関連するコマンド")
 
@@ -703,7 +705,7 @@ async def contract_set(interaction: discord.Interaction, script: discord.Attachm
     except PermissionError as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
     except Exception as e:
-        await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n`{e}`"))
+        await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n```{e}```"))
 
 @contract_group.command(name="get", description="現在設定されているコントラクトを取得します。")
 @app_commands.describe(user="コントラクトを取得するユーザー (任意)")
