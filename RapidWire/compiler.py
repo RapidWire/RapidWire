@@ -274,6 +274,7 @@ class Compiler:
                 'discord_send', 'discord_role_add', 'has_role', 'length',
                 'split', 'to_str', 'to_int', 'now',
                 'swap', 'add_liquidity', 'remove_liquidity',
+                'store_get',
             ]
 
             op_obj = {
