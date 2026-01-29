@@ -21,6 +21,7 @@ Rapid.Config = config.RapidWireConfig
 async def lifespan(app: FastAPI):
     # Startup
     await Rapid.initialize()
+    Rapid.Config = config.RapidWireConfig
     yield
     # Shutdown
     await Rapid.close()
