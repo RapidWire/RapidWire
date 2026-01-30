@@ -278,6 +278,20 @@ async def get_my_balance(user_id: int):
             )
     return response
 
+@app.get("/balance/{user_id}/{symbol}", response_model=BalanceResponse, tags=["Account"])
+async def get_user_balance_by_symbol(user_id: int, symbol: str):
+    currency = await Rapid.Currencies.get_by_symbol(symbol.upper())
+    if not currency:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Currency not found")
+    
+    user = Rapid.get_user(user_id)
+    balance = await user.get_balance(currency.currency_id)
+    
+    return BalanceResponse(
+        currency=currency,
+        amount=balance.amount
+    )
+
 @app.get("/stakes/{user_id}", response_model=List[StakeResponse], tags=["Staking"])
 async def get_user_stakes(user_id: int):
     stakes = await Rapid.Stakes.get_for_user(user_id)
