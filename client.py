@@ -286,8 +286,8 @@ class RapidWireClient:
         resp = self._request("GET", f"/balance/{user_id}")
         return [BalanceResponse(**item) for item in resp.json()]
 
-    def get_balance_by_symbol(self, user_id: int, symbol: str) -> BalanceResponse:
-        resp = self._request("GET", f"/balance/{user_id}/{symbol}")
+    def get_balance_by_id(self, user_id: int, currency_id: int) -> BalanceResponse:
+        resp = self._request("GET", f"/balance/{user_id}/{currency_id}")
         return BalanceResponse(**resp.json())
 
     def get_stakes(self, user_id: int) -> list[StakeResponse]:
