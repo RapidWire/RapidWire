@@ -125,6 +125,9 @@ python server.py
 | `/contract set` | スマートコントラクトを設定します。 |
 | `/claim create` | 他のユーザーへ支払いを請求します。 |
 
-## スマートコントラクトについて
+## ドキュメント
 
-スマートコントラクトのサンプルや書き方については、[`doc/sample_contracts.md`](./doc/sample_contracts.md) を参照してください。
+より詳細な情報については、[公式ドキュメント](./document/index.md) を参照してください。
+
+- **[ユーザーガイド](./document/user_guide/commands.md)**: コマンドの使い方やチュートリアル。
+- **[開発者ガイド](./document/developer/smart_contracts/getting_started.md)**: スマートコントラクトの開発方法やAPIリファレンス。
