@@ -896,6 +896,45 @@ async def lp_info(interaction: discord.Interaction, symbol_a: str, symbol_b: str
     embed = await _get_pool_info_embed(pool)
     await interaction.followup.send(embed=embed)
 
+@lp_group.command(name="list", description="保有している流動性プールの一覧を表示します。")
+@app_commands.describe(user="対象のユーザー (任意)")
+async def lp_list(interaction: discord.Interaction, user: Optional[User] = None):
+    await interaction.response.defer(thinking=True)
+    target_user = user or interaction.user
+
+    try:
+        providers = await Rapid.LiquidityProviders.get_for_user(target_user.id)
+        if not providers:
+             await interaction.followup.send(embed=create_success_embed(f"{target_user.display_name} は流動性を提供していません。", "流動性プール一覧"))
+             return
+
+        embed = Embed(title=f"{target_user.display_name} の流動性プール一覧", color=Color.purple())
+
+        for provider in providers:
+            pool = await Rapid.LiquidityPools.get(provider.pool_id)
+            if not pool: continue
+
+            currency_a = await Rapid.Currencies.get(pool.currency_a_id)
+            currency_b = await Rapid.Currencies.get(pool.currency_b_id)
+
+            # シェアの割合
+            share_percentage = (Decimal(provider.shares) / Decimal(pool.total_shares)) * 100
+
+            # 推定引き出し可能額
+            amount_a = int(Decimal(provider.shares) * Decimal(pool.reserve_a) / Decimal(pool.total_shares))
+            amount_b = int(Decimal(provider.shares) * Decimal(pool.reserve_b) / Decimal(pool.total_shares))
+
+            field_name = f"ID: {pool.pool_id} | {currency_a.symbol}-{currency_b.symbol}"
+            field_value = (
+                f"保有シェア: `{format_amount(provider.shares)}` ({share_percentage:.2f}%)\n"
+                f"推定価値: `{format_amount(amount_a)} {currency_a.symbol}` + `{format_amount(amount_b)} {currency_b.symbol}`"
+            )
+            embed.add_field(name=field_name, value=field_value, inline=False)
+
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
+
 @app_commands.command(name="swap", description="通貨をスワップします。")
 @app_commands.describe(from_symbol="スワップ元の通貨シンボル", to_symbol="スワップ先の通貨シンボル", amount="スワップする量")
 async def swap(interaction: discord.Interaction, from_symbol: str, to_symbol: str, amount: float):
