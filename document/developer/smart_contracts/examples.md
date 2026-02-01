@@ -7,8 +7,6 @@
 特定の金額を送金してこのコントラクトを実行すると、Discordのロールを自動的に付与します。
 
 ```python
-from RapidWire.sdk import *
-
 # 設定
 PRICE = 100               # 価格
 CURRENCY_ID = 1           # 支払いに使う通貨ID
@@ -50,8 +48,6 @@ def main():
 50%の確率で賭け金が2倍になって返ってきます。
 
 ```python
-from RapidWire.sdk import *
-
 # 設定
 CURRENCY_ID = 1
 MIN_BET = 10
@@ -97,8 +93,6 @@ def main():
 特定の通貨（会員権トークン）を持っている人だけがメッセージを書き込めるボードです。
 
 ```python
-from RapidWire.sdk import *
-
 # 会員権トークンのID
 TOKEN_ID = 2
 
