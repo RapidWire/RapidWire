@@ -7,12 +7,12 @@ from time import time
 from datetime import datetime
 import hashlib
 
-import config
 from RapidWire import RapidWire, exceptions, structs
 from RapidWire.constants import INTEREST_RATE_SCALE
 
 Rapid: RapidWire = None
 SYSTEM_USER_ID = 0
+ITEMS_PER_PAGE = 15
 
 class EmbedField:
     def __init__(self, name: str, value: str, inline: bool = True):
@@ -134,8 +134,8 @@ async def _get_currency(interaction: discord.Interaction, symbol: Optional[str])
     return None
 
 @app_commands.command(name="balance", description="あなたの保有資産を表示します。")
-@app_commands.describe(user="残高を表示するユーザー")
-async def balance(interaction: discord.Interaction, user: Optional[User] = None):
+@app_commands.describe(user="残高を表示するユーザー", page="ページ番号")
+async def balance(interaction: discord.Interaction, user: Optional[User] = None, page: int = 1):
     target_user = user or interaction.user
     await interaction.response.defer(thinking=True)
     try:
@@ -146,8 +146,19 @@ async def balance(interaction: discord.Interaction, user: Optional[User] = None)
             await interaction.followup.send(embed=create_success_embed(f"{target_user.display_name}は資産を保有していません。", title="残高"))
             return
 
-        embed = Embed(title=f"{target_user.display_name}の保有資産", color=Color.green())
-        for bal in balances:
+        total_items = len(balances)
+        total_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+
+        if page < 1 or (total_pages > 0 and page > total_pages):
+            await interaction.followup.send(embed=create_error_embed(f"指定されたページ ({page}) は存在しません。全 {total_pages} ページです。"))
+            return
+
+        start_idx = (page - 1) * ITEMS_PER_PAGE
+        end_idx = start_idx + ITEMS_PER_PAGE
+        current_balances = balances[start_idx:end_idx]
+
+        embed = Embed(title=f"{target_user.display_name}の保有資産 (ページ {page}/{total_pages})", color=Color.green())
+        for bal in current_balances:
             currency = await Rapid.Currencies.get(currency_id=bal.currency_id)
             if currency:
                 embed.add_field(
@@ -161,7 +172,7 @@ async def balance(interaction: discord.Interaction, user: Optional[User] = None)
         await interaction.followup.send(embed=create_error_embed(f"残高の取得中に予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
 @app_commands.command(name="transfer", description="指定したユーザーに通貨を送金します。")
-@app_commands.describe(user="送金先のユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
+@app_commands.describe(user="送金先のユーザー", amount="送金する量", symbol="送金する通貨のシンボル")
 async def transfer(interaction: discord.Interaction, user: User, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     
@@ -194,8 +205,8 @@ async def transfer(interaction: discord.Interaction, user: User, amount: float, 
     except Exception as e:
         await interaction.followup.send(embed=create_error_embed(f"予期せぬエラーが発生しました。\n```[{e.__class__.__name__}] {e}```"))
 
-@app_commands.command(name="transfer_from", description="他のユーザーのウォレットから送金します（要承認）。")
-@app_commands.describe(source="送金元ユーザー", destination="送金先ユーザー", amount="送金する量", symbol="送金する通貨のシンボル (任意)")
+@app_commands.command(name="transfer_from", description="他のユーザーのウォレットから送金します (要承認)")
+@app_commands.describe(source="送金元ユーザー", destination="送金先ユーザー", amount="送金する量", symbol="送金する通貨のシンボル")
 async def transfer_from(interaction: discord.Interaction, source: User, destination: User, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
 
@@ -226,7 +237,7 @@ async def transfer_from(interaction: discord.Interaction, source: User, destinat
         await interaction.followup.send(embed=create_success_embed(desc, title="代理送金完了", fields=fields))
 
     except exceptions.InsufficientFunds:
-        await interaction.followup.send(embed=create_error_embed("残高が不足しているか、承認額（Allowance）が不足しています。"))
+        await interaction.followup.send(embed=create_error_embed("残高が不足しているか、承認額 (Allowance) が不足しています。"))
     except exceptions.TransactionError as e:
         await interaction.followup.send(embed=create_error_embed(f"取引の処理中にエラーが発生しました。\n```{e}```"))
     except Exception as e:
@@ -263,7 +274,7 @@ async def execute_contract(interaction: discord.Interaction, user: User, input_d
 
 @app_commands.command(name="history", description="転送履歴を表示します。")
 @app_commands.describe(
-    transfer_id="詳細を表示する転送ID (任意)",
+    transfer_id="詳細を表示する転送ID",
     user="対象ユーザー",
     source="送金元ユーザー",
     destination="送金先ユーザー",
@@ -413,7 +424,7 @@ async def currency_create(interaction: discord.Interaction, name: str, symbol: s
         await interaction.followup.send(embed=create_error_embed(f"通貨の作成中にエラーが発生しました。\n```{e}```"))
 
 @currency_group.command(name="info", description="通貨の詳細情報を表示します。")
-@app_commands.describe(symbol="情報を表示する通貨のシンボル (任意)")
+@app_commands.describe(symbol="情報を表示する通貨のシンボル")
 async def currency_info(interaction: discord.Interaction, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
         
@@ -572,7 +583,7 @@ async def currency_apply_interest_change(interaction: discord.Interaction):
 stake_group = app_commands.Group(name="stake", description="ステーキングに関連するコマンド")
 
 @stake_group.command(name="deposit", description="通貨を預け入れ、ステーキングを開始します。")
-@app_commands.describe(amount="預け入れる量", symbol="預け入れる通貨のシンボル (任意)")
+@app_commands.describe(amount="預け入れる量", symbol="預け入れる通貨のシンボル")
 async def stake_deposit(interaction: discord.Interaction, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
@@ -583,7 +594,7 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
 
         int_amount = int(Decimal(str(amount)) * (10**Rapid.Config.decimal_places))
         stake = await Rapid.stake_deposit(interaction.user.id, currency.currency_id, int_amount)
-        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキングが完了しました。\n現在の合計ステーク額は `{format_amount(stake.amount)} {currency.symbol}` です。"
+        desc = f"`{format_amount(int_amount)} {currency.symbol}` のステーキングが完了しました。\n現在の合計ステーキング額は `{format_amount(stake.amount)} {currency.symbol}` です。"
         await interaction.followup.send(embed=create_success_embed(desc, "ステーキング完了"))
     except exceptions.InsufficientFunds:
         await interaction.followup.send(embed=create_error_embed("ステーキングするための残高が不足しています。"))
@@ -591,7 +602,7 @@ async def stake_deposit(interaction: discord.Interaction, amount: float, symbol:
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
 @stake_group.command(name="withdraw", description="ステーキングした通貨の一部または全部を引き出します。")
-@app_commands.describe(amount="引き出す量", symbol="引き出す通貨のシンボル (任意)")
+@app_commands.describe(amount="引き出す量", symbol="引き出す通貨のシンボル")
 async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
@@ -607,7 +618,7 @@ async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol
         remaining_amount = stake.amount if stake else 0
 
         desc = f"`{format_amount(tx.amount)} {currency.symbol}` を引き出しました。\n"
-        desc += f"残りのステーク額: `{format_amount(remaining_amount)} {currency.symbol}`"
+        desc += f"残りのステーキング額: `{format_amount(remaining_amount)} {currency.symbol}`"
         await interaction.followup.send(embed=create_success_embed(desc, "引き出し完了"))
     except (ValueError, PermissionError, exceptions.InsufficientFunds) as e:
         await interaction.followup.send(embed=create_error_embed(str(e)))
@@ -615,22 +626,34 @@ async def stake_withdraw(interaction: discord.Interaction, amount: float, symbol
         await interaction.followup.send(embed=create_error_embed(f"エラーが発生しました: {e}"))
 
 @stake_group.command(name="info", description="あなたのステーキング状況を表示します。")
-async def stake_info(interaction: discord.Interaction):
+@app_commands.describe(page="ページ番号")
+async def stake_info(interaction: discord.Interaction, page: int = 1):
     await interaction.response.defer(thinking=True)
     
     stakes = await Rapid.Stakes.get_for_user(interaction.user.id)
     if not stakes:
-        await interaction.followup.send(embed=create_success_embed("現在、アクティブなステークはありません。", "ステーク情報"))
+        await interaction.followup.send(embed=create_success_embed("現在、アクティブなステーキングはありません。", "ステーキング情報"))
         return
-        
-    embed = Embed(title=f"{interaction.user.display_name}のステーク情報", color=Color.purple())
+
+    total_items = len(stakes)
+    total_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+
+    if page < 1 or (total_pages > 0 and page > total_pages):
+        await interaction.followup.send(embed=create_error_embed(f"指定されたページ ({page}) は存在しません。全 {total_pages} ページです。"))
+        return
+
+    start_idx = (page - 1) * ITEMS_PER_PAGE
+    end_idx = start_idx + ITEMS_PER_PAGE
+    current_stakes = stakes[start_idx:end_idx]
+
+    embed = Embed(title=f"{interaction.user.display_name}のステーキング情報 (ページ {page}/{total_pages})", color=Color.purple())
     
-    for stake in stakes:
+    for stake in current_stakes:
         currency = await Rapid.Currencies.get(stake.currency_id)
         if not currency: continue
 
         field_name = f"通貨: **{currency.name} ({currency.symbol})**"
-        field_value = (f"ステーク額: `{format_amount(stake.amount)}`\n"
+        field_value = (f"ステーキング額: `{format_amount(stake.amount)}`\n"
                        f"現在の利率: `{Decimal(currency.hourly_interest_rate) / Decimal(INTEREST_RATE_SCALE // 100):.4f}%/h`\n"
                        f"最終更新日時: <t:{stake.last_updated_at}:F>")
         embed.add_field(name=field_name, value=field_value, inline=False)
@@ -640,7 +663,7 @@ async def stake_info(interaction: discord.Interaction):
 approve_group = app_commands.Group(name="approve", description="他のユーザーにあなたの資産の使用を許可します。")
 
 @approve_group.command(name="set", description="指定したユーザーに資産の使用を許可します。")
-@app_commands.describe(user="許可を与えるユーザー", amount="許可する量", symbol="通貨のシンボル (任意)")
+@app_commands.describe(user="許可を与えるユーザー", amount="許可する量", symbol="通貨のシンボル")
 async def approve_set(interaction: discord.Interaction, user: User, amount: float, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
@@ -662,7 +685,7 @@ async def approve_set(interaction: discord.Interaction, user: User, amount: floa
         await interaction.followup.send(embed=create_error_embed(f"承認の設定中にエラーが発生しました: {e}"))
 
 @approve_group.command(name="info", description="指定したユーザーへの許可状況を確認します。")
-@app_commands.describe(user="確認するユーザー", symbol="通貨のシンボル (任意)")
+@app_commands.describe(user="確認するユーザー", symbol="通貨のシンボル")
 async def approve_info(interaction: discord.Interaction, user: User, symbol: Optional[str] = None):
     await interaction.response.defer(thinking=True)
     try:
@@ -685,7 +708,7 @@ contract_group = app_commands.Group(name="contract", description="あなたの�
 @app_commands.describe(
     script="コントラクトとして実行するPythonコードが書かれたファイル",
     max_cost="このコントラクトの実行を許可する最大コスト (0で無制限)",
-    lock_hours="コントラクトの更新を禁止する期間（時間単位）。0でロックなし。"
+    lock_hours="コントラクトの更新を禁止する期間 (時間単位)。0でロックなし。"
 )
 async def contract_set(interaction: discord.Interaction, script: discord.Attachment, max_cost: Optional[int] = 0, lock_hours: Optional[int] = 0):
     await interaction.response.defer(thinking=True)
@@ -708,7 +731,7 @@ async def contract_set(interaction: discord.Interaction, script: discord.Attachm
         await interaction.followup.send(embed=create_error_embed(f"コントラクトの設定中にエラーが発生しました。\n```{e}```"))
 
 @contract_group.command(name="get", description="現在設定されているコントラクトを取得します。")
-@app_commands.describe(user="コントラクトを取得するユーザー (任意)")
+@app_commands.describe(user="コントラクトを取得するユーザー")
 async def contract_get(interaction: discord.Interaction, user: Optional[User] = None):
     await interaction.response.defer(thinking=True)
     target_user = user or interaction.user
@@ -755,15 +778,19 @@ async def claim_create(interaction: discord.Interaction, user: User, amount: flo
         await interaction.followup.send(embed=create_error_embed(f"請求の作成中にエラーが発生しました: {e}"))
 
 @claim_group.command(name="list", description="あなたが関与する請求を一覧表示します。")
-async def claim_list(interaction: discord.Interaction):
+@app_commands.describe(page="ページ番号")
+async def claim_list(interaction: discord.Interaction, page: int = 1):
     await interaction.response.defer(thinking=True)
     try:
-        claims = await Rapid.Claims.get_for_user(interaction.user.id)
+        claims = await Rapid.Claims.get_for_user(interaction.user.id, page=page, limit=ITEMS_PER_PAGE)
         if not claims:
-            await interaction.followup.send(embed=create_success_embed("関連する請求はありません。", "請求一覧"))
+            if page == 1:
+                await interaction.followup.send(embed=create_success_embed("関連する請求はありません。", "請求一覧"))
+            else:
+                await interaction.followup.send(embed=create_error_embed(f"指定されたページ ({page}) には請求がありません。"))
             return
         
-        embed = Embed(title="請求一覧", color=Color.blue())
+        embed = Embed(title=f"請求一覧 (ページ {page})", color=Color.blue())
         for claim in claims:
             currency = await Rapid.Currencies.get(currency_id=claim.currency_id)
             if not currency: continue
@@ -895,6 +922,56 @@ async def lp_info(interaction: discord.Interaction, symbol_a: str, symbol_b: str
         return
     embed = await _get_pool_info_embed(pool)
     await interaction.followup.send(embed=embed)
+
+@lp_group.command(name="list", description="保有している流動性プールの一覧を表示します。")
+@app_commands.describe(user="対象のユーザー", page="ページ番号")
+async def lp_list(interaction: discord.Interaction, user: Optional[User] = None, page: int = 1):
+    await interaction.response.defer(thinking=True)
+    target_user = user or interaction.user
+
+    try:
+        providers = await Rapid.LiquidityProviders.get_for_user(target_user.id)
+        if not providers:
+             await interaction.followup.send(embed=create_success_embed(f"{target_user.display_name} は流動性を提供していません。", "流動性プール一覧"))
+             return
+
+        total_items = len(providers)
+        total_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+
+        if page < 1 or (total_pages > 0 and page > total_pages):
+            await interaction.followup.send(embed=create_error_embed(f"指定されたページ ({page}) は存在しません。全 {total_pages} ページです。"))
+            return
+
+        start_idx = (page - 1) * ITEMS_PER_PAGE
+        end_idx = start_idx + ITEMS_PER_PAGE
+        current_providers = providers[start_idx:end_idx]
+
+        embed = Embed(title=f"{target_user.display_name} の流動性プール一覧 (ページ {page}/{total_pages})", color=Color.purple())
+
+        for provider in current_providers:
+            pool = await Rapid.LiquidityPools.get(provider.pool_id)
+            if not pool: continue
+
+            currency_a = await Rapid.Currencies.get(pool.currency_a_id)
+            currency_b = await Rapid.Currencies.get(pool.currency_b_id)
+
+            # シェアの割合
+            share_percentage = (Decimal(provider.shares) / Decimal(pool.total_shares)) * 100
+
+            # 推定引き出し可能額
+            amount_a = int(Decimal(provider.shares) * Decimal(pool.reserve_a) / Decimal(pool.total_shares))
+            amount_b = int(Decimal(provider.shares) * Decimal(pool.reserve_b) / Decimal(pool.total_shares))
+
+            field_name = f"ID: {pool.pool_id} | {currency_a.symbol}-{currency_b.symbol}"
+            field_value = (
+                f"保有シェア: `{format_amount(provider.shares)}` ({share_percentage:.2f}%)\n"
+                f"推定価値: `{format_amount(amount_a)} {currency_a.symbol}` + `{format_amount(amount_b)} {currency_b.symbol}`"
+            )
+            embed.add_field(name=field_name, value=field_value, inline=False)
+
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(embed=create_error_embed(f"一覧の取得中にエラーが発生しました: {e}"))
 
 @app_commands.command(name="swap", description="通貨をスワップします。")
 @app_commands.describe(from_symbol="スワップ元の通貨シンボル", to_symbol="スワップ先の通貨シンボル", amount="スワップする量")
