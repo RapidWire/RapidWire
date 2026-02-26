@@ -837,7 +837,7 @@ async def claim_cancel(interaction: discord.Interaction, claim_id: int):
 async def _get_pool_info_embed(pool: structs.LiquidityPool) -> Embed:
     currency_a = await Rapid.Currencies.get(pool.currency_a_id)
     currency_b = await Rapid.Currencies.get(pool.currency_b_id)
-    embed = Embed(title=f"流動性プール情報: {currency_a.symbol}-{currency_b.symbol}", color=Color.purple())
+    embed = Embed(title=f"流動性プール情報: {currency_a.symbol}/{currency_b.symbol}", color=Color.purple())
     embed.add_field(name="プールID", value=f"`{pool.pool_id}`", inline=False)
     embed.add_field(name=f"{currency_a.symbol} リザーブ", value=f"`{format_amount(pool.reserve_a)}`", inline=True)
     embed.add_field(name=f"{currency_b.symbol} リザーブ", value=f"`{format_amount(pool.reserve_b)}`", inline=True)
@@ -962,7 +962,7 @@ async def lp_list(interaction: discord.Interaction, user: Optional[User] = None,
             amount_a = int(Decimal(provider.shares) * Decimal(pool.reserve_a) / Decimal(pool.total_shares))
             amount_b = int(Decimal(provider.shares) * Decimal(pool.reserve_b) / Decimal(pool.total_shares))
 
-            field_name = f"ID: {pool.pool_id} | {currency_a.symbol}-{currency_b.symbol}"
+            field_name = f"ID: {pool.pool_id} | {currency_a.symbol}/{currency_b.symbol}"
             field_value = (
                 f"保有シェア: `{format_amount(provider.shares)}` ({share_percentage:.2f}%)\n"
                 f"推定価値: `{format_amount(amount_a)} {currency_a.symbol}` + `{format_amount(amount_b)} {currency_b.symbol}`"
