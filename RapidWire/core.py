@@ -934,19 +934,26 @@ class RapidWire:
         if amount_a_desired <= 0 or amount_b_desired <= 0:
             raise ValueError("Amounts must be positive.")
 
+        if pool.currency_a_id == currency_a_id:
+            amount_desired_for_a = amount_a_desired
+            amount_desired_for_b = amount_b_desired
+        else:
+            amount_desired_for_a = amount_b_desired
+            amount_desired_for_b = amount_a_desired
+
         if pool.reserve_a == 0 or pool.reserve_b == 0:
-            amount_a = amount_a_desired
-            amount_b = amount_b_desired
+            amount_a = amount_desired_for_a
+            amount_b = amount_desired_for_b
             shares_to_mint = int((Decimal(amount_a) * Decimal(amount_b)).sqrt())
         else:
-            amount_b_optimal = int(Decimal(amount_a_desired) * Decimal(pool.reserve_b) / Decimal(pool.reserve_a))
-            if amount_b_optimal <= amount_b_desired:
-                amount_a = amount_a_desired
+            amount_b_optimal = int(Decimal(amount_desired_for_a) * Decimal(pool.reserve_b) / Decimal(pool.reserve_a))
+            if amount_b_optimal <= amount_desired_for_b:
+                amount_a = amount_desired_for_a
                 amount_b = amount_b_optimal
             else:
-                amount_a_optimal = int(Decimal(amount_b_desired) * Decimal(pool.reserve_a) / Decimal(pool.reserve_b))
+                amount_a_optimal = int(Decimal(amount_desired_for_b) * Decimal(pool.reserve_a) / Decimal(pool.reserve_b))
                 amount_a = amount_a_optimal
-                amount_b = amount_b_desired
+                amount_b = amount_desired_for_b
 
             shares_to_mint = int(Decimal(amount_a) * Decimal(pool.total_shares) / Decimal(pool.reserve_a))
 
@@ -956,8 +963,10 @@ class RapidWire:
                 source_balance_a = await user.get_balance(pool.currency_a_id, for_update=True, cursor=cursor)
                 source_balance_b = await user.get_balance(pool.currency_b_id, for_update=True, cursor=cursor)
 
-                if source_balance_a.amount < amount_a or source_balance_b.amount < amount_b:
-                    raise InsufficientFunds("Insufficient funds to add liquidity.")
+                if source_balance_a.amount < amount_a:
+                    raise InsufficientFunds(f"Insufficient funds for currency A. Required: {amount_a}, Available: {source_balance_a.amount}")
+                if source_balance_b.amount < amount_b:
+                    raise InsufficientFunds(f"Insufficient funds for currency B. Required: {amount_b}, Available: {source_balance_b.amount}")
 
                 await user._update_balance(cursor, pool.currency_a_id, -amount_a)
                 await user._update_balance(cursor, pool.currency_b_id, -amount_b)
