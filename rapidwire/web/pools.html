@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RapidWire DEXのすべての流動性プールの一覧と通貨ペアごとの比較">
+<title>Pools - RapidWire</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/app.css">
+<script type="module" src="/assets/pools.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へスキップ</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M2 20h8l4-8h6l4 8h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="12" r="3" fill="currentColor"/><circle cx="24" cy="20" r="3" fill="currentColor"/></svg>RapidWire</a>
+    <nav class="site-nav" aria-label="メイン">
+      <ul>
+        <li><a href="/">Top</a></li>
+        <li><a href="/explorer.html">Explorer</a></li>
+        <li><a href="/pools.html" aria-current="page">Pools</a></li>
+      </ul>
+    </nav>
+    <form class="header-search" action="/explorer.html" method="get" role="search">
+      <label class="visually-hidden" for="site-search">ID または通貨シンボルで検索</label>
+      <input type="search" id="site-search" name="q" placeholder="ID / 通貨シンボル" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="btn btn--primary" type="submit">検索</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" class="site-main">
+  <div class="page-head">
+    <h1>Pools</h1>
+    <p class="lede">DEXで稼働中のすべての流動性プールです。同じ通貨ペアでも手数料ティアごとに別のプールになります。通貨ペアを指定すると、そのペアのティアを並べて比較できます。</p>
+  </div>
+
+  <section class="panel" aria-labelledby="pair-title">
+    <div class="panel-head">
+      <h2 id="pair-title">通貨ペアで絞り込む</h2>
+      <p class="panel-note">通貨IDまたは通貨シンボルで指定します。</p>
+    </div>
+    <form class="filters" id="pair-form" action="/pools.html" method="get">
+      <div class="field">
+        <label for="pair-x">通貨 1</label>
+        <input type="text" id="pair-x" name="x" autocomplete="off" spellcheck="false" maxlength="20" placeholder="例: RWC または ID">
+      </div>
+      <div class="field">
+        <label for="pair-y">通貨 2</label>
+        <input type="text" id="pair-y" name="y" autocomplete="off" spellcheck="false" maxlength="20" placeholder="例: GOLD または ID">
+      </div>
+      <div class="cluster">
+        <button class="btn btn--primary" type="submit">表示</button>
+        <a class="btn" href="/pools.html">解除</a>
+      </div>
+    </form>
+    <div id="pair-result" class="table-host" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="pools-title">
+    <div class="panel-head">
+      <h2 id="pools-title">稼働中のプール</h2>
+      <p class="panel-note" id="pools-summary"></p>
+    </div>
+    <div id="pools"></div>
+    <div id="pools-pager"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p>RapidWire</p>
+    <ul>
+      <li><a href="/docs">API docs</a></li>
+      <li><a href="/operator.html">Operator</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

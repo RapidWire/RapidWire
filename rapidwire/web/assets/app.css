@@ -1,0 +1,1096 @@
+/* RapidWire web explorer styles shared by every page; the palette is defined once on :root and redefined for dark mode. */
+
+:root {
+  color-scheme: light dark;
+  --paper: #edf1ef;
+  --surface: #ffffff;
+  --surface-sunk: #e3e9e7;
+  --ink: #15201e;
+  --muted: #4b5a57;
+  --line: #c6d1ce;
+  --accent: #0f6e5c;
+  --accent-strong: #0a5446;
+  --accent-ink: #ffffff;
+  --copper: #a04b1d;
+  --ok: #1d7337;
+  --ok-bg: #e2f2e6;
+  --fail: #b3261e;
+  --fail-bg: #fbe5e3;
+  --revert: #974700;
+  --revert-bg: #fbecdc;
+  --legacy: #5b4b9a;
+  --legacy-bg: #ece8f8;
+  --neg: #b3261e;
+  --pos: #1d7337;
+  --font-sans: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Osaka-Mono", "MS Gothic", "Noto Sans Mono CJK JP", monospace;
+  --radius-s: 4px;
+  --radius-m: 10px;
+  --measure: 72rem;
+  --gutter: clamp(1rem, 4vw, 2rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0e1615;
+    --surface: #15201e;
+    --surface-sunk: #1b2926;
+    --ink: #e3ece9;
+    --muted: #9db1ac;
+    --line: #2f413d;
+    --accent: #57c7ac;
+    --accent-strong: #7ad8c0;
+    --accent-ink: #08201b;
+    --copper: #e3925e;
+    --ok: #6fd18c;
+    --ok-bg: #133222;
+    --fail: #ff8f86;
+    --fail-bg: #3a1714;
+    --revert: #f2a65a;
+    --revert-bg: #3a2610;
+    --legacy: #c3b5f7;
+    --legacy-bg: #2a2445;
+    --neg: #ff8f86;
+    --pos: #6fd18c;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+.lede,
+.hero-sub {
+  word-break: auto-phrase;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 0.5em;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 800;
+}
+
+h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+p {
+  margin: 0 0 1em;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  color: var(--accent-strong);
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--copper);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.5rem 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius-s);
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+  color: var(--paper);
+}
+
+/* Site header: brand, navigation and search, with the copper wire as its bottom edge. */
+.site-header {
+  background: var(--surface);
+  border-bottom: 2px solid var(--copper);
+}
+
+.site-header-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0.75rem var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: var(--ink);
+}
+
+.brand-mark {
+  width: 1.6rem;
+  height: 1.6rem;
+  color: var(--copper);
+  flex: none;
+}
+
+.site-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+}
+
+.site-nav a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.header-search {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+  flex: 1 1 18rem;
+  max-width: 26rem;
+}
+
+.header-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 40rem) {
+  .header-search {
+    margin-left: 0;
+    max-width: none;
+    flex-basis: 100%;
+  }
+}
+
+.site-main {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 2rem var(--gutter) 3rem;
+  flex: 1 0 auto;
+}
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-footer-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 1.25rem var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+}
+
+.site-footer ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.site-footer a {
+  color: var(--muted);
+}
+
+/* Page heading block: an h1, an optional identifier line and a short lede. */
+.page-head {
+  margin-bottom: 1.75rem;
+}
+
+.page-head .lede {
+  color: var(--muted);
+  max-width: 44rem;
+  margin: 0;
+}
+
+.page-id {
+  font-family: var(--font-mono);
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.head-badges {
+  margin-top: 0.75rem;
+}
+
+/* Banners above a page's content: a deleted currency, a legacy or private execution. */
+.banner {
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--muted);
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.banner p:last-child {
+  margin-bottom: 0;
+}
+
+.banner-title {
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.banner--danger {
+  border-left-color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.banner--legacy {
+  border-left-color: var(--legacy);
+  background: var(--legacy-bg);
+}
+
+/* A panel is one titled region of a page; sections inside main are separated by stacking panels. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.panel-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.panel-section + .panel-section {
+  margin-top: 1.5rem;
+}
+
+/* Tabs: a tablist of buttons above the panels they switch. */
+.tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+
+.tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.5rem 0.75rem;
+  min-height: 2.5rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.tab-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  margin-left: 0.3em;
+}
+
+.tabpanel:focus-visible {
+  outline-offset: 4px;
+}
+
+.layout-split {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 88rem) {
+  .layout-split {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* An execution link with the origin badge of the linked execution. */
+.exec-ref {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  max-width: 100%;
+}
+
+/* Forms: .field wraps one label and its control; .filters lays fields out in a wrapping row. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type="text"],
+input[type="search"],
+input[type="password"],
+select {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0.45rem 0.6rem;
+  min-height: 2.5rem;
+  width: 100%;
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.form-error {
+  color: var(--fail);
+  font-weight: 600;
+  margin: 0.75rem 0 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn--primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--accent-ink);
+}
+
+.btn[aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.table-host {
+  margin-top: 1.25rem;
+}
+
+/* Data tables: .table-wrap scrolls a wide table inside itself; .data-table--cards turns rows into stacked cards on narrow screens using each cell's data-label. */
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.data-table thead th {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  border-bottom-width: 2px;
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface-sunk);
+}
+
+.data-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table .nowrap {
+  white-space: nowrap;
+}
+
+@media (max-width: 45rem) {
+  .data-table--cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .data-table--cards,
+  .data-table--cards tbody,
+  .data-table--cards tr,
+  .data-table--cards td,
+  .data-table--cards th {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table--cards tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    margin-bottom: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--surface);
+  }
+
+  .data-table--cards td,
+  .data-table--cards tbody th {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 38%) minmax(0, 1fr);
+    gap: 0.75rem;
+    border-bottom: 1px dashed var(--line);
+    padding: 0.4rem 0;
+    text-align: left;
+  }
+
+  .data-table--cards tr > :last-child {
+    border-bottom: 0;
+  }
+
+  .data-table--cards td::before,
+  .data-table--cards tbody th::before {
+    content: attr(data-label);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .data-table--cards .num {
+    text-align: left;
+  }
+
+  .data-table--cards .num,
+  .data-table--cards .nowrap,
+  .data-table--cards .badge {
+    white-space: normal;
+  }
+}
+
+/* Key-value grid for detail pages: a dl whose dt/dd pairs form two columns, one on narrow screens. */
+.kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.15rem 1.25rem;
+  margin: 0;
+}
+
+.kv dt {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 0.6rem;
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (min-width: 40rem) {
+  .kv {
+    grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+  }
+
+  .kv dt,
+  .kv dd {
+    padding: 0.5rem 0;
+    margin: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* Raw execution input and output, wrapped so that no line widens the page. */
+.code-block {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.value-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.value-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  min-width: 0;
+}
+
+.type-tag {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 0 0.35rem;
+}
+
+/* Values: IDs, amounts and the arrow between two accounts. */
+.id {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+/* Account IDs and amounts stay on one line only in tables wider than the card layout, which scroll inside their .table-wrap; elsewhere a 19-digit ID or an amount of up to 38 digits wraps anywhere instead of widening the page. */
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 45.0625rem) {
+  .data-table .account.id,
+  .data-table .account .id,
+  .data-table .amount {
+    white-space: nowrap;
+  }
+}
+
+.kv dd,
+.feed li,
+.data-table--cards td,
+.data-table--cards .cell {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.amount--neg {
+  color: var(--neg);
+}
+
+.amount--pos {
+  color: var(--pos);
+}
+
+.unit {
+  color: var(--muted);
+  margin-left: 0.3em;
+  font-weight: 600;
+}
+
+.flow {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+}
+
+.flow-arrow {
+  color: var(--copper);
+}
+
+.sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Badges: status, origin and other short markers. */
+.badge {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.badge--success {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.badge--failed {
+  color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.badge--reverted {
+  color: var(--revert);
+  background: var(--revert-bg);
+}
+
+.badge--legacy {
+  color: var(--legacy);
+  background: var(--legacy-bg);
+}
+
+.badge--native,
+.badge--muted {
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.badge--warn {
+  color: var(--revert);
+  background: var(--revert-bg);
+}
+
+.badge--flag,
+.badge--kind-interest {
+  color: var(--accent);
+  background: transparent;
+}
+
+.badge--kind-gas {
+  color: var(--copper);
+  background: transparent;
+}
+
+/* Loading, empty and error states shown in place of content. */
+.state {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.state--error {
+  color: var(--fail);
+  background: var(--fail-bg);
+  border-radius: var(--radius-m);
+  text-align: left;
+}
+
+.state--error .state-title {
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.state--error p:last-child {
+  margin-bottom: 0;
+}
+
+.state--loading::before {
+  content: "";
+  display: block;
+  width: 3rem;
+  height: 2px;
+  margin: 0 auto 0.75rem;
+  background: var(--copper);
+  animation: wire-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes wire-pulse {
+  from {
+    transform: scaleX(0.2);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Pager below a paged list. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 1rem;
+}
+
+.pager-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Search result chooser. */
+.choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.choices a {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-s);
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.choices a:hover {
+  border-color: var(--accent);
+}
+
+.choice-kind {
+  font-weight: 700;
+}
+
+.choice-detail {
+  color: var(--muted);
+}
+
+/* Compact list of latest transfers. */
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.feed li:last-child {
+  border-bottom: 0;
+}
+
+.feed-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+/* Landing page: the wordmark hero with its wire, the feature ledger and the call to action. */
+.hero {
+  padding: clamp(1.5rem, 6vw, 4rem) 0 2.5rem;
+}
+
+.wordmark {
+  font-size: clamp(3rem, 14vw, 7.5rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  margin: 0 0 1rem;
+}
+
+.hero-sub {
+  font-size: clamp(1.05rem, 2.6vw, 1.4rem);
+  color: var(--muted);
+  max-width: 44rem;
+  margin: 0 0 2rem;
+}
+
+.wire {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 7rem;
+  margin: 0 0 2rem;
+  color: var(--copper);
+}
+
+.wire-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 0;
+  animation: wire-draw 1.6s ease-out both;
+}
+
+.wire-node {
+  fill: var(--paper);
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.wire-node--hub {
+  fill: currentColor;
+}
+
+@keyframes wire-draw {
+  from {
+    stroke-dashoffset: 1400;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire-line,
+  .state--loading::before {
+    animation: none;
+  }
+}
+
+.intro {
+  max-width: 44rem;
+  font-size: 1.05rem;
+}
+
+.features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 2px solid var(--ink);
+}
+
+@media (min-width: 48rem) {
+  .features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 2.5rem;
+  }
+}
+
+.features li {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.features h3 {
+  margin-bottom: 0.3rem;
+}
+
+.features p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.cta {
+  margin-top: 2.5rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--accent);
+  border-radius: var(--radius-m);
+}
+
+.cta p {
+  color: var(--muted);
+  max-width: 40rem;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  margin: 0 0 2rem;
+  padding: 0;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.stats dt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  fill: currentColor;
+}

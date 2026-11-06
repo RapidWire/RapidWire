@@ -1,0 +1,119 @@
+name: rapidwire
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+# Only migrate declares build, so "docker compose build" builds the shared image once.
+x-app: &app
+  image: rapidwire:local
+  pull_policy: never
+  env_file: .env
+  logging: *logging
+
+services:
+  mysql:
+    image: mysql:8.4
+    # utf8mb4_0900_bin compares strings byte for byte, so symbols, names and contract storage keys never match case- or accent-insensitively.
+    # READ-COMMITTED keeps locking reads (SELECT ... FOR UPDATE) free of gap locks while still reading the latest committed rows.
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_bin
+      - --default-time-zone=+00:00
+      - --transaction-isolation=READ-COMMITTED
+      - --max-connections=200
+      - --skip-name-resolve
+    # MYSQL_ROOT_PASSWORD comes from .env.mysql, which no other service reads.
+    env_file:
+      - path: .env.mysql
+        required: true
+    environment:
+      # Root may log in only through the local socket inside this container, never over the network.
+      MYSQL_ROOT_HOST: localhost
+      MYSQL_DATABASE: ${RAPIDWIRE_DB_NAME:-rapidwire}
+      MYSQL_USER: ${RAPIDWIRE_DB_USER:-rapidwire}
+      MYSQL_PASSWORD: ${RAPIDWIRE_DB_PASSWORD:?RAPIDWIRE_DB_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # TCP to 127.0.0.1 answers only after init has finished, because the entrypoint runs its init server without networking.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysqladmin ping --host=127.0.0.1 --user=\"$$MYSQL_USER\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    logging: *logging
+
+  migrate:
+    <<: *app
+    build: .
+    command: ["migrate"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["api"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - backups:/var/lib/rapidwire/backups:ro
+    restart: unless-stopped
+
+  bot:
+    <<: *app
+    command: ["bot"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Shutdown drains guild directory writes, waits for token revocations and stops the listeners and the gateway client before disposing the engine, which takes longer than docker's default 10 second grace.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  # The worker's DB-locked scheduler takes the periodic backups; the backup service below is only for on-demand runs via "docker compose run --rm backup".
+  worker:
+    <<: *app
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - backups:/var/lib/rapidwire/backups
+    # Covers the worker's shutdown, which lets running jobs finish, then cancels the rest and releases their job locks before disposing the engine.
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  backup:
+    <<: *app
+    command: ["backup"]
+    profiles: ["tools"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - backups:/var/lib/rapidwire/backups
+    restart: "no"
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.6
+    command: ["tunnel", "--no-autoupdate", "run"]
+    # TUNNEL_TOKEN comes from .env.cloudflared, which no other service reads; cloudflared exits with an error when it is missing or empty.
+    env_file:
+      - path: .env.cloudflared
+        required: true
+    depends_on:
+      - api
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  mysql-data:
+  backups:

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RapidWireの実行と移動の一覧と検索">
+<title>Explorer - RapidWire</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/app.css">
+<script type="module" src="/assets/explorer.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へスキップ</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M2 20h8l4-8h6l4 8h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="12" r="3" fill="currentColor"/><circle cx="24" cy="20" r="3" fill="currentColor"/></svg>RapidWire</a>
+    <nav class="site-nav" aria-label="メイン">
+      <ul>
+        <li><a href="/">Top</a></li>
+        <li><a href="/explorer.html" aria-current="page">Explorer</a></li>
+        <li><a href="/pools.html">Pools</a></li>
+      </ul>
+    </nav>
+    <form class="header-search" action="/explorer.html" method="get" role="search">
+      <label class="visually-hidden" for="site-search">ID または通貨シンボルで検索</label>
+      <input type="search" id="site-search" name="q" placeholder="ID / 通貨シンボル" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="btn btn--primary" type="submit">検索</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" class="site-main">
+  <div class="page-head">
+    <h1>Explorer</h1>
+    <p class="lede">RapidWireのすべての実行と移動を新しい順に表示します。旧版から引き継いだ実行も同じ一覧に含まれます。</p>
+  </div>
+
+  <section class="panel" id="search-panel" aria-labelledby="search-title" hidden>
+    <div class="panel-head">
+      <h2 id="search-title">検索結果</h2>
+    </div>
+    <div id="search-results"></div>
+  </section>
+
+  <div class="layout-split">
+    <section class="panel" aria-labelledby="executions-title">
+      <div class="panel-head">
+        <h2 id="executions-title">最新の実行</h2>
+        <p class="panel-note" id="executions-summary"></p>
+      </div>
+      <form class="filters" id="filters" action="/explorer.html" method="get">
+        <div class="field">
+          <label for="filter-type">種類</label>
+          <select id="filter-type" name="execution_type">
+            <option value="">すべて</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-status">状態</label>
+          <select id="filter-status" name="status">
+            <option value="">すべて</option>
+            <option value="success">成功 / success</option>
+            <option value="failed">失敗 / failed</option>
+            <option value="reverted">リバート / reverted</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-initiator">実行者のアカウントID</label>
+          <input type="text" id="filter-initiator" name="initiator_id" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="20" placeholder="例: 1234567890">
+        </div>
+        <div class="cluster">
+          <button class="btn btn--primary" type="submit">絞り込む</button>
+          <a class="btn" href="/explorer.html">解除</a>
+        </div>
+      </form>
+      <div id="executions" class="table-host"></div>
+      <div id="executions-pager"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="transfers-title">
+      <div class="panel-head">
+        <h2 id="transfers-title">最新の移動</h2>
+      </div>
+      <div id="transfers"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p>RapidWire</p>
+    <ul>
+      <li><a href="/docs">API docs</a></li>
+      <li><a href="/operator.html">Operator</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

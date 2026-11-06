@@ -1,0 +1,16 @@
+{
+  "now": 1790000000,
+  "currencies": [
+    {"id": 1269970084965912747, "symbol": "RAPID", "name": "Rapid"},
+    {"id": 456789012345678901, "symbol": "GOLD", "name": "Gold"}
+  ],
+  "balances": [
+    {"account": 1000, "currency": "GOLD", "amount": 1000},
+    {"account": 1000, "currency": "RAPID", "amount": 50000},
+    {"account": 2000, "currency": "RAPID", "amount": 1000000},
+    {"account": 2000, "currency": "GOLD", "amount": 20000}
+  ],
+  "pools": [
+    {"currency_x": "RAPID", "currency_y": "GOLD", "fee_bps": 50, "reserve_x": 2000000, "reserve_y": 1000000}
+  ]
+}

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RapidWire DEXの流動性プールの詳細">
+<title>Pool - RapidWire</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/app.css">
+<script type="module" src="/assets/pool.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へスキップ</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M2 20h8l4-8h6l4 8h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="12" r="3" fill="currentColor"/><circle cx="24" cy="20" r="3" fill="currentColor"/></svg>RapidWire</a>
+    <nav class="site-nav" aria-label="メイン">
+      <ul>
+        <li><a href="/">Top</a></li>
+        <li><a href="/explorer.html">Explorer</a></li>
+        <li><a href="/pools.html" aria-current="page">Pools</a></li>
+      </ul>
+    </nav>
+    <form class="header-search" action="/explorer.html" method="get" role="search">
+      <label class="visually-hidden" for="site-search">ID または通貨シンボルで検索</label>
+      <input type="search" id="site-search" name="q" placeholder="ID / 通貨シンボル" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="btn btn--primary" type="submit">検索</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" class="site-main">
+  <div class="page-head">
+    <p class="page-id" id="pool-id"></p>
+    <h1 id="pool-title">Pool</h1>
+    <p class="lede">定積型 (x * y = k) の流動性プールです。スワップの手数料はプールに残り、流動性の提供者に配分されます。</p>
+  </div>
+
+  <div id="pool-banner"></div>
+
+  <section class="panel" aria-labelledby="overview-title">
+    <div class="panel-head">
+      <h2 id="overview-title">概要</h2>
+    </div>
+    <div id="pool-overview"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="price-title">
+    <div class="panel-head">
+      <h2 id="price-title">スポット価格</h2>
+      <p class="panel-note">リザーブの比から計算した手数料を含まない価格です。</p>
+    </div>
+    <div id="pool-price"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="tiers-title">
+    <div class="panel-head">
+      <h2 id="tiers-title">同じペアの他のティア</h2>
+    </div>
+    <div id="pool-tiers"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="activity-title">
+    <div class="panel-head">
+      <h2 id="activity-title">最近の移動</h2>
+      <p class="panel-note">プールの保管口座が関わる移動です。</p>
+    </div>
+    <div id="pool-activity"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p>RapidWire</p>
+    <ul>
+      <li><a href="/docs">API docs</a></li>
+      <li><a href="/operator.html">Operator</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

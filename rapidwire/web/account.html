@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RapidWireのアカウントの残高、ステーク、流動性、請求と移動履歴">
+<title>Account - RapidWire</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/app.css">
+<script type="module" src="/assets/account.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へスキップ</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M2 20h8l4-8h6l4 8h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="12" r="3" fill="currentColor"/><circle cx="24" cy="20" r="3" fill="currentColor"/></svg>RapidWire</a>
+    <nav class="site-nav" aria-label="メイン">
+      <ul>
+        <li><a href="/">Top</a></li>
+        <li><a href="/explorer.html">Explorer</a></li>
+        <li><a href="/pools.html">Pools</a></li>
+      </ul>
+    </nav>
+    <form class="header-search" action="/explorer.html" method="get" role="search">
+      <label class="visually-hidden" for="site-search">ID または通貨シンボルで検索</label>
+      <input type="search" id="site-search" name="q" placeholder="ID / 通貨シンボル" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="btn btn--primary" type="submit">検索</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" class="site-main">
+  <div class="page-head">
+    <p class="page-id" id="account-kind">アカウント</p>
+    <h1 id="account-title">アカウント</h1>
+    <p class="lede" id="account-lede">残高と取引はすべてのアカウントについて公開されています。</p>
+    <div class="cluster head-badges" id="account-badges"></div>
+  </div>
+
+  <div id="account-error"></div>
+  <div id="account-note"></div>
+
+  <div id="account-body" hidden>
+    <section class="panel" id="system-panel" aria-labelledby="system-title" hidden>
+      <div class="panel-head">
+        <h2 id="system-title">システムアカウント</h2>
+      </div>
+      <div id="system-details"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="overview-title">
+      <div class="panel-head">
+        <h2 id="overview-title">概要</h2>
+      </div>
+      <div id="overview"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="holdings-title">
+      <div class="panel-head">
+        <h2 id="holdings-title">保有資産</h2>
+      </div>
+      <div class="tablist" role="tablist" aria-labelledby="holdings-title" id="holdings-tabs">
+        <button class="tab" type="button" role="tab" id="tab-balances" aria-controls="panel-balances" aria-selected="true">残高<span class="tab-count" id="count-balances"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-stakes" aria-controls="panel-stakes" aria-selected="false" tabindex="-1">ステーク<span class="tab-count" id="count-stakes"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-pools" aria-controls="panel-pools" aria-selected="false" tabindex="-1">流動性<span class="tab-count" id="count-pools"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-claims" aria-controls="panel-claims" aria-selected="false" tabindex="-1">請求<span class="tab-count" id="count-claims"></span></button>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-balances" aria-labelledby="tab-balances" tabindex="0">
+        <p class="panel-note">ゼロでない残高を通貨ID順に表示します。発行アカウントの残高は供給量の符号を反転した値のため、負の値になります。</p>
+        <div id="balances" class="table-host"></div>
+        <div id="balances-pager"></div>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-stakes" aria-labelledby="tab-stakes" tabindex="0" hidden>
+        <p class="panel-note">元本は最後に利息を付けた時点の額です。見込み額は表示時点までの利息を加えた額で、何も記録せずに計算しています。</p>
+        <div id="stakes" class="table-host"></div>
+        <div id="stakes-pager"></div>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-pools" aria-labelledby="tab-pools" tabindex="0" hidden>
+        <p class="panel-note">流動性プールのシェアと、すべて引き出した場合に現在の準備金から受け取れる額です。</p>
+        <div id="positions" class="table-host"></div>
+        <div id="positions-pager"></div>
+      </div>
+      <div class="tabpanel" role="tabpanel" id="panel-claims" aria-labelledby="tab-claims" tabindex="0" hidden>
+        <form class="filters" id="claims-filter" action="/account.html" method="get">
+          <div class="field">
+            <label for="claims-status">請求の状態</label>
+            <select id="claims-status" name="cs">
+              <option value="">すべて</option>
+              <option value="pending">未払い / pending</option>
+              <option value="paid">支払い済み / paid</option>
+              <option value="canceled">取り消し / canceled</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="claims-role">この口座の立場</label>
+            <select id="claims-role" name="cr">
+              <option value="">両方</option>
+              <option value="claimant">請求した側 / claimant</option>
+              <option value="payer">支払う側 / payer</option>
+            </select>
+          </div>
+          <div class="cluster">
+            <button class="btn btn--primary" type="submit">絞り込む</button>
+          </div>
+        </form>
+        <div id="claims" class="table-host"></div>
+        <div id="claims-pager"></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="history-title">
+      <div class="panel-head">
+        <h2 id="history-title">移動履歴</h2>
+        <p class="panel-note" id="history-summary"></p>
+      </div>
+      <form class="filters" id="history-filter" action="/account.html" method="get">
+        <div class="field">
+          <label for="history-currency">通貨</label>
+          <select id="history-currency" name="currency_id">
+            <option value="">すべて</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="history-sort">並び替え</label>
+          <select id="history-sort" name="sort_by">
+            <option value="transfer_id">移動ID</option>
+            <option value="timestamp">時刻</option>
+            <option value="amount">金額</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="history-order">順序</label>
+          <select id="history-order" name="sort_order">
+            <option value="desc">降順</option>
+            <option value="asc">昇順</option>
+          </select>
+        </div>
+        <div class="cluster">
+          <button class="btn btn--primary" type="submit">表示</button>
+        </div>
+      </form>
+      <div id="history" class="table-host"></div>
+      <div id="history-pager"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="executions-title">
+      <div class="panel-head">
+        <h2 id="executions-title">開始した実行</h2>
+        <p class="panel-note" id="executions-summary"></p>
+      </div>
+      <p class="panel-note">このアカウントが実行者として開始した実行を新しい順に表示します。失敗とリバートも含みます。<span id="executions-more"></span></p>
+      <div id="executions" class="table-host"></div>
+      <div id="executions-pager"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p>RapidWire</p>
+    <ul>
+      <li><a href="/docs">API docs</a></li>
+      <li><a href="/operator.html">Operator</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

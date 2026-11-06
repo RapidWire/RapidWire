@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="RapidWireのスマートコントラクトの状態、公開関数、版とストレージ">
+<title>Contract - RapidWire</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/app.css">
+<script type="module" src="/assets/contract.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">本文へスキップ</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M2 20h8l4-8h6l4 8h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="12" r="3" fill="currentColor"/><circle cx="24" cy="20" r="3" fill="currentColor"/></svg>RapidWire</a>
+    <nav class="site-nav" aria-label="メイン">
+      <ul>
+        <li><a href="/">Top</a></li>
+        <li><a href="/explorer.html">Explorer</a></li>
+        <li><a href="/pools.html">Pools</a></li>
+      </ul>
+    </nav>
+    <form class="header-search" action="/explorer.html" method="get" role="search">
+      <label class="visually-hidden" for="site-search">ID または通貨シンボルで検索</label>
+      <input type="search" id="site-search" name="q" placeholder="ID / 通貨シンボル" autocomplete="off" spellcheck="false" maxlength="40">
+      <button class="btn btn--primary" type="submit">検索</button>
+    </form>
+  </div>
+</header>
+
+<main id="main" class="site-main">
+  <div class="page-head">
+    <p class="page-id" id="contract-id"></p>
+    <h1>Contract</h1>
+    <p class="lede">アカウントに登録されたスマートコントラクトです。現在の版、ハッシュ、ロック期限、公開関数、ストレージを表示します。バイナリの中身はこのページには表示しません。</p>
+  </div>
+
+  <section class="panel" aria-labelledby="overview-title">
+    <div class="panel-head">
+      <h2 id="overview-title">概要</h2>
+    </div>
+    <div id="contract-overview"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="functions-title">
+    <div class="panel-head">
+      <h2 id="functions-title">公開関数</h2>
+      <p class="panel-note">現在の版の公開関数です。バイナリには引数名がないため、型だけを表示します。</p>
+    </div>
+    <div id="contract-functions"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="storage-title">
+    <div class="panel-head">
+      <h2 id="storage-title">ストレージ</h2>
+      <p class="panel-note" id="storage-summary"></p>
+    </div>
+    <div id="contract-storage"></div>
+    <div id="storage-pager"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="versions-title">
+    <div class="panel-head">
+      <h2 id="versions-title">版の履歴</h2>
+      <p class="panel-note" id="versions-summary"></p>
+    </div>
+    <div id="contract-versions"></div>
+    <div id="versions-pager"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="calls-title">
+    <div class="panel-head">
+      <h2 id="calls-title">コントラクト呼び出し</h2>
+      <p class="panel-note" id="calls-summary"></p>
+    </div>
+    <p class="panel-note">このコントラクトへのすべての呼び出しです。他のコントラクトからの入れ子の呼び出しと、失敗した呼び出しも含みます。</p>
+    <div id="contract-calls"></div>
+    <div id="calls-pager"></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <p>RapidWire</p>
+    <ul>
+      <li><a href="/docs">API docs</a></li>
+      <li><a href="/operator.html">Operator</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+      - run: pip install -c constraints.txt -e '.[dev]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+      - run: pip install -c constraints.txt -e '.[dev]'
+      - run: pytest -m "not integration"
+
+  # Runs the integration tests against a MySQL service container with the image's default server configuration.
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rapidwire-ci
+          MYSQL_DATABASE: rapidwire_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --host=127.0.0.1 --user=root --password=rapidwire-ci --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 30s
+    env:
+      # rapidwire_test is disposable: the test fixture drops every table in it before migrating.
+      RAPIDWIRE_TEST_DB_URL: mysql+asyncmy://root:rapidwire-ci@127.0.0.1:3306/rapidwire_test?charset=utf8mb4
+      RAPIDWIRE_TEST_PROPERTY_EXAMPLES: "60"
+      # The headless browser test in tests/integration/web fails instead of skipping when Chromium cannot start.
+      RAPIDWIRE_TEST_REQUIRE_BROWSER: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+      - name: Migrate from an installed wheel
+        env:
+          RAPIDWIRE_DB_HOST: 127.0.0.1
+          RAPIDWIRE_DB_PORT: "3306"
+          RAPIDWIRE_DB_NAME: rapidwire_test
+          RAPIDWIRE_DB_USER: root
+          RAPIDWIRE_DB_PASSWORD: rapidwire-ci
+        run: |
+          pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/dist" .
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/pip" install -c constraints.txt "$RUNNER_TEMP"/dist/rapidwire-*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-venv/bin/rapidwire" migrate
+      # The backup tests run mysqldump and mysql from this image against the service container.
+      - run: docker pull mysql:8.4
+      - run: pip install -c constraints.txt -e '.[dev]'
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest -m integration
+
+  # Runs the integration tests without RAPIDWIRE_TEST_DB_URL, so the test fixture starts and removes its own MySQL container through the runner's docker.
+  integration-docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RAPIDWIRE_TEST_PROPERTY_EXAMPLES: "60"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints.txt
+      - run: docker pull mysql:8.4
+      - run: pip install -c constraints.txt -e '.[dev]'
+      # The browser test does not depend on how MySQL is provided and runs in the integration job.
+      - run: pytest -m integration --ignore=tests/integration/web

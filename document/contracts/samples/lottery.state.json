@@ -1,0 +1,10 @@
+{
+  "now": 1790000000,
+  "currencies": [
+    {"id": 1269970084965912747, "symbol": "RAPID", "name": "Rapid"}
+  ],
+  "balances": [
+    {"account": 1000, "currency": "RAPID", "amount": 500000},
+    {"account": 2000, "currency": "RAPID", "amount": 1000000}
+  ]
+}

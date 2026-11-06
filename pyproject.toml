@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rapidwire"
+dynamic = ["version"]
+description = "RapidWire ledger, DEX, contract VM, Discord bot, HTTP API and worker."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncmy>=0.2.10",
+    "cryptography>=43",
+    "alembic>=1.16",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "discord.py>=2.4",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "hypothesis>=6.100",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "playwright>=1.49",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+rapidwire = "rapidwire.cli:main"
+rwc = "rapidwire.contract.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "rapidwire.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["rapidwire*"]
+
+[tool.setuptools.package-data]
+rapidwire = ["py.typed", "contract/rapidwire_contract.pyi", "db/migrations/*.py", "db/migrations/*.mako", "db/migrations/versions/*.py", "web/*", "web/**/*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 200
+extend-exclude = ["local"]
+# The client package lives in client/ so it can be installed on its own; listing it makes ruff sort rapidwire_client as first-party.
+src = [".", "client"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S104", "S105", "S106", "S603", "S607", "S608"]
+# The contract stub is read by contract authors' editors, which may run older Python versions than the package, so it keeps TypeAlias and TypeVar.
+"rapidwire/contract/rapidwire_contract.pyi" = ["UP040", "UP047"]
+# Contract sources import the language's names with the star import the compiler requires; mypy checks them against the stub in tests/unit/contract/test_samples.py.
+"document/contracts/samples/*.py" = ["F403", "F405"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["rapidwire", "client", "tests"]
+mypy_path = "client"
+
+[[tool.mypy.overrides]]
+module = ["asyncmy", "asyncmy.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The client package is imported from its source tree; `pip install -e ./client` installs the same code for other uses.
+pythonpath = ["client"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = ["--strict-markers", "--import-mode=importlib"]
+markers = [
+    "integration: tests that need a real MySQL server (started through docker unless RAPIDWIRE_TEST_DB_URL is set)",
+]
