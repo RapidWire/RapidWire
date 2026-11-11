@@ -27,7 +27,7 @@ async def _seed(engine: AsyncEngine) -> int:
         await create_currency(engine, currency_id=currency_id, symbol=symbol)
     async with engine.begin() as conn:
         await ensure_user_accounts(conn, [ALICE, BOB], now=NOW)
-        result = await conn.execute(insert(execution).values(type="pool_create", origin="native", initiator_id=ALICE, status="success", input={}, created_at=NOW))
+        result = await conn.execute(insert(execution).values(type="pool_create", initiator_id=ALICE, status="success", input={}, created_at=NOW))
         assert result.inserted_primary_key is not None
         return int(result.inserted_primary_key[0])
 

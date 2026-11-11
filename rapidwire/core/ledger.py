@@ -30,7 +30,7 @@ from rapidwire.core.errors import (
     InvalidArgument,
     error_from_code,
 )
-from rapidwire.core.types import AccountKind, ExecutionStatus, ExecutionType, JsonObject, LabelBasis, Origin, to_json_object
+from rapidwire.core.types import AccountKind, ExecutionStatus, ExecutionType, JsonObject, to_json_object
 from rapidwire.core.validation import BIGINT_MAX, is_user_account_id, validate_user_account_id
 from rapidwire.db.tables import IDEMPOTENCY_KEY_MAX, balance, currency, execution, transfer
 from rapidwire.db.types import AMOUNT_MAX, AMOUNT_MIN
@@ -249,17 +249,11 @@ class LedgerTx:
         contract_function: str | None = None,
         status: ExecutionStatus = ExecutionStatus.SUCCESS,
         output: Mapping[str, Any] | None = None,
-        origin: Origin = Origin.NATIVE,
-        label_basis: LabelBasis | None = None,
-        execution_id: int | None = None,
-        created_at: datetime | None = None,
     ) -> int:
-        """Insert an execution row and return its ID; the initiator account must exist (see require_accounts()), execution_id/created_at/origin/label_basis exist for legacy imports, and contract_id is derived by execution_contract_id()."""
+        """Insert an execution row and return its ID; the initiator account must exist (see require_accounts()), and contract_id is derived by execution_contract_id()."""
         stored_input = to_json_object(input)
         values: dict[str, Any] = {
             "type": str(type),
-            "origin": origin.value,
-            "label_basis": label_basis.value if label_basis is not None else None,
             "initiator_id": initiator_id,
             "parent_execution_id": parent_execution_id,
             "status": status.value,
@@ -267,11 +261,9 @@ class LedgerTx:
             "output": to_json_object(output) if output is not None else None,
             "idempotency_key": idempotency_key,
             "contract_function": contract_function,
-            "created_at": ensure_utc(created_at) if created_at is not None else self.now,
+            "created_at": self.now,
             "contract_id": execution_contract_id(str(type), initiator_id, stored_input),
         }
-        if execution_id is not None:
-            values["execution_id"] = execution_id
         result = await self.conn.execute(insert(execution).values(**values))
         key = result.inserted_primary_key
         if key is None:
@@ -383,9 +375,6 @@ class LedgerTx:
         to_account: int,
         amount: int,
         kind: str,
-        *,
-        transfer_id: int | None = None,
-        created_at: datetime | None = None,
     ) -> int:
         """Move amount between two balance rows locked by this transaction and record the transfer row, returning its ID; raises InvalidAmount, InvalidArgument, InsufficientBalance or AmountOverflow before writing anything."""
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
@@ -415,10 +404,8 @@ class LedgerTx:
             "to_account": to_account,
             "amount": amount,
             "kind": str(kind),
-            "created_at": ensure_utc(created_at) if created_at is not None else self.now,
+            "created_at": self.now,
         }
-        if transfer_id is not None:
-            values["transfer_id"] = transfer_id
         result = await self.conn.execute(insert(transfer).values(**values))
         self._balances[from_key] = new_from
         self._balances[to_key] = new_to

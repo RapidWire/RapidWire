@@ -82,8 +82,6 @@ async def test_mint_and_transfer_record_executions_and_transfers(seeded: AsyncEn
     row = (await _executions(seeded))[-1]
     assert row["execution_id"] == execution_id
     assert row["status"] == "success"
-    assert row["origin"] == "native"
-    assert row["label_basis"] is None
     assert row["input"] == {"to": str(BOB), "amount": "300"}
     assert row["created_at"] == NOW
     moves = await _transfers(seeded, execution_id)
@@ -358,7 +356,7 @@ async def _insert_pools(engine: AsyncEngine, currency_a: int, currency_b: int, p
     """Insert active pool rows with explicit IDs for the pair, mapping pool ID to fee tier, so custody accounts can reference them."""
     async with engine.begin() as conn:
         await ensure_user_accounts(conn, [ALICE], now=NOW)
-        created = await conn.execute(insert(execution).values(type=ExecutionType.POOL_CREATE, origin="native", initiator_id=ALICE, status=ExecutionStatus.SUCCESS, input={}, output={}, created_at=NOW))
+        created = await conn.execute(insert(execution).values(type=ExecutionType.POOL_CREATE, initiator_id=ALICE, status=ExecutionStatus.SUCCESS, input={}, output={}, created_at=NOW))
         assert created.inserted_primary_key is not None
         for pool_id, fee_bps in pools.items():
             row = {"currency_a": currency_a, "currency_b": currency_b, "fee_bps": fee_bps, "reserve_a": 1, "reserve_b": 1, "total_shares": MINIMUM_LIQUIDITY, "locked_shares": MINIMUM_LIQUIDITY}

@@ -89,8 +89,7 @@ async for entry in async_client.paginate(async_client.get_account_history, 123, 
 - `list_claims(account_id, status=..., role=...)` は、勘定が行った請求には `role="claimant"`、勘定に対して行われた請求には `role="payer"` を受け取り、`role` を指定しなければ両方を一覧にする。
 - `list_executions(contract_id=...)` は、コントラクトの呼び出し (入れ子の呼び出しを含む) をその管理実行とともに一覧にし、呼び出しだけを得るには `execution_type="contract_call"` と組み合わせる。
 - `get_user_stats()` は勘定の正確な `total_transfers` を返す。
-- すべての実行と移動の項目は `origin` と `label_basis` (`legacy` は旧版から取り込んだ実行を示す) に加え、親の実行の `parent_origin` と `parent_label_basis` を持ち、実行はさらに `contract_id` (呼び出しが呼び出した、または管理実行が対象としたコントラクト) を持つ。
-- 請求、プール、コントラクト、コントラクトのバージョンは、それぞれが結び付く各実行の出自とラベルの根拠を持つ: 請求では `created_execution_origin` と `resolved_execution_origin`、プールでは `created_execution_origin` と `dissolved_execution_origin`、コントラクトでは `created_execution_origin` と `updated_execution_origin`、バージョンでは `created_execution_origin` であり、それぞれに対応する `*_label_basis` がある。
+- 実行は `contract_id` (呼び出しが呼び出した、または管理実行が対象としたコントラクト) を持つ。
 
 ## 金額
 

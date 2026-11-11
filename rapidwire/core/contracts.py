@@ -39,7 +39,7 @@ from rapidwire.core.paging import (
     Page,
     read_page,
 )
-from rapidwire.core.types import ExecutionType, LabelBasis, Origin
+from rapidwire.core.types import ExecutionType
 from rapidwire.core.validation import require_int_in_range, require_user_account
 from rapidwire.db.tables import (
     CONTRACT_MAX_SIZE,
@@ -51,7 +51,6 @@ from rapidwire.db.tables import (
     contract,
     contract_storage,
     contract_version,
-    execution,
 )
 
 __all__ = [
@@ -272,11 +271,7 @@ class ContractInfo:
     updated_at: datetime
     deleted_at: datetime | None
     created_execution_id: int
-    created_execution_origin: Origin
-    created_execution_label_basis: LabelBasis | None
     updated_execution_id: int
-    updated_execution_origin: Origin
-    updated_execution_label_basis: LabelBasis | None
 
     def locked_at(self, now: datetime) -> bool:
         return is_locked(self.locked_until, now)
@@ -284,15 +279,13 @@ class ContractInfo:
 
 @dataclass(frozen=True)
 class ContractVersionSummary:
-    """A version without its binary, with the origin and label basis of the execution that registered it."""
+    """A version without its binary, with the execution that registered it."""
 
     account_id: int
     version: int
     sha256: str
     size: int
     created_execution_id: int
-    created_execution_origin: Origin
-    created_execution_label_basis: LabelBasis | None
     created_at: datetime
 
 
@@ -306,8 +299,6 @@ class ContractVersion:
     sha256: str
     size: int
     created_execution_id: int
-    created_execution_origin: Origin
-    created_execution_label_basis: LabelBasis | None
     created_at: datetime
 
 
@@ -702,33 +693,15 @@ def _versions_count() -> Any:
     return select(func.count()).select_from(versions).where(versions.c.account_id == contract.c.account_id).correlate(contract).scalar_subquery()
 
 
-_created_execution = execution.alias("contract_created_execution")
-_updated_execution = execution.alias("contract_updated_execution")
-_version_execution = execution.alias("version_created_execution")
-
-
-def _label_basis(value: str | None) -> LabelBasis | None:
-    return LabelBasis(value) if value is not None else None
-
-
 def _contract_query(*extra: Any) -> Any:
-    """The contract row joined with its current version's hash, size and any extra version columns, the origins of its creating and updating executions, plus the version count, as one statement."""
-    return (
-        select(
-            contract,
-            contract_version.c.sha256,
-            contract_version.c.size,
-            *extra,
-            _versions_count().label("version_count"),
-            _created_execution.c.origin.label("created_execution_origin"),
-            _created_execution.c.label_basis.label("created_execution_label_basis"),
-            _updated_execution.c.origin.label("updated_execution_origin"),
-            _updated_execution.c.label_basis.label("updated_execution_label_basis"),
-        )
-        .join(contract_version, (contract_version.c.account_id == contract.c.account_id) & (contract_version.c.version == contract.c.current_version))
-        .join(_created_execution, _created_execution.c.execution_id == contract.c.created_execution_id)
-        .join(_updated_execution, _updated_execution.c.execution_id == contract.c.updated_execution_id)
-    )
+    """The contract row joined with its current version's hash, size and any extra version columns, plus the version count, as one statement."""
+    return select(
+        contract,
+        contract_version.c.sha256,
+        contract_version.c.size,
+        *extra,
+        _versions_count().label("version_count"),
+    ).join(contract_version, (contract_version.c.account_id == contract.c.account_id) & (contract_version.c.version == contract.c.current_version))
 
 
 def _contract_info(row: RowMapping) -> ContractInfo:
@@ -746,11 +719,7 @@ def _contract_info(row: RowMapping) -> ContractInfo:
         updated_at=row["updated_at"],
         deleted_at=row["deleted_at"],
         created_execution_id=row["created_execution_id"],
-        created_execution_origin=Origin(row["created_execution_origin"]),
-        created_execution_label_basis=_label_basis(row["created_execution_label_basis"]),
         updated_execution_id=row["updated_execution_id"],
-        updated_execution_origin=Origin(row["updated_execution_origin"]),
-        updated_execution_label_basis=_label_basis(row["updated_execution_label_basis"]),
     )
 
 
@@ -806,19 +775,15 @@ async def get_contract_version(db: Db, account_id: int, version: int | None = No
         contract_version.c.size,
         contract_version.c.created_execution_id,
         contract_version.c.created_at,
-        _version_execution.c.origin.label("created_execution_origin"),
-        _version_execution.c.label_basis.label("created_execution_label_basis"),
     )
-    registered = _version_execution.c.execution_id == contract_version.c.created_execution_id
     if version is None:
         stmt = (
             select(*columns)
             .join(contract, (contract.c.account_id == contract_version.c.account_id) & (contract.c.current_version == contract_version.c.version))
-            .join(_version_execution, registered)
             .where(contract.c.account_id == account_id, contract.c.status != ContractStatus.DELETED.value)
         )
     else:
-        stmt = select(*columns).join(_version_execution, registered).where(contract_version.c.account_id == account_id, contract_version.c.version == version)
+        stmt = select(*columns).where(contract_version.c.account_id == account_id, contract_version.c.version == version)
     async with reader(db) as conn:
         row = (await conn.execute(stmt)).one_or_none()
     if row is None:
@@ -830,8 +795,6 @@ async def get_contract_version(db: Db, account_id: int, version: int | None = No
         sha256=bytes(row.sha256).hex(),
         size=row.size,
         created_execution_id=row.created_execution_id,
-        created_execution_origin=Origin(row.created_execution_origin),
-        created_execution_label_basis=_label_basis(row.created_execution_label_basis),
         created_at=row.created_at,
     )
 
@@ -846,10 +809,7 @@ async def list_contract_versions(db: Db, account_id: int, *, page: int = 1, per_
             contract_version.c.size,
             contract_version.c.created_execution_id,
             contract_version.c.created_at,
-            _version_execution.c.origin.label("created_execution_origin"),
-            _version_execution.c.label_basis.label("created_execution_label_basis"),
         )
-        .join(_version_execution, _version_execution.c.execution_id == contract_version.c.created_execution_id)
         .where(contract_version.c.account_id == account_id)
         .order_by(contract_version.c.version.desc())
     )
@@ -866,8 +826,6 @@ async def list_contract_versions(db: Db, account_id: int, *, page: int = 1, per_
             sha256=bytes(row.sha256).hex(),
             size=row.size,
             created_execution_id=row.created_execution_id,
-            created_execution_origin=Origin(row.created_execution_origin),
-            created_execution_label_basis=_label_basis(row.created_execution_label_basis),
             created_at=row.created_at,
         ),
     )

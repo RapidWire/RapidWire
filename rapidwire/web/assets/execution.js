@@ -8,7 +8,6 @@ import {
   currencyLink,
   dataTable,
   executionLink,
-  executionRef,
   executionTypeLabel,
   formatMinimalUnits,
   formatTime,
@@ -18,11 +17,8 @@ import {
   isId,
   kindBadge,
   kvList,
-  labelBasisText,
   loadCurrencyIndex,
   mount,
-  originBadge,
-  originDetail,
   renderEmpty,
   renderError,
   renderLoading,
@@ -83,32 +79,15 @@ function contractOf(execution) {
   return typeof id === "string" && isId(id, { positive: true }) ? id : null;
 }
 
-// A link to a direct child execution with its origin badge, taken from the children the detail response includes.
-function childRef(execution, id) {
-  const children = Array.isArray(execution.children) ? execution.children : [];
-  const child = children.find((node) => node.execution_id === id);
-  return child ? executionRef(id, child.origin, child.label_basis) : executionLink(id);
-}
-
 function renderHead(execution) {
   document.title = `Execution #${execution.execution_id} - RapidWire`;
   mount("execution-kind", "実行 / Execution ", h("span", { class: "id" }, `#${execution.execution_id}`));
   mount("execution-title", executionTypeLabel(execution.type), " ", h("span", { class: "unit mono" }, execution.type));
-  mount("execution-badges", statusBadge(execution.status), originBadge(execution.origin, execution.label_basis), PRIVATE_TYPES.includes(execution.type) ? h("span", { class: "badge badge--muted" }, "非公開 / private") : null);
+  mount("execution-badges", statusBadge(execution.status), PRIVATE_TYPES.includes(execution.type) ? h("span", { class: "badge badge--muted" }, "非公開 / private") : null);
 }
 
 function banners(execution) {
   const items = [];
-  if (execution.origin === "legacy") {
-    items.push(
-      h(
-        "div",
-        { class: "banner banner--legacy", role: "note" },
-        h("p", { class: "banner-title" }, "旧版から取り込んだ実行"),
-        h("p", null, "この実行は旧版のRapidWireで行われ、新版に取り込まれたものです。", execution.label_basis ? [labelBasisText(execution.label_basis), " (label_basis: ", h("span", { class: "mono" }, execution.label_basis), ")"] : null),
-      ),
-    );
-  }
   if (PRIVATE_TYPES.includes(execution.type)) {
     items.push(
       h(
@@ -132,15 +111,14 @@ function overview(execution, contractId) {
       ["実行ID", h("span", { class: "id" }, execution.execution_id)],
       ["種類", [executionTypeLabel(execution.type), h("span", { class: "sub mono" }, execution.type)]],
       ["状態", statusBadge(execution.status)],
-      ["由来", originDetail(execution.origin, execution.label_basis)],
       ["実行者", accountLink(execution.initiator_id, { withName: true })],
       ["日時", formatTime(execution.created_at)],
-      ["親の実行", execution.parent_execution_id ? executionRef(execution.parent_execution_id, execution.parent_origin, execution.parent_label_basis) : "なし"],
+      ["親の実行", execution.parent_execution_id ? executionLink(execution.parent_execution_id) : "なし"],
       ["冪等キー", execution.has_idempotency_key ? ["あり", h("span", { class: "sub" }, "キーそのものは公開されません。")] : "なし"],
       ["コントラクト", contractId ? contractLink(contractId) : "-"],
       ["コントラクト関数", execution.contract_function ? h("span", { class: "mono" }, execution.contract_function) : "-"],
       ["移動", `${transfers.length} 件`],
-      ["子実行", children.length === 0 ? "なし" : h("span", { class: "cluster" }, children.map((child) => childRef(execution, child)))],
+      ["子実行", children.length === 0 ? "なし" : h("span", { class: "cluster" }, children.map((child) => executionLink(child)))],
     ]),
   );
 }
@@ -290,7 +268,6 @@ const CHILD_COLUMNS = [
   { label: "実行", className: "nowrap", render: (row) => executionLink(row.execution_id) },
   { label: "種類", render: (row) => [executionTypeLabel(row.type), h("span", { class: "sub mono" }, row.type)] },
   { label: "状態", render: (row) => statusBadge(row.status) },
-  { label: "由来", render: (row) => originBadge(row.origin, row.label_basis) },
   { label: "関数", render: (row) => (row.contract_function ? h("span", { class: "mono" }, row.contract_function) : "-") },
   { label: "移動", className: "num", render: (row) => `${Array.isArray(row.transfers) ? row.transfers.length : 0} 件` },
   { label: "配送", className: "num", render: (row) => `${Array.isArray(row.deliveries) ? row.deliveries.length : 0} 件` },
@@ -306,7 +283,7 @@ function childrenSection(execution) {
   } else {
     mount(host, dataTable({ caption: "直下の子実行", columns: CHILD_COLUMNS, rows: children }));
   }
-  const note = ids.length === 0 ? "この実行の中で開始された実行 (コントラクトからの呼び出しなど) を表示します。" : ["直下の子実行ID (child_execution_ids): ", ids.map((id, index) => [index > 0 ? ", " : null, childRef(execution, id)]), "。さらに深い実行はそれぞれのページで確認できます。"];
+  const note = ids.length === 0 ? "この実行の中で開始された実行 (コントラクトからの呼び出しなど) を表示します。" : ["直下の子実行ID (child_execution_ids): ", ids.map((id, index) => [index > 0 ? ", " : null, executionLink(id)]), "。さらに深い実行はそれぞれのページで確認できます。"];
   return section("children-title", "子実行", h("p", { class: "panel-note" }, note), host);
 }
 

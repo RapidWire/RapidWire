@@ -11,7 +11,7 @@ import {
   countText,
   currencyLink,
   executionColumns,
-  executionRef,
+  executionLink,
   formatTime,
   getParam,
   groupInteger,
@@ -278,8 +278,8 @@ function claimColumns(id, currencies) {
     {
       label: "実行",
       render: (row) => [
-        h("span", { class: "sub" }, "作成 ", executionRef(row.created_execution_id, row.created_execution_origin, row.created_execution_label_basis)),
-        row.resolved_execution_id ? h("span", { class: "sub" }, "解決 ", executionRef(row.resolved_execution_id, row.resolved_execution_origin, row.resolved_execution_label_basis)) : null,
+        h("span", { class: "sub" }, "作成 ", executionLink(row.created_execution_id)),
+        row.resolved_execution_id ? h("span", { class: "sub" }, "解決 ", executionLink(row.resolved_execution_id)) : null,
       ],
     },
   ];

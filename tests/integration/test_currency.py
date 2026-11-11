@@ -438,7 +438,7 @@ async def _create_pool_account(engine: AsyncEngine, pool_id: int, currency_ids: 
     currency_a, currency_b = sorted(currency_ids)
     async with engine.begin() as conn:
         created = await conn.execute(
-            insert(execution).values(type=ExecutionType.POOL_CREATE, origin="native", initiator_id=creator, status=ExecutionStatus.SUCCESS, input={}, output={"pool_id": str(pool_id)}, created_at=T0)
+            insert(execution).values(type=ExecutionType.POOL_CREATE, initiator_id=creator, status=ExecutionStatus.SUCCESS, input={}, output={"pool_id": str(pool_id)}, created_at=T0)
         )
         assert created.inserted_primary_key is not None
         row = {"pool_id": pool_id, "currency_a": currency_a, "currency_b": currency_b, "fee_bps": FEE_TIERS_BPS[0], "created_by": creator, "created_execution_id": created.inserted_primary_key[0]}

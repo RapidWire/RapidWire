@@ -23,7 +23,7 @@ from rapidwire.core.hooks import PoolDissolution, register_pool_dissolver
 from rapidwire.core.ledger import DUPLICATE_KEY_ERROR, BalanceKey, LedgerTx, LedgerUsageError, OperationResult, mysql_error_code, run_operation
 from rapidwire.core.paging import POOLS_PER_PAGE_DEFAULT, POOLS_PER_PAGE_MAX, POSITIONS_PER_PAGE_DEFAULT, POSITIONS_PER_PAGE_MAX, Page, read_page
 from rapidwire.core.routing import PoolState
-from rapidwire.core.types import ExecutionType, LabelBasis, Origin, TransferKind
+from rapidwire.core.types import ExecutionType, TransferKind
 from rapidwire.core.validation import (
     require_int_in_range,
     require_storable_int,
@@ -33,7 +33,7 @@ from rapidwire.core.validation import (
     validate_positive_id,
     validate_user_account_id,
 )
-from rapidwire.db.tables import FEE_TIERS_BPS, MINIMUM_LIQUIDITY, account, currency, execution, pool, pool_share
+from rapidwire.db.tables import FEE_TIERS_BPS, MINIMUM_LIQUIDITY, account, currency, pool, pool_share
 from rapidwire.db.types import AMOUNT_MAX
 
 __all__ = [
@@ -755,12 +755,8 @@ class PoolInfo:
     created_by: int
     created_at: datetime
     created_execution_id: int
-    created_execution_origin: Origin
-    created_execution_label_basis: LabelBasis | None
     dissolved_at: datetime | None
     dissolved_execution_id: int | None
-    dissolved_execution_origin: Origin | None
-    dissolved_execution_label_basis: LabelBasis | None
 
     @property
     def active(self) -> bool:
@@ -781,8 +777,6 @@ class ProviderPosition:
 
 _currency_a = currency.alias("pool_currency_a")
 _currency_b = currency.alias("pool_currency_b")
-_created = execution.alias("pool_created_execution")
-_dissolved = execution.alias("pool_dissolved_execution")
 
 
 def _pool_query() -> Select[Any]:
@@ -794,25 +788,11 @@ def _pool_query() -> Select[Any]:
             _currency_a.c.deleted_at.label("deleted_at_a"),
             _currency_b.c.deleted_at.label("deleted_at_b"),
             account.c.account_id.label("custody_account_id"),
-            _created.c.origin.label("created_execution_origin"),
-            _created.c.label_basis.label("created_execution_label_basis"),
-            _dissolved.c.origin.label("dissolved_execution_origin"),
-            _dissolved.c.label_basis.label("dissolved_execution_label_basis"),
         )
         .join(_currency_a, _currency_a.c.currency_id == pool.c.currency_a)
         .join(_currency_b, _currency_b.c.currency_id == pool.c.currency_b)
         .join(account, account.c.pool_id == pool.c.pool_id)
-        .join(_created, _created.c.execution_id == pool.c.created_execution_id)
-        .outerjoin(_dissolved, _dissolved.c.execution_id == pool.c.dissolved_execution_id)
     )
-
-
-def _optional_origin(value: str | None) -> Origin | None:
-    return Origin(value) if value is not None else None
-
-
-def _optional_label_basis(value: str | None) -> LabelBasis | None:
-    return LabelBasis(value) if value is not None else None
 
 
 def _pool_info(row: Row[Any]) -> PoolInfo:
@@ -834,12 +814,8 @@ def _pool_info(row: Row[Any]) -> PoolInfo:
         created_by=values["created_by"],
         created_at=values["created_at"],
         created_execution_id=values["created_execution_id"],
-        created_execution_origin=Origin(values["created_execution_origin"]),
-        created_execution_label_basis=_optional_label_basis(values["created_execution_label_basis"]),
         dissolved_at=values["dissolved_at"],
         dissolved_execution_id=values["dissolved_execution_id"],
-        dissolved_execution_origin=_optional_origin(values["dissolved_execution_origin"]),
-        dissolved_execution_label_basis=_optional_label_basis(values["dissolved_execution_label_basis"]),
     )
 
 

@@ -109,10 +109,7 @@ async def test_unsuccessful_executions_keep_only_gas_and_no_children(db: AsyncEn
     execution_id = await mint(db, 1, ALICE, 5, now=NOW)
     async with db.begin() as conn:
         await conn.execute(
-            text(
-                "INSERT INTO execution (type, origin, initiator_id, parent_execution_id, status, input, output, created_at)"
-                " VALUES ('contract_call', 'native', :a, :p, 'success', '{}', '{}', UTC_TIMESTAMP(6))"
-            ),
+            text("INSERT INTO execution (type, initiator_id, parent_execution_id, status, input, output, created_at) VALUES ('contract_call', :a, :p, 'success', '{}', '{}', UTC_TIMESTAMP(6))"),
             {"a": ALICE, "p": execution_id},
         )
     assert (await verify_invariants(db)).ok

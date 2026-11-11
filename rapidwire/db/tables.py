@@ -29,7 +29,7 @@ from sqlalchemy.dialects.mysql import BINARY, BLOB
 from sqlalchemy.sql.naming import conv
 
 from rapidwire.contract.limits import STORAGE_KEY_MAX_LENGTH, STORAGE_VALUE_MAX_BYTES
-from rapidwire.core.types import AccountKind, ClaimStatus, ExecutionStatus, LabelBasis, Origin, OutboxStatus
+from rapidwire.core.types import AccountKind, ClaimStatus, ExecutionStatus, OutboxStatus
 from rapidwire.db.metadata import metadata
 from rapidwire.db.types import Amount, UtcDateTime
 
@@ -223,8 +223,6 @@ execution = Table(
     metadata,
     Column("execution_id", BigInteger, primary_key=True, autoincrement=True),
     Column("type", String(ENUM_LENGTH), nullable=False),
-    Column("origin", String(ENUM_LENGTH), nullable=False),
-    Column("label_basis", String(ENUM_LENGTH), nullable=True),
     Column("initiator_id", BigInteger, ForeignKey("account.account_id"), nullable=False),
     Column("parent_execution_id", BigInteger, ForeignKey("execution.execution_id"), nullable=True),
     Column("status", String(ENUM_LENGTH), nullable=False),
@@ -235,12 +233,7 @@ execution = Table(
     Column("created_at", UtcDateTime(), nullable=False),
     # The contract a contract_call called or a contract management execution acted on; it may name an account without a contract, so it has no foreign key.
     Column("contract_id", BigInteger, nullable=True),
-    CheckConstraint(_in("origin", Origin), name="origin"),
     CheckConstraint(_in("status", ExecutionStatus), name="status"),
-    CheckConstraint(
-        f"(origin = '{Origin.NATIVE}' AND label_basis IS NULL) OR (origin = '{Origin.LEGACY}' AND label_basis IS NOT NULL AND {_in('label_basis', LabelBasis)})",
-        name="label_basis",
-    ),
     UniqueConstraint("initiator_id", "idempotency_key"),
     Index(None, "initiator_id", "execution_id"),
     Index(None, "parent_execution_id"),

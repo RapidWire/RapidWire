@@ -26,7 +26,6 @@ from rapidwire.core import contracts
 from rapidwire.core.contract_calls import ContractCallResult, DryRunResult, call_contract, dry_run_contract
 from rapidwire.core.contracts import LOCK_HOURS_MAX
 from rapidwire.core.errors import ContractNotFound, DomainError, InvalidContract, NotFoundError, PermissionDenied
-from rapidwire.core.types import LabelBasis, Origin
 from rapidwire.core.validation import BIGINT_MAX
 from rapidwire.db.tables import CONTRACT_FUNCTION_MAX
 from rapidwire.db.types import AMOUNT_MAX
@@ -104,11 +103,7 @@ class ContractOut(BaseModel):
     updated_at: datetime
     deleted_at: datetime | None
     created_execution_id: IntOut
-    created_execution_origin: Origin = Field(description="The origin of the execution that first registered the contract.")
-    created_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy creating execution, else null.")
     updated_execution_id: IntOut
-    updated_execution_origin: Origin = Field(description="The origin of the execution that last changed the contract.")
-    updated_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy updating execution, else null.")
     functions: list[PublicFunctionOut] = Field(description="The public functions of the current version in name order; empty for a deleted contract.")
 
 
@@ -124,8 +119,6 @@ class VersionSummaryOut(BaseModel):
     sha256: str
     size: int
     created_execution_id: IntOut
-    created_execution_origin: Origin = Field(description="The origin of the execution that registered the version.")
-    created_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy registering execution, else null.")
     created_at: datetime
 
 
@@ -304,11 +297,7 @@ async def get_contract(account_id: ContractId, engine: EngineDep) -> ContractOut
         updated_at=info.updated_at,
         deleted_at=info.deleted_at,
         created_execution_id=info.created_execution_id,
-        created_execution_origin=info.created_execution_origin,
-        created_execution_label_basis=info.created_execution_label_basis,
         updated_execution_id=info.updated_execution_id,
-        updated_execution_origin=info.updated_execution_origin,
-        updated_execution_label_basis=info.updated_execution_label_basis,
         functions=_functions(details.functions),
     )
 
@@ -333,8 +322,6 @@ async def list_versions(
             sha256=v.sha256,
             size=v.size,
             created_execution_id=v.created_execution_id,
-            created_execution_origin=v.created_execution_origin,
-            created_execution_label_basis=v.created_execution_label_basis,
             created_at=v.created_at,
         ),
     )
@@ -356,8 +343,6 @@ async def get_version(account_id: ContractId, version: VersionNumber, engine: En
         sha256=found.sha256,
         size=found.size,
         created_execution_id=found.created_execution_id,
-        created_execution_origin=found.created_execution_origin,
-        created_execution_label_basis=found.created_execution_label_basis,
         created_at=found.created_at,
         binary=base64.b64encode(found.binary).decode("ascii"),
     )

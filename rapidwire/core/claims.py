@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import ColumnElement, RowMapping, Select, insert, or_, select, update
+from sqlalchemy import ColumnElement, RowMapping, insert, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rapidwire.core.db import Db, consistent_snapshot, reader
@@ -15,9 +15,9 @@ from rapidwire.core.errors import ClaimNotFound, CurrencyNotFound, InvalidArgume
 from rapidwire.core.ledger import LedgerTx, LedgerUsageError, OperationResult, run_operation
 from rapidwire.core.outbox import enqueue
 from rapidwire.core.paging import CLAIMS_PER_PAGE_DEFAULT, CLAIMS_PER_PAGE_MAX, Page, bounded_count, count_bounded, validate_paging
-from rapidwire.core.types import ClaimStatus, ExecutionType, LabelBasis, Origin, OutboxKind, TransferKind
+from rapidwire.core.types import ClaimStatus, ExecutionType, OutboxKind, TransferKind
 from rapidwire.core.validation import BIGINT_MAX, require_storable_int, require_user_account, validate_positive_amount
-from rapidwire.db.tables import CLAIM_DESCRIPTION_MAX, claim, execution, notification_permission
+from rapidwire.db.tables import CLAIM_DESCRIPTION_MAX, claim, notification_permission
 
 __all__ = [
     "CLAIM_DESCRIPTION_MAX",
@@ -64,7 +64,7 @@ class _ClaimRow:
 
 @dataclass(frozen=True)
 class Claim:
-    """A claim with the origin and label basis of the executions that created and resolved it; resolved_execution_id (and its origin) is None while pending."""
+    """A claim with the executions that created and resolved it; resolved_execution_id is None while pending."""
 
     claim_id: int
     claimant_id: int
@@ -76,37 +76,14 @@ class Claim:
     created_at: datetime
     updated_at: datetime
     created_execution_id: int
-    created_execution_origin: Origin
-    created_execution_label_basis: LabelBasis | None
     resolved_execution_id: int | None
-    resolved_execution_origin: Origin | None
-    resolved_execution_label_basis: LabelBasis | None
 
     @classmethod
     def from_row(cls, row: RowMapping) -> Claim:
-        """A claim from a row of _claims_with_origins()."""
+        """A claim from a row of the claim table."""
         values = dict(row)
         values["status"] = ClaimStatus(values["status"])
-        values["created_execution_origin"] = Origin(values["created_execution_origin"])
-        for key, kind in (("created_execution_label_basis", LabelBasis), ("resolved_execution_origin", Origin), ("resolved_execution_label_basis", LabelBasis)):
-            values[key] = kind(values[key]) if values[key] is not None else None
         return cls(**values)
-
-
-_CREATED = execution.alias("created_execution")
-_RESOLVED = execution.alias("resolved_execution")
-
-
-def _claims_with_origins() -> Select[Any]:
-    """Every claim column plus the origin and label basis of its creating and resolving executions."""
-    joined = claim.join(_CREATED, _CREATED.c.execution_id == claim.c.created_execution_id).outerjoin(_RESOLVED, _RESOLVED.c.execution_id == claim.c.resolved_execution_id)
-    return select(
-        claim,
-        _CREATED.c.origin.label("created_execution_origin"),
-        _CREATED.c.label_basis.label("created_execution_label_basis"),
-        _RESOLVED.c.origin.label("resolved_execution_origin"),
-        _RESOLVED.c.label_basis.label("resolved_execution_label_basis"),
-    ).select_from(joined)
 
 
 def _optional_str(op: OperationResult, key: str) -> str | None:
@@ -402,7 +379,7 @@ async def get_claim(db: Db, claim_id: int) -> Claim:
     """The claim with this ID; raises ClaimNotFound when there is none and InvalidArgument for a non-integer ID."""
     validate_claim_id(claim_id)
     async with reader(db) as conn:
-        row = (await conn.execute(_claims_with_origins().where(claim.c.claim_id == claim_id))).mappings().one_or_none()
+        row = (await conn.execute(select(claim).where(claim.c.claim_id == claim_id))).mappings().one_or_none()
     if row is None:
         raise ClaimNotFound()
     return Claim.from_row(row)
@@ -434,7 +411,7 @@ async def list_claims_for_user(
         except ValueError:
             raise InvalidArgument(f"Unknown claim status {status!r}.") from None
         conditions.append(claim.c.status == wanted.value)
-    page_stmt = _claims_with_origins().where(*conditions).order_by(claim.c.claim_id.desc()).limit(per_page).offset(offset)
+    page_stmt = select(claim).where(*conditions).order_by(claim.c.claim_id.desc()).limit(per_page).offset(offset)
     async with consistent_snapshot(db) as conn:
         total, bounded = await count_bounded(conn, [bounded_count(select(claim.c.claim_id).where(*conditions))])
         rows = (await conn.execute(page_stmt)).mappings().all()

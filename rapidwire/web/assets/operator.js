@@ -1,5 +1,5 @@
 // Operator page: lists and downloads backups with an API token held only in this module's memory, checks each download's SHA-256 in the browser, and saves it only when every digest agrees.
-import { ApiError, api, apiFetch, dataTable, describeError, executionRef, formatBytes, formatTime, h, isId, mount, renderEmpty, renderLoading } from "/assets/app.js";
+import { ApiError, api, apiFetch, dataTable, describeError, executionLink, formatBytes, formatTime, h, isId, mount, renderEmpty, renderLoading } from "/assets/app.js";
 
 const BACKUPS_PER_PAGE = 15;
 const TOKEN_PATTERN = /^[\x21-\x7e]{1,200}$/;
@@ -15,11 +15,6 @@ let downloadController = null;
 let busy = false;
 // Incremented whenever the token is forgotten or replaced, so work started under an earlier token is dropped when it finishes.
 let session = 0;
-
-// A link to an execution the API recorded for this page's own request, which is always native.
-function nativeExecutionRef(id) {
-  return executionRef(id, "native");
-}
 
 function authHeaders() {
   return { Authorization: `Bearer ${token}` };
@@ -167,7 +162,7 @@ async function download(item, statusHost) {
     const sizeOk = blob.size === item.size && (total === null || total === item.size);
     const headerOk = SHA256_PATTERN.test(headerDigest) && headerDigest === item.sha256;
     const computedOk = computed === null ? null : computed === item.sha256;
-    const recorded = isId(executionId) ? h("span", { class: "sub" }, "記録: 実行 ", nativeExecutionRef(executionId)) : null;
+    const recorded = isId(executionId) ? h("span", { class: "sub" }, "記録: 実行 ", executionLink(executionId)) : null;
     const checks = h(
       "ul",
       { class: "sub" },
@@ -257,7 +252,7 @@ async function list(pageNumber = 1) {
   try {
     const body = await api("/v1/admin/backups", { headers: authHeaders(), signal, query: { page: pageNumber, per_page: BACKUPS_PER_PAGE } });
     const summary = document.getElementById("backups-summary");
-    summary.replaceChildren(`${body.total.toLocaleString("en-US")} 件 - この一覧は実行 `, nativeExecutionRef(body.execution_id), " として記録されました");
+    summary.replaceChildren(`${body.total.toLocaleString("en-US")} 件 - この一覧は実行 `, executionLink(body.execution_id), " として記録されました");
     setState("トークンはこのページのメモリにだけ保持しています。");
     mount("backups-pager", backupPager(body));
     if (body.items.length === 0) {

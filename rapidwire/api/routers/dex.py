@@ -16,7 +16,6 @@ from rapidwire.api.paging import Page, PageParams, page_params
 from rapidwire.core import pools, swap
 from rapidwire.core.errors import PoolNotFound
 from rapidwire.core.paging import POOLS_PER_PAGE_DEFAULT, POOLS_PER_PAGE_MAX, POSITIONS_PER_PAGE_DEFAULT, POSITIONS_PER_PAGE_MAX
-from rapidwire.core.types import LabelBasis, Origin
 from rapidwire.db.tables import FEE_TIERS_BPS
 from rapidwire.db.types import AMOUNT_MAX
 
@@ -102,12 +101,8 @@ class PoolOut(BaseModel):
     created_by: IntOut
     created_at: datetime
     created_execution_id: IntOut
-    created_execution_origin: Origin = Field(description="The origin of the execution that created the pool.")
-    created_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy creating execution, else null.")
     dissolved_at: datetime | None
     dissolved_execution_id: IntOut | None
-    dissolved_execution_origin: Origin | None = Field(description="The origin of the execution that dissolved the pool, null while active.")
-    dissolved_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy dissolving execution, else null.")
 
 
 class PoolPairResponse(BaseModel):
@@ -217,12 +212,8 @@ def _pool(info: pools.PoolInfo) -> PoolOut:
         created_by=info.created_by,
         created_at=info.created_at,
         created_execution_id=info.created_execution_id,
-        created_execution_origin=info.created_execution_origin,
-        created_execution_label_basis=info.created_execution_label_basis,
         dissolved_at=info.dissolved_at,
         dissolved_execution_id=info.dissolved_execution_id,
-        dissolved_execution_origin=info.dissolved_execution_origin,
-        dissolved_execution_label_basis=info.dissolved_execution_label_basis,
     )
 
 

@@ -87,15 +87,6 @@ export const EXECUTION_STATUSES = Object.freeze(["success", "failed", "reverted"
 
 const STATUS_LABELS = Object.freeze({ success: "成功", failed: "失敗", reverted: "リバート" });
 
-// How the type of a legacy execution was decided: a short label for badges and the sentence for detail views.
-const LABEL_BASIS_TEXT = Object.freeze({
-  row_shape: ["記録の形から判定", "旧版の記録の形から種類を判定しました。"],
-  recalculation: ["再計算で判定", "残高の再計算から種類を判定しました。"],
-  binlog: ["binlogから判定", "データベースのbinlogから種類を判定しました。"],
-  owner_decision: ["運営の判断", "運営の判断で種類を決めました。"],
-  state_import: ["状態の引き継ぎ", "旧版の状態を引き継ぐために記録した実行です。"],
-});
-
 const TRANSFER_KIND_BADGES = Object.freeze({
   principal: ["元本 / principal", "badge--muted"],
   interest: ["利息 / interest", "badge--kind-interest"],
@@ -635,37 +626,6 @@ export function statusBadge(status) {
   return h("span", { class: known ? `badge badge--${status}` : "badge badge--muted" }, known ? `${STATUS_LABELS[status]} / ${status}` : String(status));
 }
 
-// The sentence saying how the type of a legacy execution was decided, or "label_basis: <value>" for a value this page does not know.
-export function labelBasisText(labelBasis) {
-  return LABEL_BASIS_TEXT[labelBasis] ? LABEL_BASIS_TEXT[labelBasis][1] : `label_basis: ${labelBasis}`;
-}
-
-// A link to an execution followed by the origin badge of that execution, for links whose API object carries the linked execution's origin and label basis; "-" without an ID.
-export function executionRef(id, origin, labelBasis = null) {
-  if (id === null || id === undefined) {
-    return document.createTextNode("-");
-  }
-  return h("span", { class: "exec-ref" }, executionLink(id), originBadge(origin, labelBasis));
-}
-
-// A badge marking where an execution came from: a legacy badge followed by a line saying how its type was decided, or a quiet "native" badge.
-export function originBadge(origin, labelBasis = null) {
-  if (origin === "legacy") {
-    const title = labelBasis ? `旧版から取り込んだ実行。${labelBasisText(labelBasis)} (label_basis: ${labelBasis})` : "旧版から取り込んだ実行";
-    const badge = h("span", { class: "badge badge--legacy", title }, "旧版 / legacy");
-    return labelBasis ? h("span", { class: "origin" }, badge, h("span", { class: "sub" }, LABEL_BASIS_TEXT[labelBasis] ? LABEL_BASIS_TEXT[labelBasis][0] : labelBasis)) : badge;
-  }
-  return h("span", { class: "badge badge--native", title: "新版の実行" }, "native");
-}
-
-// The origin badge with a sentence explaining it, for detail views.
-export function originDetail(origin, labelBasis = null) {
-  if (origin !== "legacy") {
-    return [originBadge(origin, labelBasis), h("span", { class: "sub" }, "新版で記録された実行です。")];
-  }
-  return [originBadge(origin, labelBasis), h("span", { class: "sub" }, "旧版から取り込んだ実行です。", labelBasis ? labelBasisText(labelBasis) : null)];
-}
-
 // A badge for a transfer kind: principal stays quiet, interest and gas are marked.
 export function kindBadge(kind) {
   const [label, tone] = TRANSFER_KIND_BADGES[kind] || [String(kind), "badge--muted"];
@@ -828,7 +788,7 @@ function historyExecutionCell(row) {
   ];
 }
 
-// The columns of a transfer history table of TransferEntry rows: the transfer and its time, then the page's own partyColumns (accounts and amount), then the transfer kind, the execution and its origin.
+// The columns of a transfer history table of TransferEntry rows: the transfer and its time, then the page's own partyColumns (accounts and amount), then the transfer kind and the execution.
 export function historyColumns(partyColumns) {
   return [
     { label: "移動", className: "nowrap", render: (row) => transferLink(row.transfer_id) },
@@ -836,18 +796,16 @@ export function historyColumns(partyColumns) {
     ...partyColumns,
     { label: "区分", render: (row) => kindBadge(row.kind) },
     { label: "実行", render: historyExecutionCell },
-    { label: "由来", render: (row) => originBadge(row.origin, row.label_basis) },
   ];
 }
 
-// The columns of an execution list of GET /v1/executions rows: the execution with its parent and the parent's origin, time, type, status, origin, optionally the initiator, and the contract function.
+// The columns of an execution list of GET /v1/executions rows: the execution with its parent, time, type, status, optionally the initiator, and the contract function.
 export function executionColumns({ initiator = true } = {}) {
   return [
-    { label: "ID", className: "nowrap", render: (row) => [executionLink(row.execution_id), row.parent_execution_id ? h("span", { class: "sub" }, "親: ", executionRef(row.parent_execution_id, row.parent_origin, row.parent_label_basis)) : null] },
+    { label: "ID", className: "nowrap", render: (row) => [executionLink(row.execution_id), row.parent_execution_id ? h("span", { class: "sub" }, "親: ", executionLink(row.parent_execution_id)) : null] },
     { label: "時刻", className: "nowrap", render: (row) => formatTime(row.created_at) },
     { label: "種類", render: (row) => [executionTypeLabel(row.type), h("span", { class: "sub mono" }, row.type)] },
     { label: "状態", render: (row) => statusBadge(row.status) },
-    { label: "由来", render: (row) => originBadge(row.origin, row.label_basis) },
     initiator ? { label: "実行者", render: (row) => accountLink(row.initiator_id, { withName: true }) } : null,
     { label: "関数", render: (row) => (row.contract_function ? h("span", { class: "mono" }, row.contract_function) : "-") },
   ].filter((column) => column !== null);
@@ -876,7 +834,7 @@ export function setUpHistoryForm(form, sort, extra = () => ({})) {
   });
 }
 
-// One item of a compact transfer feed (ul.feed): the transfer and its amount, the two accounts, and the time, execution type, execution, contract function and origin badge.
+// One item of a compact transfer feed (ul.feed): the transfer and its amount, the two accounts, and the time, execution type, execution and contract function.
 export function transferFeedItem(entry) {
   return h(
     "li",
@@ -892,8 +850,6 @@ export function transferFeedItem(entry) {
       " ",
       executionLink(entry.execution_id),
       entry.contract_function ? [" ", h("span", { class: "mono" }, `${entry.contract_function}()`)] : null,
-      " ",
-      originBadge(entry.origin, entry.label_basis),
     ),
   );
 }

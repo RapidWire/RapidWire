@@ -4,7 +4,7 @@ import {
   amountView,
   api,
   dataTable,
-  executionRef,
+  executionLink,
   formatTime,
   getParam,
   groupInteger,
@@ -39,7 +39,7 @@ function renderBanner(pool) {
       "div",
       { class: "state state--error panel", role: "status" },
       h("p", { class: "state-title" }, "このプールは解消されました / This pool was dissolved"),
-      h("p", null, "通貨の削除によりプールは解消され、リザーブとシェアは0になっています。同じペアとティアのプールは新しいIDで作り直せます。 ", "解消: ", formatTime(pool.dissolved_at), " (実行 ", executionRef(pool.dissolved_execution_id, pool.dissolved_execution_origin, pool.dissolved_execution_label_basis), ")"),
+      h("p", null, "通貨の削除によりプールは解消され、リザーブとシェアは0になっています。同じペアとティアのプールは新しいIDで作り直せます。 ", "解消: ", formatTime(pool.dissolved_at), " (実行 ", executionLink(pool.dissolved_execution_id), ")"),
     ),
   );
 }
@@ -66,9 +66,9 @@ function renderOverview(pool) {
       ["保管口座", accountLink(pool.custody_account_id)],
       ["作成者", accountLink(pool.created_by, { withName: true })],
       ["作成日時", formatTime(pool.created_at)],
-      ["作成の実行", executionRef(pool.created_execution_id, pool.created_execution_origin, pool.created_execution_label_basis)],
+      ["作成の実行", executionLink(pool.created_execution_id)],
       ["解消日時", formatTime(pool.dissolved_at)],
-      ["解消の実行", executionRef(pool.dissolved_execution_id, pool.dissolved_execution_origin, pool.dissolved_execution_label_basis)],
+      ["解消の実行", executionLink(pool.dissolved_execution_id)],
     ]),
   );
 }

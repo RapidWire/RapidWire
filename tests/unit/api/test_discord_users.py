@@ -148,7 +148,7 @@ async def test_unknown_user_is_not_found_and_remembered_briefly(client: httpx.As
 
 
 async def test_not_found_on_refresh_keeps_the_cached_name(client: httpx.AsyncClient, clock: Clock, upstream: Upstream) -> None:
-    # As in the old version, a user Discord no longer finds keeps the name it had.
+    # A user Discord no longer finds keeps the name it had.
     upstream.names[ALICE] = "alice"
     users = _users(client, clock)
     await users.username(ALICE)

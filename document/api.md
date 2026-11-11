@@ -155,9 +155,6 @@ ID (勘定、通貨、実行、移動、請求、プール、トークン、ロ�
 パスとクエリの ID は 10 進文字列である。
 形式が不正または範囲外の ID (例えば `abc`、`01`、`1.5`、符号付き 64 ビットの範囲外の値) は 422 の検証エラーとなり、通貨、請求、実行、移動の ID は正でなければならない。
 レスポンスの時刻は、`Z` の接尾辞を付けた UTC の ISO 8601 文字列である。
-旧版から取り込んだ実行は、すべての一覧と照会に新版の実行と並んで現れる。
-その `origin` は `legacy` であり、`label_basis` はその種類がどう決まったか (`row_shape`、`recalculation`、`binlog`、`owner_decision` または `state_import`) を示す。
-新版の実行の `origin` は `native`、`label_basis` は `null` である。
 
 ### 勘定
 
@@ -217,15 +214,12 @@ Discord が 401 または 403 を返した場合は Bot のトークンが拒否
 - `contract_function`: そのコントラクト関数の呼び出しが行った移動。
 - `sort_by`: `transfer_id` (既定)、`timestamp` または `amount`、`sort_order`: `desc` (既定) または `asc`。時刻や金額が等しい場合は、同じ向きの移動 ID 順に並ぶ。
 
-旧版の `/transfers/search` の絞り込みはこれらの名前に対応する: `source_id`、`user_id`、`currency_id`、`min_amount`、`max_amount`、`sort_by`、`sort_order` は名前がそのままで、`dest_id` は `destination_id`、`start_timestamp` と `end_timestamp` は `start` と `end`、`limit` は `per_page` になり、`input_data` は `execution_type` と `contract_function` に置き換わる。
-
 `GET /v1/accounts/{account_id}/history` は、その勘定がどちらか一方の側にある移動に固定した同じ検索である。
 `currency_id`、`start`、`end`、`min_amount`、`max_amount`、`execution_type`、`contract_function`、`sort_by`、`sort_order` とページ分割のパラメータを受け取る。
 
-移動の項目は `{"transfer_id", "execution_id", "currency_id", "currency_symbol", "from_account", "to_account", "amount", "kind", "created_at", "execution_type", "execution_status", "origin", "label_basis", "initiator_id", "parent_execution_id", "parent_origin", "parent_label_basis", "contract_function"}` である。
+移動の項目は `{"transfer_id", "execution_id", "currency_id", "currency_symbol", "from_account", "to_account", "amount", "kind", "created_at", "execution_type", "execution_status", "initiator_id", "parent_execution_id", "contract_function"}` である。
 `kind` は `principal`、`interest` または `gas` であり、`currency_symbol` は通貨の現在のシンボルである。
-`execution_*`、`origin`、`label_basis`、`initiator_id`、`parent_execution_id`、`contract_function` の各フィールドは、その移動を行った実行を表す。
-`parent_origin` と `parent_label_basis` はその親の実行の `origin` と `label_basis` であり、親がなければどちらも `null` である。
+`execution_*`、`initiator_id`、`parent_execution_id`、`contract_function` の各フィールドは、その移動を行った実行を表す。
 
 `GET /v1/transfers/{transfer_id}` は 1 件の移動の項目、または 404 `transfer_not_found` を返す。
 
@@ -235,9 +229,8 @@ Discord が 401 または 403 を返した場合は Bot のトークンが拒否
 絞り込み `initiator_id`、`execution_type`、`status` (`success`、`failed` または `reverted`)、`contract_id` はすべて一致しなければならない。
 `contract_id` は、`contract_id` がその勘定である実行を選ぶ: 他のコントラクトからの入れ子の呼び出しと失敗した呼び出しを含むそのコントラクトのすべての呼び出しと、その `contract_update`、`contract_lock`、`contract_pause`、`contract_resume`、`contract_delete` の実行である。
 `execution_type=contract_call` と組み合わせると呼び出しだけを一覧にする。
-実行は `{"execution_id", "type", "origin", "label_basis", "initiator_id", "parent_execution_id", "parent_origin", "parent_label_basis", "contract_id", "status", "input", "output", "has_idempotency_key", "contract_function", "created_at"}` である。
+実行は `{"execution_id", "type", "initiator_id", "parent_execution_id", "contract_id", "status", "input", "output", "has_idempotency_key", "contract_function", "created_at"}` である。
 `contract_id` は、`contract_call` では呼び出されたコントラクト (`input.contract_id`)、コントラクトの管理の実行ではそのコントラクトの勘定 (その操作者) であり、それ以外のすべての種類では `null` である。
-`parent_origin` と `parent_label_basis` は親の実行を表し、親がなければどちらも `null` である。
 `input` と `output` は保存されたオブジェクトであり、その中では金額を含むすべての整数が、他のフィールドの金額の形式ではなく最小単位の 10 進文字列である (`"12500"` は 12.5)。
 `output` は、成功した実行ではその結果、失敗した実行ではその `error` オブジェクトである。
 通知の許可、Discord 権限、API トークンを変更する実行は非公開である: その `input` は `{}`、`output` は `null` である。
@@ -290,10 +283,8 @@ Discord が 401 または 403 を返した場合は Bot のトークンが拒否
 `GET /v1/accounts/{account_id}/claims` は、その勘定が請求者または支払者である請求を新しい順に並べたページ分割された一覧 (既定 15 件、1 ページ最大 100 件) である。
 `status` (`pending`、`paid` または `canceled`) で絞り込み、`role` で勘定が行った請求 (`claimant`) またはその勘定に対して行われた請求 (`payer`) だけに限る。
 `GET /v1/claims/{claim_id}` は 1 件の請求、または 404 `claim_not_found` を返す。
-請求は `{"claim_id", "claimant_id", "payer_id", "currency_id", "amount", "description", "status", "created_at", "updated_at", "created_execution_id", "created_execution_origin", "created_execution_label_basis", "resolved_execution_id", "resolved_execution_origin", "resolved_execution_label_basis"}` である。
+請求は `{"claim_id", "claimant_id", "payer_id", "currency_id", "amount", "description", "status", "created_at", "updated_at", "created_execution_id", "resolved_execution_id"}` である。
 `resolved_execution_id` はその請求を支払ったか取り消した実行であり、未払いの間は `null` である。
-`*_origin` と `*_label_basis` のフィールドは関連する実行の `origin` と `label_basis` であるため、旧版から取り込んだ請求は作成の実行について `legacy` を示す。
-解決の実行についてのフィールドは、請求が未払いの間は `null` である。
 
 `GET /v1/allowances/{owner_id}/{spender_id}/{currency_id}` は、使用者が持ち主の残高からまだ移動できる額を `{"owner_id", "spender_id", "currency_id", "symbol", "amount"}` として返す。
 許可額が存在しない場合の金額は `"0.000"` であり、存在しない通貨は 404 `currency_not_found` である。
@@ -467,7 +458,6 @@ DEX のリクエストの本文の未知のフィールドは 422 の検証エ�
 - `reserve_a`、`reserve_b` (金額)、`total_shares`、`locked_shares` (作成時に永久にロックされる最小流動性分。解散後は 0)。
 - `custody_account_id`: 準備金を保持するシステム勘定 (負の ID)。
 - `created_by`、`created_at`、`created_execution_id`、`dissolved_at`、`dissolved_execution_id` (後の 2 つは有効な間 `null`)。
-- `created_execution_origin`、`created_execution_label_basis`、`dissolved_execution_origin`、`dissolved_execution_label_basis`: 作成と解散の実行の `origin` と `label_basis` であり、解散についてのものは有効な間 `null` である。
 
 ### プールの読み取り
 
@@ -572,7 +562,7 @@ VM がその引数のリストを理由に拒否した入れ子の呼び出し�
 
 ### コントラクトの読み取り
 
-`GET /v1/contracts/{account_id}` はコントラクトの状態を返す: `account_id`、`status` (`active`、`paused` または `deleted`)、`current_version`、現在のバージョンのバイナリの `sha256` (小文字の 16 進) と `size` (バイト)、`version_count`、`locked` (更新のロックが現在有効か)、`locked_until`、`storage_keys`、`storage_bytes`、`created_at`、`updated_at`、`deleted_at`、`created_execution_id`、`updated_execution_id`、その 2 つの実行の `origin` と `label_basis` である `created_execution_origin`、`created_execution_label_basis`、`updated_execution_origin`、`updated_execution_label_basis`、そして `functions` である。
+`GET /v1/contracts/{account_id}` はコントラクトの状態を返す: `account_id`、`status` (`active`、`paused` または `deleted`)、`current_version`、現在のバージョンのバイナリの `sha256` (小文字の 16 進) と `size` (バイト)、`version_count`、`locked` (更新のロックが現在有効か)、`locked_until`、`storage_keys`、`storage_bytes`、`created_at`、`updated_at`、`deleted_at`、`created_execution_id`、`updated_execution_id`、そして `functions` である。
 `functions` は現在のバージョンの公開関数を名前順に一覧にし、各項目は `{"name", "params", "returns", "signature"}` である。
 `params` は引数の型を順に保持し (バイナリは引数名を持たない)、`returns` は結果の型、`signature` は `"echo(int, str) -> str"` のような 1 行である。
 削除されたコントラクトでは空である。
@@ -582,11 +572,11 @@ VM がその引数のリストを理由に拒否した入れ子の呼び出し�
 `GET /v1/contracts/{account_id}/functions` は、呼び出しのフォームを組み立てるために同じ関数の一覧を `{"account_id", "status", "version", "functions"}` として返す。
 コントラクトのない勘定は 404 `contract_not_found` である。
 
-`GET /v1/contracts/{account_id}/versions` は登録されたバージョンを新しい順に並べたページ (既定 1 ページ 15 件、最大 100 件) を返し、各項目は `{"version", "sha256", "size", "created_execution_id", "created_execution_origin", "created_execution_label_basis", "created_at"}` である。
-`created_execution_id` はそれを登録した `contract_update` の実行であり、その後の 2 つのフィールドはその実行の `origin` と `label_basis` である。
+`GET /v1/contracts/{account_id}/versions` は登録されたバージョンを新しい順に並べたページ (既定 1 ページ 15 件、最大 100 件) を返し、各項目は `{"version", "sha256", "size", "created_execution_id", "created_at"}` である。
+`created_execution_id` はそれを登録した `contract_update` の実行である。
 コントラクトのない勘定は空のページになる。
 
-`GET /v1/contracts/{account_id}/versions/{version}` は、削除されたコントラクトのものも含めて 1 つのバージョンを `{"account_id", "version", "sha256", "size", "created_execution_id", "created_execution_origin", "created_execution_label_basis", "created_at", "binary"}` として返す。
+`GET /v1/contracts/{account_id}/versions/{version}` は、削除されたコントラクトのものも含めて 1 つのバージョンを `{"account_id", "version", "sha256", "size", "created_execution_id", "created_at", "binary"}` として返す。
 `binary` は登録されたとおりのバイナリを、パディング付きの標準の base64 で表したものである。
 `{version}` は 1 から始まるバージョン番号であり、存在しないバージョンは 404 `not_found` である。
 

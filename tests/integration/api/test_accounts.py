@@ -16,9 +16,9 @@ from rapidwire.core.accounts import ensure_stake_custody_account
 from rapidwire.core.ledger import LedgerTx, run_child, run_operation
 from rapidwire.core.permissions import InMemoryGuildInfo
 from rapidwire.core.tokens import issue_token
-from rapidwire.core.types import ExecutionType, LabelBasis, Origin, TransferKind
+from rapidwire.core.types import ExecutionType, TransferKind
 from tests.integration.api.conftest import API_TEST_DISCORD_TOKEN, API_TEST_PASSWORD, DiscordStub
-from tests.integration.factories import create_currency, create_pool, mint
+from tests.integration.factories import create_currency, create_pool, insert_transfer, mint
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 CUR_A = 10
@@ -51,18 +51,6 @@ def _details(response: httpx.Response) -> list[list[str | int]]:
     return [detail["loc"] for detail in _envelope(response, 422, "validation_error")["details"]]
 
 
-async def _legacy(engine: AsyncEngine, *, execution_id: int, type: str, initiator: int, currency_id: int, source: int, destination: int, amount: int, at: datetime) -> None:
-    async with engine.begin() as conn:
-        tx = LedgerTx(conn, at)
-        await tx.require_accounts([initiator, destination])
-        await tx.lock_currencies([currency_id])
-        await tx.lock_balances([(source, currency_id), (destination, currency_id)])
-        created = await tx.create_execution(
-            type=type, initiator_id=initiator, input={"amount": str(amount)}, output={}, origin=Origin.LEGACY, label_basis=LabelBasis.ROW_SHAPE, execution_id=execution_id, created_at=at
-        )
-        await tx.move(created, currency_id, source, destination, amount, TransferKind.PRINCIPAL, transfer_id=execution_id, created_at=at)
-
-
 async def _move(engine: AsyncEngine, *, type: str, initiator: int, currency_id: int, source: int, destination: int, amount: int, now: datetime, contract_function: str | None = None) -> int:
     async def body(tx: LedgerTx, execution_id: int) -> dict[str, Any]:
         await tx.lock_currencies([currency_id])
@@ -76,9 +64,9 @@ async def _move(engine: AsyncEngine, *, type: str, initiator: int, currency_id: 
 
 @dataclass(frozen=True)
 class History:
-    legacy_mint: int
-    legacy_transfer: int
-    native_mint: int
+    big_mint: int
+    big_transfer: int
+    service_mint: int
     keyed_transfer: int
     call: int
 
@@ -86,12 +74,14 @@ class History:
 async def _seed_history(db: AsyncEngine) -> History:
     a = await create_currency(db, currency_id=CUR_A, symbol="AAA", name="Alpha", now=T0)
     await create_currency(db, currency_id=CUR_B, symbol="BBB", name="Beta", now=T0)
-    await _legacy(db, execution_id=BIG, type=ExecutionType.MINT, initiator=ALICE, currency_id=CUR_A, source=a.issuance_account_id, destination=ALICE, amount=1000, at=T0)
-    await _legacy(db, execution_id=BIG + 1, type=ExecutionType.TRANSFER, initiator=ALICE, currency_id=CUR_A, source=ALICE, destination=BIG_USER, amount=100, at=T0 + timedelta(days=1))
-    native_mint = await mint(db, CUR_B, BOB, 5000, now=T0 + timedelta(days=2))
+    await insert_transfer(db, execution_id=BIG, transfer_id=BIG, type=ExecutionType.MINT, initiator=ALICE, currency_id=CUR_A, source=a.issuance_account_id, destination=ALICE, amount=1000, at=T0)
+    await insert_transfer(
+        db, execution_id=BIG + 1, transfer_id=BIG + 1, type=ExecutionType.TRANSFER, initiator=ALICE, currency_id=CUR_A, source=ALICE, destination=BIG_USER, amount=100, at=T0 + timedelta(days=1)
+    )
+    service_mint = await mint(db, CUR_B, BOB, 5000, now=T0 + timedelta(days=2))
     keyed = await transfers.transfer(db, sender_id=BOB, recipient_id=ALICE, currency_id=CUR_B, amount=1500, now=T0 + timedelta(days=3), idempotency_key=SECRET_KEY)
     call = await _move(db, type=ExecutionType.CONTRACT_CALL, initiator=ALICE, currency_id=CUR_A, source=ALICE, destination=BOB, amount=200, now=T0 + timedelta(days=4), contract_function="buy")
-    return History(legacy_mint=BIG, legacy_transfer=BIG + 1, native_mint=native_mint, keyed_transfer=keyed.execution_id, call=call)
+    return History(big_mint=BIG, big_transfer=BIG + 1, service_mint=service_mint, keyed_transfer=keyed.execution_id, call=call)
 
 
 async def _history_ids(client: httpx.AsyncClient, path: str = "/v1/history", **params: str) -> list[str]:
@@ -292,9 +282,9 @@ async def test_history_search_filters(client: httpx.AsyncClient, db: AsyncEngine
     seed = await _seed_history(db)
     everything = (await client.get("/v1/history")).json()
     assert everything["total"] == 5
-    assert [item["execution_id"] for item in everything["items"]] == [str(seed.call), str(seed.keyed_transfer), str(seed.native_mint), str(BIG + 1), str(BIG)]
-    legacy = everything["items"][3]
-    assert legacy == {
+    assert [item["execution_id"] for item in everything["items"]] == [str(seed.call), str(seed.keyed_transfer), str(seed.service_mint), str(BIG + 1), str(BIG)]
+    big = everything["items"][3]
+    assert big == {
         "transfer_id": str(BIG + 1),
         "execution_id": str(BIG + 1),
         "currency_id": str(CUR_A),
@@ -306,38 +296,32 @@ async def test_history_search_filters(client: httpx.AsyncClient, db: AsyncEngine
         "currency_symbol": "AAA",
         "execution_type": "transfer",
         "execution_status": "success",
-        "origin": "legacy",
-        "label_basis": "row_shape",
         "initiator_id": str(ALICE),
         "parent_execution_id": None,
-        "parent_origin": None,
-        "parent_label_basis": None,
         "contract_function": None,
     }
-    assert everything["items"][0]["origin"] == "native"
-    assert everything["items"][0]["label_basis"] is None
     assert everything["items"][0]["contract_function"] == "buy"
-    call, keyed, native, legacy_transfer, legacy_mint = (str(seed.call), str(seed.keyed_transfer), str(seed.native_mint), str(BIG + 1), str(BIG))
-    assert await _history_ids(client, user_id=str(BIG_USER)) == [legacy_transfer]
-    assert await _history_ids(client, user_id=str(BOB)) == [call, keyed, native]
-    assert await _history_ids(client, source_id=str(ALICE)) == [call, legacy_transfer]
-    assert await _history_ids(client, destination_id=str(ALICE)) == [keyed, legacy_mint]
+    call, keyed, minted, big_transfer, big_mint = (str(seed.call), str(seed.keyed_transfer), str(seed.service_mint), str(BIG + 1), str(BIG))
+    assert await _history_ids(client, user_id=str(BIG_USER)) == [big_transfer]
+    assert await _history_ids(client, user_id=str(BOB)) == [call, keyed, minted]
+    assert await _history_ids(client, source_id=str(ALICE)) == [call, big_transfer]
+    assert await _history_ids(client, destination_id=str(ALICE)) == [keyed, big_mint]
     assert await _history_ids(client, source_id=str(ALICE), destination_id=str(BOB)) == [call]
-    assert await _history_ids(client, currency_id=str(CUR_B)) == [keyed, native]
-    assert await _history_ids(client, transfer_id=str(BIG)) == [legacy_mint]
-    assert await _history_ids(client, start=_iso(T0 + timedelta(days=1)), end=_iso(T0 + timedelta(days=3))) == [native, legacy_transfer]
-    assert await _history_ids(client, start="2026-01-02T09:00:00+09:00", end="2026-01-04T09:00:00+09:00") == [native, legacy_transfer]
-    assert await _history_ids(client, start="0001-01-01T00:00:00Z", end="9999-12-31T23:59:59Z") == [call, keyed, native, legacy_transfer, legacy_mint]
-    assert await _history_ids(client, min_amount="0.2", max_amount="1.5") == [call, keyed, legacy_mint]
-    assert await _history_ids(client, min_amount="1.001") == [keyed, native]
+    assert await _history_ids(client, currency_id=str(CUR_B)) == [keyed, minted]
+    assert await _history_ids(client, transfer_id=str(BIG)) == [big_mint]
+    assert await _history_ids(client, start=_iso(T0 + timedelta(days=1)), end=_iso(T0 + timedelta(days=3))) == [minted, big_transfer]
+    assert await _history_ids(client, start="2026-01-02T09:00:00+09:00", end="2026-01-04T09:00:00+09:00") == [minted, big_transfer]
+    assert await _history_ids(client, start="0001-01-01T00:00:00Z", end="9999-12-31T23:59:59Z") == [call, keyed, minted, big_transfer, big_mint]
+    assert await _history_ids(client, min_amount="0.2", max_amount="1.5") == [call, keyed, big_mint]
+    assert await _history_ids(client, min_amount="1.001") == [keyed, minted]
     assert await _history_ids(client, max_amount="0") == []
-    assert await _history_ids(client, execution_type="transfer") == [keyed, legacy_transfer]
+    assert await _history_ids(client, execution_type="transfer") == [keyed, big_transfer]
     assert await _history_ids(client, contract_function="buy") == [call]
     assert await _history_ids(client, contract_function="sell") == []
-    assert await _history_ids(client, sort_by="amount", sort_order="asc") == [legacy_transfer, call, legacy_mint, keyed, native]
-    assert await _history_ids(client, sort_by="timestamp", sort_order="asc") == [legacy_mint, legacy_transfer, native, keyed, call]
+    assert await _history_ids(client, sort_by="amount", sort_order="asc") == [big_transfer, call, big_mint, keyed, minted]
+    assert await _history_ids(client, sort_by="timestamp", sort_order="asc") == [big_mint, big_transfer, minted, keyed, call]
     paged = (await client.get("/v1/history", params={"per_page": 2, "page": 2})).json()
-    assert ([item["execution_id"] for item in paged["items"]], paged["total"]) == ([native, legacy_transfer], 5)
+    assert ([item["execution_id"] for item in paged["items"]], paged["total"]) == ([minted, big_transfer], 5)
 
 
 @pytest.mark.parametrize(
@@ -412,12 +396,8 @@ async def test_execution_detail_children_and_transfers(client: httpx.AsyncClient
     assert {key: value for key, value in detail.items() if key not in nested} == {
         "execution_id": str(top.execution_id),
         "type": "contract_call",
-        "origin": "native",
-        "label_basis": None,
         "initiator_id": str(ALICE),
         "parent_execution_id": None,
-        "parent_origin": None,
-        "parent_label_basis": None,
         "contract_id": None,
         "status": "success",
         "input": {"amount": "12500"},
@@ -431,7 +411,6 @@ async def test_execution_detail_children_and_transfers(client: httpx.AsyncClient
     assert detail["deliveries"] == []
     [child] = detail["children"]
     assert (child["execution_id"], child["parent_execution_id"], child["contract_function"], child["output"]) == (str(ids["child"]), str(top.execution_id), "pay", {"moved": "20"})
-    assert (child["parent_origin"], child["parent_label_basis"]) == ("native", None)
     assert [item["amount"] for item in child["transfers"]] == ["0.020"]
     assert child["child_execution_ids"] == [str(ids["grandchild"])]
     assert "children" not in child
@@ -441,23 +420,23 @@ async def test_execution_detail_children_and_transfers(client: httpx.AsyncClient
     assert _details(await client.get("/v1/executions/abc")) == [["path", "execution_id"]]
 
 
-async def test_legacy_executions_and_big_ids(client: httpx.AsyncClient, db: AsyncEngine) -> None:
+async def test_big_ids(client: httpx.AsyncClient, db: AsyncEngine) -> None:
     await _seed_history(db)
     detail = (await client.get(f"/v1/executions/{BIG + 1}")).json()
-    assert (detail["execution_id"], detail["origin"], detail["label_basis"], detail["input"]) == (str(BIG + 1), "legacy", "row_shape", {"amount": "100"})
+    assert (detail["execution_id"], detail["input"]) == (str(BIG + 1), {"amount": "100"})
     assert detail["transfers"][0]["transfer_id"] == str(BIG + 1)
     assert detail["transfers"][0]["to_account"] == str(BIG_USER)
     transfer = (await client.get(f"/v1/transfers/{BIG + 1}")).json()
-    assert (transfer["transfer_id"], transfer["to_account"], transfer["origin"]) == (str(BIG + 1), str(BIG_USER), "legacy")
+    assert (transfer["transfer_id"], transfer["to_account"]) == (str(BIG + 1), str(BIG_USER))
     assert f'"{BIG_USER}"' in (await client.get(f"/v1/transfers/{BIG + 1}")).text
 
 
 async def test_transfer(client: httpx.AsyncClient, db: AsyncEngine) -> None:
     seed = await _seed_history(db)
-    native = (await client.get("/v1/history", params={"transfer_id": str(BIG + 3)})).json()["items"]
-    assert [item["execution_id"] for item in native] == [str(seed.keyed_transfer)]
+    minted = (await client.get("/v1/history", params={"transfer_id": str(BIG + 3)})).json()["items"]
+    assert [item["execution_id"] for item in minted] == [str(seed.keyed_transfer)]
     transfer = (await client.get(f"/v1/transfers/{BIG + 3}")).json()
-    assert transfer == native[0]
+    assert transfer == minted[0]
     assert (transfer["amount"], transfer["currency_symbol"], transfer["execution_type"]) == ("1.500", "BBB", "transfer")
     _envelope(await client.get("/v1/transfers/5"), 404, "transfer_not_found")
     assert _details(await client.get("/v1/transfers/-5")) == [["path", "transfer_id"]]
@@ -468,7 +447,7 @@ async def test_list_executions_filters_and_redaction(client: httpx.AsyncClient, 
     issued = await issue_token(db, account_id=CAROL)
     newest = (await client.get("/v1/executions")).json()
     assert newest["total"] == 6
-    assert [item["execution_id"] for item in newest["items"]] == [str(BIG + 5), str(seed.call), str(seed.keyed_transfer), str(seed.native_mint), str(BIG + 1), str(BIG)]
+    assert [item["execution_id"] for item in newest["items"]] == [str(BIG + 5), str(seed.call), str(seed.keyed_transfer), str(seed.service_mint), str(BIG + 1), str(BIG)]
     assert newest["items"][0]["execution_id"] == str(issued.execution_id)
     private = newest["items"][0]
     assert (private["type"], private["input"], private["output"]) == ("token_issue", {}, None)
@@ -479,9 +458,9 @@ async def test_list_executions_filters_and_redaction(client: httpx.AsyncClient, 
     assert keyed.json()["has_idempotency_key"] is True
     assert SECRET_KEY not in keyed.text
     assert "idempotency_key" not in keyed.json()
-    assert [item["execution_id"] for item in (await client.get("/v1/executions", params={"initiator_id": str(BOB)})).json()["items"]] == [str(seed.keyed_transfer), str(seed.native_mint)]
+    assert [item["execution_id"] for item in (await client.get("/v1/executions", params={"initiator_id": str(BOB)})).json()["items"]] == [str(seed.keyed_transfer), str(seed.service_mint)]
     by_type = (await client.get("/v1/executions", params={"execution_type": "mint"})).json()["items"]
-    assert [item["execution_id"] for item in by_type] == [str(seed.native_mint), str(BIG)]
+    assert [item["execution_id"] for item in by_type] == [str(seed.service_mint), str(BIG)]
     assert (await client.get("/v1/executions", params={"status": "failed"})).json()["total"] == 0
     assert (await client.get("/v1/executions", params={"status": "success", "per_page": 2})).json()["total"] == 6
     assert _details(await client.get("/v1/executions", params={"status": "done"})) == [["query", "status"]]
@@ -521,16 +500,12 @@ async def test_claims(client: httpx.AsyncClient, db: AsyncEngine) -> None:
         "created_at": _iso(T0),
         "updated_at": _iso(T0 + timedelta(hours=1)),
         "created_execution_id": str(first.execution_id),
-        "created_execution_origin": "native",
-        "created_execution_label_basis": None,
         "resolved_execution_id": str(paid.execution_id),
-        "resolved_execution_origin": "native",
-        "resolved_execution_label_basis": None,
     }
     as_claimant = (await client.get(f"/v1/accounts/{ALICE}/claims", params={"role": "claimant"})).json()
     assert [item["claim_id"] for item in as_claimant["items"]] == [str(third.claim_id), str(first.claim_id)]
     as_payer = (await client.get(f"/v1/accounts/{ALICE}/claims", params={"role": "payer", "status": "pending"})).json()
-    assert ([item["claim_id"] for item in as_payer["items"]], as_payer["items"][0]["resolved_execution_origin"]) == ([str(second.claim_id)], None)
+    assert ([item["claim_id"] for item in as_payer["items"]], as_payer["items"][0]["resolved_execution_id"]) == ([str(second.claim_id)], None)
     assert _details(await client.get(f"/v1/accounts/{ALICE}/claims", params={"role": "owner"})) == [["query", "role"]]
     listed = (await client.get(f"/v1/accounts/{ALICE}/claims")).json()
     assert (listed["total"], [item["claim_id"] for item in listed["items"]]) == (3, [str(third.claim_id), str(second.claim_id), str(first.claim_id)])

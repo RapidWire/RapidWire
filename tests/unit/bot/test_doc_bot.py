@@ -13,7 +13,7 @@ from discord import app_commands
 
 from rapidwire.bot.app import build_bot
 from rapidwire.bot.client import bot_intents
-from rapidwire.bot.commands.account import HISTORY_PER_PAGE, LEGACY_MARK
+from rapidwire.bot.commands.account import HISTORY_PER_PAGE
 from rapidwire.bot.embeds import ERROR_TITLE, ITEMS_PER_PAGE
 from rapidwire.bot.errors import COMMAND_OUTDATED_MESSAGE, GENERIC_MESSAGE
 from rapidwire.bot.guild_sync import WITHDRAW_AFTER_FAILURES
@@ -152,7 +152,6 @@ def test_documented_numbers_and_texts_come_from_the_code() -> None:
         f"`{GENERIC_MESSAGE}`",
         f"`{COMMAND_OUTDATED_MESSAGE}`",
         f"`{ERROR_TITLE}`",
-        f"`{LEGACY_MARK}`",
         f"{GUILD_HEARTBEAT_INTERVAL_SECONDS} 秒ごとに",
         f"1 から {LOCK_HOURS_MAX:,} まで",
         f"{CLAIM_DESCRIPTION_MAX} 文字以内",

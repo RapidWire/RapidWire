@@ -34,7 +34,7 @@ from rapidwire.core.errors import (
 )
 from rapidwire.core.invariants import verify_invariants
 from rapidwire.core.ledger import LedgerTx, LedgerUsageError, run_operation
-from rapidwire.core.types import ClaimStatus, ExecutionStatus, ExecutionType, LabelBasis, Origin, OutboxKind, OutboxStatus, TransferKind
+from rapidwire.core.types import ClaimStatus, ExecutionStatus, ExecutionType, OutboxKind, OutboxStatus, TransferKind
 from rapidwire.db.tables import STAKE_CUSTODY_ACCOUNT_ID, claim, currency, execution, notification_permission, outbox
 from rapidwire.db.tables import transfer as transfer_table
 from tests.integration.factories import balance_of, create_currency, mint
@@ -112,11 +112,7 @@ async def test_create_claim_without_permission_enqueues_nothing(funded: AsyncEng
         created_at=NOW,
         updated_at=NOW,
         created_execution_id=created.execution_id,
-        created_execution_origin=Origin.NATIVE,
-        created_execution_label_basis=None,
         resolved_execution_id=None,
-        resolved_execution_origin=None,
-        resolved_execution_label_basis=None,
     )
     row = await _execution(funded, created.execution_id)
     assert (row["type"], row["status"], row["initiator_id"]) == (ExecutionType.CLAIM_CREATE, ExecutionStatus.SUCCESS, CLAIMANT)
@@ -429,30 +425,14 @@ async def test_list_claims_for_user_filters_by_role(funded: AsyncEngine) -> None
         await list_claims_for_user(funded, CLAIMANT, role="owner")  # type: ignore[arg-type]
 
 
-async def test_claims_carry_the_origin_of_their_executions(funded: AsyncEngine) -> None:
+async def test_claims_reference_the_executions_that_created_and_resolved_them(funded: AsyncEngine) -> None:
     created = await _new_claim(funded)
     canceled = await cancel_claim(funded, claim_id=created.claim_id, user_id=PAYER, now=NOW)
-    async with funded.begin() as conn:
-        tx = LedgerTx(conn, NOW)
-        legacy_execution = await tx.create_execution(type=ExecutionType.CLAIM_CREATE, initiator_id=CLAIMANT, input={}, origin=Origin.LEGACY, label_basis=LabelBasis.STATE_IMPORT)
-        inserted = await conn.execute(
-            insert(claim).values(
-                claimant_id=CLAIMANT, payer_id=PAYER, currency_id=CUR, amount=7, status=ClaimStatus.PENDING.value, created_at=NOW, updated_at=NOW, created_execution_id=legacy_execution
-            )
-        )
-    key = inserted.inserted_primary_key
-    assert key is not None
-    legacy_id = int(key[0])
+    pending = await _new_claim(funded, 7)
     resolved = await get_claim(funded, created.claim_id)
-    assert (resolved.created_execution_origin, resolved.resolved_execution_id, resolved.resolved_execution_origin, resolved.resolved_execution_label_basis) == (
-        Origin.NATIVE,
-        canceled.execution_id,
-        Origin.NATIVE,
-        None,
-    )
+    assert (resolved.created_execution_id, resolved.resolved_execution_id) == (created.execution_id, canceled.execution_id)
     listed = {c.claim_id: c for c in (await list_claims_for_user(funded, PAYER)).items}
-    legacy = listed[legacy_id]
-    assert (legacy.created_execution_origin, legacy.created_execution_label_basis, legacy.resolved_execution_origin) == (Origin.LEGACY, LabelBasis.STATE_IMPORT, None)
+    assert (listed[pending.claim_id].created_execution_id, listed[pending.claim_id].resolved_execution_id) == (pending.execution_id, None)
 
 
 async def test_pay_and_cancel_race_resolves_each_claim_once(funded: AsyncEngine) -> None:

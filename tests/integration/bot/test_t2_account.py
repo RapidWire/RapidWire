@@ -11,9 +11,9 @@ from rapidwire.bot.client import RapidWireBot
 from rapidwire.bot.errors import NUMBER_FORMAT_MESSAGES
 from rapidwire.core import allowances, transfers
 from rapidwire.core.ledger import LedgerTx, run_operation
-from rapidwire.core.types import ExecutionType, LabelBasis, Origin, TransferKind
+from rapidwire.core.types import ExecutionType, TransferKind
 from tests.integration.bot.conftest import MakeInteraction
-from tests.integration.factories import balance_of, create_currency, mint
+from tests.integration.factories import balance_of, create_currency, insert_transfer, mint
 from tests.unit.bot.fakes import FakeInteraction, FakeUser, invoke
 
 GUILD = 7_100_001
@@ -160,18 +160,6 @@ async def test_transfer_from_with_allowance_but_too_little_balance(db: AsyncEngi
     assert await allowances.get_allowance(db, ALICE, BOB, GUILD) == 500 * UNIT
 
 
-async def _legacy_transfer(db: AsyncEngine, *, execution_id: int, source: int, destination: int, amount: int, at: datetime) -> None:
-    async with db.begin() as conn:
-        tx = LedgerTx(conn, at)
-        await tx.require_accounts([source, destination])
-        await tx.lock_currencies([GUILD])
-        await tx.lock_balances([(source, GUILD), (destination, GUILD)])
-        created = await tx.create_execution(
-            type=ExecutionType.TRANSFER, initiator_id=source, input={"amount": str(amount)}, output={}, origin=Origin.LEGACY, label_basis=LabelBasis.ROW_SHAPE, execution_id=execution_id, created_at=at
-        )
-        await tx.move(created, GUILD, source, destination, amount, TransferKind.PRINCIPAL, transfer_id=execution_id, created_at=at)
-
-
 async def _contract_move(db: AsyncEngine, *, source: int, destination: int, amount: int, function: str, at: datetime) -> int:
     async def body(tx: LedgerTx, execution_id: int) -> dict[str, Any]:
         await tx.lock_currencies([GUILD])
@@ -185,12 +173,14 @@ async def _contract_move(db: AsyncEngine, *, source: int, destination: int, amou
 
 async def _seed_history(db: AsyncEngine) -> dict[str, int]:
     issuance = await _seed(db)
-    await _legacy_transfer(db, execution_id=50, source=ALICE, destination=BOB, amount=2 * UNIT, at=T0 + timedelta(hours=1))
+    await insert_transfer(
+        db, execution_id=50, transfer_id=50, type=ExecutionType.TRANSFER, initiator=ALICE, currency_id=GUILD, source=ALICE, destination=BOB, amount=2 * UNIT, at=T0 + timedelta(hours=1)
+    )
     # 2026-01-31 23:59:59 and 2026-02-01 00:00:00 in Japan Standard Time.
     late = await transfers.transfer(db, sender_id=ALICE, recipient_id=BOB, currency_id=GUILD, amount=3 * UNIT, now=datetime(2026, 1, 31, 14, 59, 59, tzinfo=UTC))
     early = await transfers.transfer(db, sender_id=BOB, recipient_id=ALICE, currency_id=GUILD, amount=1 * UNIT, now=datetime(2026, 1, 31, 15, tzinfo=UTC))
     called = await _contract_move(db, source=ALICE, destination=CAROL, amount=7 * UNIT, function="buy", at=datetime(2026, 2, 3, tzinfo=UTC))
-    return {"issuance": issuance, "legacy": 50, "late": late.transfer_id, "early": early.transfer_id, "called": called}
+    return {"issuance": issuance, "explicit": 50, "late": late.transfer_id, "early": early.transfer_id, "called": called}
 
 
 async def _history(bot: RapidWireBot, interaction: FakeInteraction, **filters: Any) -> FakeInteraction:
@@ -216,28 +206,27 @@ def _ids(embed: discord.Embed) -> list[int]:
     return [int((field.name or "").split(" | ")[1].removeprefix("ID: ")) for field in embed.fields]
 
 
-async def test_history_list_directions_and_legacy_marker(db: AsyncEngine, bot: RapidWireBot, make_interaction: MakeInteraction) -> None:
+async def test_history_list_directions(db: AsyncEngine, bot: RapidWireBot, make_interaction: MakeInteraction) -> None:
     ids = await _seed_history(db)
     embed = (await _history(bot, make_interaction(user_id=ALICE, guild_id=GUILD))).last.embed
     assert embed.title == "転送履歴 (ページ 1/1)"
     assert embed.colour == discord.Colour.blue()
     assert _ids(embed) == sorted(_ids(embed), reverse=True)
     by_id = {int((field.name or "").split(" | ")[1].removeprefix("ID: ")): field for field in embed.fields}
-    legacy = by_id[ids["legacy"]]
-    assert legacy.name is not None and legacy.name.startswith("📤 | ID: 50 | <t:") and legacy.name.endswith(":R> (旧版)")
-    assert legacy.value == f"`2.000 RAPID` to <@{BOB}>"
+    explicit = by_id[ids["explicit"]]
+    assert explicit.name is not None and explicit.name.startswith("📤 | ID: 50 | <t:") and explicit.name.endswith(":R>")
+    assert explicit.value == f"`2.000 RAPID` to <@{BOB}>"
     assert by_id[ids["early"]].value == f"`1.000 RAPID` from <@{BOB}>"
     assert (by_id[ids["early"]].name or "").startswith("📥")
-    assert "(旧版)" not in (by_id[ids["late"]].name or "")
     minted = [field for field in embed.fields if (field.value or "").endswith("from システム")]
     assert len(minted) == 2
 
     embed = (await _history(bot, make_interaction(user_id=CAROL), source=FakeUser(ALICE), destination=FakeUser(BOB))).last.embed
-    assert sorted(_ids(embed)) == sorted([ids["legacy"], ids["late"]])
+    assert sorted(_ids(embed)) == sorted([ids["explicit"], ids["late"]])
     assert all((field.name or "").startswith("📤") for field in embed.fields)
 
     embed = (await _history(bot, make_interaction(user_id=CAROL), user=FakeUser(BOB))).last.embed
-    assert sorted(_ids(embed)) == sorted([ids["legacy"], ids["late"], ids["early"]])
+    assert sorted(_ids(embed)) == sorted([ids["explicit"], ids["late"], ids["early"]])
 
     embed = (await _history(bot, make_interaction(user_id=CAROL))).last.embed
     assert _ids(embed) == [ids["called"]]
@@ -253,7 +242,7 @@ async def test_history_without_matches(db: AsyncEngine, bot: RapidWireBot, make_
 async def test_history_date_bounds_are_japan_days(db: AsyncEngine, bot: RapidWireBot, make_interaction: MakeInteraction) -> None:
     ids = await _seed_history(db)
     jan31 = (await _history(bot, make_interaction(user_id=BOB), start_date="2026-01-31", end_date="2026-01-31")).last.embed
-    assert sorted(_ids(jan31)) == sorted([ids["legacy"], ids["late"]])
+    assert sorted(_ids(jan31)) == sorted([ids["explicit"], ids["late"]])
     feb1 = (await _history(bot, make_interaction(user_id=BOB), start_date="2026-02-01")).last.embed
     assert _ids(feb1) == [ids["early"]]
     until_jan30 = (await _history(bot, make_interaction(user_id=BOB), end_date="2026-01-30")).last.embed
@@ -266,11 +255,11 @@ async def test_history_amount_type_function_and_currency_filters(db: AsyncEngine
     ids = await _seed_history(db)
     alice = make_interaction
     embed = (await _history(bot, alice(user_id=ALICE), min_amount="2", max_amount="3")).last.embed
-    assert sorted(_ids(embed)) == sorted([ids["legacy"], ids["late"]])
+    assert sorted(_ids(embed)) == sorted([ids["explicit"], ids["late"]])
     embed = (await _history(bot, alice(user_id=ALICE), execution_type="contract_call")).last.embed
     assert _ids(embed) == [ids["called"]]
     embed = (await _history(bot, alice(user_id=ALICE), execution_type=" TRANSFER ")).last.embed
-    assert sorted(_ids(embed)) == sorted([ids["legacy"], ids["late"], ids["early"]])
+    assert sorted(_ids(embed)) == sorted([ids["explicit"], ids["late"], ids["early"]])
     embed = (await _history(bot, alice(user_id=ALICE), contract_function="buy")).last.embed
     assert _ids(embed) == [ids["called"]]
     embed = (await _history(bot, alice(user_id=ALICE), contract_function="sell")).last.embed
@@ -311,8 +300,8 @@ async def test_history_pages_hold_ten(db: AsyncEngine, bot: RapidWireBot, make_i
 
 async def test_history_detail(db: AsyncEngine, bot: RapidWireBot, make_interaction: MakeInteraction) -> None:
     ids = await _seed_history(db)
-    embed = (await _history(bot, make_interaction(user_id=CAROL), transfer_id=ids["legacy"], user=FakeUser(CAROL))).last.embed
-    assert embed.title == "転送詳細: ID 50 (旧版)"
+    embed = (await _history(bot, make_interaction(user_id=CAROL), transfer_id=ids["explicit"], user=FakeUser(CAROL))).last.embed
+    assert embed.title == "転送詳細: ID 50"
     assert _fields(embed) == [
         ("日時", f"<t:{int((T0 + timedelta(hours=1)).timestamp())}:F>"),
         ("From", f"<@{ALICE}>"),
@@ -321,7 +310,6 @@ async def test_history_detail(db: AsyncEngine, bot: RapidWireBot, make_interacti
         ("実行ID", "`50`"),
         ("実行の種別", "送金 (`transfer`)"),
         ("実行の状態", "成功"),
-        ("由来", "旧版から取り込んだ実行"),
     ]
     embed = (await _history(bot, make_interaction(user_id=CAROL), transfer_id=ids["called"])).last.embed
     assert embed.title == f"転送詳細: ID {ids['called']}"

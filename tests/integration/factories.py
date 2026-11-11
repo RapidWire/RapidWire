@@ -1,12 +1,13 @@
-"""Seed helpers for integration tests: create a currency row with its issuance account, mint through the ledger, create pools and add liquidity through the pools service, assemble and register contracts and write their storage, and read balances and supply."""
+"""Seed helpers for integration tests: create a currency row with its issuance account, mint through the ledger, insert ledger rows under explicit IDs and times, create pools and add liquidity through the pools service, assemble and register contracts and write their storage, and read balances and supply."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rapidwire.contract.assembler import assemble
@@ -15,8 +16,8 @@ from rapidwire.core import contracts, pools
 from rapidwire.core.accounts import ensure_user_account, get_or_create_issuance_account
 from rapidwire.core.clock import resolve_now
 from rapidwire.core.ledger import LedgerTx, run_operation
-from rapidwire.core.types import ExecutionType, TransferKind
-from rapidwire.db.tables import FEE_TIERS_BPS, balance, currency
+from rapidwire.core.types import ExecutionStatus, ExecutionType, TransferKind
+from rapidwire.db.tables import FEE_TIERS_BPS, balance, currency, execution, transfer
 
 DEFAULT_CREATOR = 1000
 
@@ -71,6 +72,54 @@ async def mint(engine: AsyncEngine, currency_id: int, account_id: int, amount: i
 
     result = await run_operation(engine, type=ExecutionType.MINT, initiator_id=account_id, input={"currency_id": currency_id, "amount": amount}, body=body, now=now)
     return result.execution_id
+
+
+async def insert_transfer(
+    engine: AsyncEngine,
+    *,
+    execution_id: int,
+    transfer_id: int,
+    type: str,
+    initiator: int,
+    currency_id: int,
+    source: int,
+    destination: int,
+    amount: int,
+    at: datetime,
+    input: Mapping[str, Any] | None = None,
+) -> int:
+    """Insert an execution and its one transfer under explicit IDs and time and apply the balance change, the way ledger rows that already exist elsewhere are loaded; returns the execution ID."""
+    async with engine.begin() as conn:
+        tx = LedgerTx(conn, at)
+        await tx.require_accounts([initiator, source, destination])
+        await tx.lock_currencies([currency_id])
+        await tx.lock_balances([(source, currency_id), (destination, currency_id)])
+        await conn.execute(
+            insert(execution).values(
+                execution_id=execution_id,
+                type=str(type),
+                initiator_id=initiator,
+                status=ExecutionStatus.SUCCESS.value,
+                input=dict(input) if input is not None else {"amount": str(amount)},
+                output={},
+                created_at=at,
+            )
+        )
+        await conn.execute(
+            insert(transfer).values(
+                transfer_id=transfer_id,
+                execution_id=execution_id,
+                currency_id=currency_id,
+                from_account=source,
+                to_account=destination,
+                amount=amount,
+                kind=TransferKind.PRINCIPAL.value,
+                created_at=at,
+            )
+        )
+        await conn.execute(update(balance).where(balance.c.account_id == source, balance.c.currency_id == currency_id).values(amount=balance.c.amount - amount))
+        await conn.execute(update(balance).where(balance.c.account_id == destination, balance.c.currency_id == currency_id).values(amount=balance.c.amount + amount))
+    return execution_id
 
 
 async def create_pool(

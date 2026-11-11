@@ -283,12 +283,8 @@ class TransferEntry(Transfer):
     currency_symbol: str
     execution_type: str
     execution_status: str
-    origin: str
-    label_basis: str | None
     initiator_id: int
     parent_execution_id: int | None
-    parent_origin: str | None
-    parent_label_basis: str | None
     contract_function: str | None
 
 
@@ -298,12 +294,8 @@ class Execution:
 
     execution_id: int
     type: str
-    origin: str
-    label_basis: str | None
     initiator_id: int
     parent_execution_id: int | None
-    parent_origin: str | None
-    parent_label_basis: str | None
     contract_id: int | None
     status: str
     input: dict[str, Any]
@@ -364,11 +356,7 @@ class Claim:
     created_at: datetime
     updated_at: datetime
     created_execution_id: int
-    created_execution_origin: str
-    created_execution_label_basis: str | None
     resolved_execution_id: int | None
-    resolved_execution_origin: str | None
-    resolved_execution_label_basis: str | None
 
 
 @_model
@@ -622,12 +610,8 @@ class Pool:
     created_by: int
     created_at: datetime
     created_execution_id: int
-    created_execution_origin: str
-    created_execution_label_basis: str | None
     dissolved_at: datetime | None
     dissolved_execution_id: int | None
-    dissolved_execution_origin: str | None
-    dissolved_execution_label_basis: str | None
 
 
 @_model
@@ -741,11 +725,7 @@ class ContractInfo:
     updated_at: datetime
     deleted_at: datetime | None
     created_execution_id: int
-    created_execution_origin: str
-    created_execution_label_basis: str | None
     updated_execution_id: int
-    updated_execution_origin: str
-    updated_execution_label_basis: str | None
     functions: tuple[ContractFunction, ...]
 
 
@@ -763,8 +743,6 @@ class ContractVersionSummary:
     sha256: str
     size: int
     created_execution_id: int
-    created_execution_origin: str
-    created_execution_label_basis: str | None
     created_at: datetime
 
 

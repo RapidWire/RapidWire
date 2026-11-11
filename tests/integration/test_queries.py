@@ -37,9 +37,9 @@ from rapidwire.core.queries import (
     user_stats,
     user_stats_count_statements,
 )
-from rapidwire.core.types import ExecutionStatus, ExecutionType, LabelBasis, Origin, TransferKind
+from rapidwire.core.types import ExecutionStatus, ExecutionType, TransferKind
 from rapidwire.db.tables import transfer
-from tests.integration.factories import balance_of, create_currency, mint, supply_of
+from tests.integration.factories import balance_of, create_currency, insert_transfer, mint, supply_of
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 CUR_A = 10
@@ -54,9 +54,9 @@ NOBODY = 999
 
 @dataclass(frozen=True)
 class Seed:
-    legacy_mint: int
-    legacy_transfer: int
-    native_mint: int
+    explicit_mint: int
+    explicit_transfer: int
+    service_mint: int
     call: int
     child: int
     grandchild: int
@@ -64,26 +64,6 @@ class Seed:
     approve: int
     failed: int
     roundtrip: int
-
-
-async def _legacy(engine: AsyncEngine, *, execution_id: int, transfer_id: int, type: str, initiator: int, currency_id: int, source: int, destination: int, amount: int, at: datetime) -> int:
-    async with engine.begin() as conn:
-        tx = LedgerTx(conn, at)
-        await tx.require_accounts([initiator])
-        await tx.lock_currencies([currency_id])
-        await tx.lock_balances([(source, currency_id), (destination, currency_id)])
-        created = await tx.create_execution(
-            type=type,
-            initiator_id=initiator,
-            input={"amount": amount},
-            output={},
-            origin=Origin.LEGACY,
-            label_basis=LabelBasis.ROW_SHAPE,
-            execution_id=execution_id,
-            created_at=at,
-        )
-        await tx.move(created, currency_id, source, destination, amount, TransferKind.PRINCIPAL, transfer_id=transfer_id, created_at=at)
-    return created
 
 
 async def _moves(engine: AsyncEngine, *, type: str, initiator: int, moves: list[tuple[int, int, int, int]], now: datetime, contract_function: str | None = None) -> int:
@@ -102,11 +82,13 @@ async def _seed(engine: AsyncEngine) -> Seed:
     a = await create_currency(engine, currency_id=CUR_A, symbol="AAA", name="Alpha", now=T0)
     await create_currency(engine, currency_id=CUR_B, symbol="BBB", name="Beta", now=T0)
     await create_currency(engine, currency_id=CUR_GONE, symbol="GONE", name="Gone", now=T0, deleted_at=T0)
-    legacy_mint = await _legacy(engine, execution_id=1, transfer_id=1, type=ExecutionType.MINT, initiator=ALICE, currency_id=CUR_A, source=a.issuance_account_id, destination=ALICE, amount=1000, at=T0)
-    legacy_transfer = await _legacy(
+    explicit_mint = await insert_transfer(
+        engine, execution_id=1, transfer_id=1, type=ExecutionType.MINT, initiator=ALICE, currency_id=CUR_A, source=a.issuance_account_id, destination=ALICE, amount=1000, at=T0
+    )
+    explicit_transfer = await insert_transfer(
         engine, execution_id=2, transfer_id=2, type=ExecutionType.TRANSFER, initiator=ALICE, currency_id=CUR_A, source=ALICE, destination=BOB, amount=100, at=T0 + timedelta(days=1)
     )
-    native_mint = await mint(engine, CUR_B, BOB, 500, now=T0 + timedelta(days=2))
+    service_mint = await mint(engine, CUR_B, BOB, 500, now=T0 + timedelta(days=2))
     ids: dict[str, int] = {}
 
     async def call_body(tx: LedgerTx, execution_id: int) -> dict[str, Any]:
@@ -159,9 +141,9 @@ async def _seed(engine: AsyncEngine) -> Seed:
     assert raised.value.execution_id is not None
     roundtrip = await _moves(engine, type=ExecutionType.TRANSFER, initiator=ALICE, moves=[(CUR_A, ALICE, DAVE, 50), (CUR_A, DAVE, ALICE, 50)], now=T0 + timedelta(days=6))
     return Seed(
-        legacy_mint=legacy_mint,
-        legacy_transfer=legacy_transfer,
-        native_mint=native_mint,
+        explicit_mint=explicit_mint,
+        explicit_transfer=explicit_transfer,
+        service_mint=service_mint,
         call=call,
         child=ids["child"],
         grandchild=ids["grandchild"],
@@ -248,9 +230,8 @@ async def test_history_single_filters_hand_checked(db: AsyncEngine, seed: Seed) 
     by_user = await search_history(db, user_id=BOB)
     assert {item.transfer_id for item in by_user.items} >= {2, 3}
     assert all(BOB in (item.from_account, item.to_account) for item in by_user.items)
-    legacy = await search_history(db, transfer_id=2)
-    (row,) = legacy.items
-    assert row.origin is Origin.LEGACY and row.label_basis is LabelBasis.ROW_SHAPE
+    explicit = await search_history(db, transfer_id=2)
+    (row,) = explicit.items
     assert (row.from_account, row.to_account, row.amount, row.currency_symbol) == (ALICE, BOB, 100, "AAA")
     assert row.created_at == T0 + timedelta(days=1) and row.created_at.tzinfo is UTC
     by_function = await search_history(db, contract_function="pay")
@@ -262,7 +243,7 @@ async def test_history_single_filters_hand_checked(db: AsyncEngine, seed: Seed) 
     amounts = await search_history(db, min_amount=20, max_amount=20)
     assert [item.amount for item in amounts.items] == [20, 20]
     nested = await search_history(db, execution_type="transfer", user_id=ALICE, destination_id=BOB)
-    assert {item.execution_id for item in nested.items} == {seed.legacy_transfer, seed.child, seed.grandchild}
+    assert {item.execution_id for item in nested.items} == {seed.explicit_transfer, seed.child, seed.grandchild}
     assert (await search_history(db, user_id=NOBODY)).total == 0
 
 
@@ -304,7 +285,7 @@ async def test_history_rejects_invalid_arguments(db: AsyncEngine) -> None:
 async def test_get_transfer(db: AsyncEngine, seed: Seed) -> None:
     entry = await get_transfer(db, 3)
     assert entry is not None
-    assert (entry.execution_id, entry.execution_type, entry.execution_status, entry.origin, entry.label_basis) == (seed.native_mint, "mint", ExecutionStatus.SUCCESS, Origin.NATIVE, None)
+    assert (entry.execution_id, entry.execution_type, entry.execution_status) == (seed.service_mint, "mint", ExecutionStatus.SUCCESS)
     assert (entry.to_account, entry.amount, entry.kind, entry.initiator_id, entry.currency_symbol) == (BOB, 500, TransferKind.PRINCIPAL, BOB, "BBB")
     assert await get_transfer(db, 10**9) is None
 
@@ -313,7 +294,7 @@ async def test_get_execution_with_nested_children(db: AsyncEngine, seed: Seed) -
     detail = await get_execution(db, seed.call)
     assert isinstance(detail, ExecutionDetail)
     root = detail.execution
-    assert (root.type, root.status, root.origin, root.label_basis, root.initiator_id, root.parent_execution_id) == ("contract_call", ExecutionStatus.SUCCESS, Origin.NATIVE, None, CAROL, None)
+    assert (root.type, root.status, root.initiator_id, root.parent_execution_id) == ("contract_call", ExecutionStatus.SUCCESS, CAROL, None)
     assert (root.contract_function, root.input, root.output, root.created_at) == ("pay", {"f": "pay"}, {}, T0 + timedelta(days=3))
     assert root.has_idempotency_key is True
     assert "secret-key" not in repr(detail)
@@ -327,9 +308,8 @@ async def test_get_execution_with_nested_children(db: AsyncEngine, seed: Seed) -
     deeper = await get_execution(db, seed.grandchild)
     assert deeper is not None and deeper.children == () and deeper.execution.parent_execution_id == seed.child
     assert [t.amount for t in deeper.transfers] == [20]
-    legacy = await get_execution(db, seed.legacy_mint)
-    assert legacy is not None and legacy.execution.origin is Origin.LEGACY and legacy.execution.label_basis is LabelBasis.ROW_SHAPE
-    assert legacy.execution.has_idempotency_key is False and [t.transfer_id for t in legacy.transfers] == [1]
+    explicit = await get_execution(db, seed.explicit_mint)
+    assert explicit is not None and explicit.execution.has_idempotency_key is False and [t.transfer_id for t in explicit.transfers] == [1]
     assert await get_execution(db, 10**9) is None
 
 
@@ -417,9 +397,9 @@ async def test_list_executions_by_contract(db: AsyncEngine) -> None:
         other = await tx.create_execution(type=ExecutionType.TRANSFER, initiator_id=ALICE, input={})
     by_dave = await list_executions(db, contract_id=DAVE)
     assert [item.execution_id for item in by_dave.items] == [call]
-    assert by_dave.items[0].contract_id == DAVE and by_dave.items[0].parent_origin is None
+    assert by_dave.items[0].contract_id == DAVE and by_dave.items[0].parent_execution_id is None
     by_bob = await list_executions(db, contract_id=BOB)
-    assert [(item.execution_id, item.parent_execution_id, item.parent_origin) for item in by_bob.items] == [(nested, call, Origin.NATIVE)]
+    assert [(item.execution_id, item.parent_execution_id) for item in by_bob.items] == [(nested, call)]
     assert [item.execution_id for item in (await list_executions(db, contract_id=ALICE)).items] == [managed]
     assert [item.execution_id for item in (await list_executions(db, contract_id=ALICE, execution_type=ExecutionType.CONTRACT_CALL)).items] == []
     assert next(item for item in (await list_executions(db)).items if item.execution_id == other).contract_id is None

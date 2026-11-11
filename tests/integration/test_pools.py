@@ -235,7 +235,7 @@ async def test_creator_losing_the_unique_key_race_records_pool_already_exists(db
         await ensure_user_accounts(conn, [BOB], now=NOW)
     async with db.connect() as other:
         await other.begin()
-        made = await other.execute(insert(execution).values(type=ExecutionType.POOL_CREATE, origin="native", initiator_id=BOB, status=ExecutionStatus.SUCCESS, input={}, output={}, created_at=NOW))
+        made = await other.execute(insert(execution).values(type=ExecutionType.POOL_CREATE, initiator_id=BOB, status=ExecutionStatus.SUCCESS, input={}, output={}, created_at=NOW))
         assert made.inserted_primary_key is not None
         values = {"currency_a": 1, "currency_b": 2, "fee_bps": TIER, "reserve_a": 1, "reserve_b": 1, "total_shares": MINIMUM_LIQUIDITY, "locked_shares": MINIMUM_LIQUIDITY}
         await other.execute(insert(pool).values(created_by=BOB, created_execution_id=made.inserted_primary_key[0], created_at=NOW, **values))

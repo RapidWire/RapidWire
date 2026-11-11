@@ -22,14 +22,13 @@ from rapidwire.core import queries, transfers
 from rapidwire.core.amounts import NumberFormatError, parse_amount
 from rapidwire.core.paging import HISTORY_PER_PAGE_DEFAULT, MAX_WINDOW, Page
 from rapidwire.core.queries import TransferEntry
-from rapidwire.core.types import ExecutionStatus, ExecutionType, Origin, TransferKind
+from rapidwire.core.types import ExecutionStatus, ExecutionType, TransferKind
 from rapidwire.db.tables import CONTRACT_FUNCTION_MAX
 
 __all__ = [
     "EXECUTION_STATUS_LABELS",
     "EXECUTION_TYPE_LABELS",
     "HISTORY_TIMEZONE",
-    "LEGACY_MARK",
     "date_bounds",
     "execution_type_autocomplete",
     "load_page",
@@ -38,9 +37,6 @@ __all__ = [
 
 # History dates are calendar days in Japan Standard Time; Japan has no daylight saving time, so a fixed offset is exact.
 HISTORY_TIMEZONE: Final = timezone(timedelta(hours=9), "JST")
-
-# Marks transfers of executions imported from the earlier version.
-LEGACY_MARK: Final = "(旧版)"
 
 HISTORY_PER_PAGE: Final = HISTORY_PER_PAGE_DEFAULT
 
@@ -229,8 +225,6 @@ async def execution_type_autocomplete(interaction: discord.Interaction[RapidWire
 
 def _transfer_detail(entry: TransferEntry) -> discord.Embed:
     title = f"転送詳細: ID {entry.transfer_id}"
-    if entry.origin is Origin.LEGACY:
-        title = f"{title} {LEGACY_MARK}"
     fields = [
         Field("日時", timestamp_full(entry.created_at)),
         Field("From", account_mention(entry.from_account), inline=True),
@@ -246,8 +240,6 @@ def _transfer_detail(entry: TransferEntry) -> discord.Embed:
     ]
     if entry.contract_function is not None:
         fields.append(Field("コントラクトの関数", f"`{entry.contract_function.replace('`', '')}`"))
-    if entry.origin is Origin.LEGACY:
-        fields.append(Field("由来", "旧版から取り込んだ実行"))
     return info_embed(title, fields=fields)
 
 
@@ -260,8 +252,6 @@ def _history_field(entry: TransferEntry, target_id: int) -> Field:
     else:
         emoji, direction = "↔️", f"from {source} to {destination}"
     name = f"{emoji} | ID: {entry.transfer_id} | {timestamp_relative(entry.created_at)}"
-    if entry.origin is Origin.LEGACY:
-        name = f"{name} {LEGACY_MARK}"
     value = f"{amount_text(entry.amount, entry.currency_symbol)} {direction}"
     if entry.kind in _KIND_LABELS:
         value = f"{value} ({_KIND_LABELS[entry.kind]})"

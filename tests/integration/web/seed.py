@@ -1,15 +1,13 @@
-"""Seed data for the web explorer checks: currencies (one with the largest supply), transfers (one of nearly the largest amount), a stake, two fee tiers of one pool and a swap, a claim, a contract with storage and calls, failed executions, a legacy-origin transfer and claim, tokens and a backup file, all written through the services except the legacy rows."""
+"""Seed data for the web explorer checks: currencies (one with the largest supply), transfers (one of nearly the largest amount), a stake, two fee tiers of one pool and a swap, a claim, a contract with storage and calls, failed executions, tokens and a backup file, all written through the services."""
 
 from __future__ import annotations
 
 import hashlib
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import insert, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rapidwire.contract.compiler import compile_source
@@ -17,9 +15,7 @@ from rapidwire.contract.runtime import RuntimeConfig
 from rapidwire.core import accounts, claims, contract_calls, contracts, currency, pools, staking, swap, tokens, transfers
 from rapidwire.core.errors import DomainError
 from rapidwire.core.permissions import InMemoryGuildInfo
-from rapidwire.core.types import ClaimStatus, ExecutionStatus, ExecutionType, LabelBasis, Origin, TransferKind
-from rapidwire.db.tables import FEE_TIERS_BPS, balance, execution, transfer
-from rapidwire.db.tables import claim as claim_table
+from rapidwire.db.tables import FEE_TIERS_BPS
 from rapidwire.db.types import AMOUNT_MAX
 
 ALICE = 1_000_001
@@ -79,10 +75,6 @@ class Seed:
     contract_call_execution: int
     contract_failed_execution: int
     failed_transfer_execution: int
-    legacy_execution: int
-    legacy_transfer: int
-    legacy_claim: int
-    legacy_claim_execution: int
     operator_token: str
     other_token: str
     backup_name: str
@@ -97,61 +89,6 @@ async def _failed_execution(call: Any) -> int:
         assert error.execution_id is not None
         return error.execution_id
     raise AssertionError("the operation was expected to fail")
-
-
-async def _insert_legacy_transfer(engine: AsyncEngine, *, currency_id: int, sender: int, recipient: int, amount: int, at: datetime) -> tuple[int, int]:
-    async with engine.begin() as conn:
-        result = await conn.execute(
-            insert(execution).values(
-                type=ExecutionType.TRANSFER,
-                origin=Origin.LEGACY,
-                label_basis=LabelBasis.ROW_SHAPE,
-                initiator_id=sender,
-                status=ExecutionStatus.SUCCESS,
-                input={"recipient_id": str(recipient), "currency_id": str(currency_id), "amount": str(amount)},
-                output={},
-                created_at=at,
-            )
-        )
-        execution_id = int(result.lastrowid)
-        moved = await conn.execute(
-            insert(transfer).values(execution_id=execution_id, currency_id=currency_id, from_account=sender, to_account=recipient, amount=amount, kind=TransferKind.PRINCIPAL, created_at=at)
-        )
-        await conn.execute(update(balance).where(balance.c.account_id == sender, balance.c.currency_id == currency_id).values(amount=balance.c.amount - amount))
-        await conn.execute(update(balance).where(balance.c.account_id == recipient, balance.c.currency_id == currency_id).values(amount=balance.c.amount + amount))
-    return execution_id, int(moved.lastrowid)
-
-
-async def _insert_legacy_claim(engine: AsyncEngine, *, claimant: int, payer: int, currency_id: int, amount: int, at: datetime) -> tuple[int, int]:
-    """A pending claim imported from the old version, created by a legacy claim_create execution."""
-    async with engine.begin() as conn:
-        created = await conn.execute(
-            insert(execution).values(
-                type=ExecutionType.CLAIM_CREATE,
-                origin=Origin.LEGACY,
-                label_basis=LabelBasis.STATE_IMPORT,
-                initiator_id=claimant,
-                status=ExecutionStatus.SUCCESS,
-                input={},
-                output={},
-                created_at=at,
-            )
-        )
-        execution_id = int(created.lastrowid)
-        inserted = await conn.execute(
-            insert(claim_table).values(
-                claimant_id=claimant,
-                payer_id=payer,
-                currency_id=currency_id,
-                amount=amount,
-                description=None,
-                status=ClaimStatus.PENDING.value,
-                created_at=at,
-                updated_at=at,
-                created_execution_id=execution_id,
-            )
-        )
-    return execution_id, int(inserted.lastrowid)
 
 
 def write_backup(backup_dir: Path) -> tuple[str, int]:
@@ -190,10 +127,6 @@ async def seed_explorer(engine: AsyncEngine, backup_dir: Path, *, runtime: Runti
     call_failed = await _failed_execution(contract_calls.call_contract(engine, guilds, caller_id=BOB, contract_id=CONTRACT, function="fail", gas_limit=10_000, config=runtime))
     transfer_failed = await _failed_execution(transfers.transfer(engine, sender_id=CAROL, recipient_id=BOB, currency_id=GOLD_GUILD, amount=10**15))
 
-    legacy_amount = 7_000
-    legacy_execution, legacy_transfer = await _insert_legacy_transfer(engine, currency_id=GOLD_GUILD, sender=ALICE, recipient=BOB, amount=legacy_amount, at=datetime(2025, 6, 1, 12, 0, tzinfo=UTC))
-    legacy_claim_execution, legacy_claim = await _insert_legacy_claim(engine, claimant=ALICE, payer=BOB, currency_id=GOLD_GUILD, amount=3_000, at=datetime(2025, 6, 2, 12, 0, tzinfo=UTC))
-
     await currency.create_currency(engine, guilds, guild_id=HUGE_GUILD, user_id=ALICE, name="Huge", symbol="HUGE", initial_supply=AMOUNT_MAX)
     huge_sent = await transfers.transfer(engine, sender_id=ALICE, recipient_id=BOB, currency_id=HUGE_GUILD, amount=HUGE_AMOUNT)
     async with engine.connect() as conn:
@@ -223,10 +156,6 @@ async def seed_explorer(engine: AsyncEngine, backup_dir: Path, *, runtime: Runti
         contract_call_execution=called.execution_id,
         contract_failed_execution=call_failed,
         failed_transfer_execution=transfer_failed,
-        legacy_execution=legacy_execution,
-        legacy_transfer=legacy_transfer,
-        legacy_claim=legacy_claim,
-        legacy_claim_execution=legacy_claim_execution,
         operator_token=operator_token.token,
         other_token=other_token.token,
         backup_name=BACKUP_NAME,

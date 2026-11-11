@@ -103,25 +103,24 @@ def _exact(path: str) -> re.Pattern[str]:
 
 def page_cases(seed: Seed) -> list[PageCase]:
     gold_amount = "1,234.567"
-    legacy_amount = "7.000"
     return [
         PageCase("index", "/", selectors=("#live-stats:not([hidden])",)),
-        PageCase("explorer", "/explorer.html", texts=(HUGE_TEXT,), selectors=("#executions .badge--success", "#executions .badge--legacy", "#transfers li", "#transfers .badge--native"), amount=True),
+        PageCase("explorer", "/explorer.html", texts=(HUGE_TEXT,), selectors=("#executions .badge--success", "#transfers li"), amount=True),
         PageCase(
             "account",
             f"/account.html?id={seed.bob}",
-            texts=(legacy_amount, HUGE_TEXT),
-            selectors=(".badge--legacy", "#executions tbody tr", '#executions-more a[href^="/explorer.html?initiator_id="]'),
+            texts=(HUGE_TEXT,),
+            selectors=("#executions tbody tr", '#executions-more a[href^="/explorer.html?initiator_id="]'),
             amount=True,
         ),
         PageCase(
             "account-claims",
             f"/account.html?id={seed.bob}&tab=claims",
             texts=(CLAIM_MARKUP,),
-            selectors=("#claims tbody tr", "#claims .badge--legacy", f'#claims a[href="/execution.html?id={seed.legacy_claim_execution}"] + .origin .badge--legacy'),
+            selectors=("#claims tbody tr", '#claims a[href^="/execution.html?id="]'),
         ),
         PageCase("account-claims-claimant", f"/account.html?id={seed.bob}&tab=claims&cr=claimant", selectors=("#claims .state--empty", "#claims-role option[value=claimant]:checked")),
-        PageCase("account-claims-payer", f"/account.html?id={seed.bob}&tab=claims&cr=payer&cs=pending", texts=(CLAIM_MARKUP,), selectors=("#claims tbody tr", "#claims .badge--legacy")),
+        PageCase("account-claims-payer", f"/account.html?id={seed.bob}&tab=claims&cr=payer&cs=pending", texts=(CLAIM_MARKUP,), selectors=("#claims tbody tr",)),
         PageCase("account-system", "/account.html?id=-1", selectors=("#system-details .kv",), amount=True),
         PageCase("account-issuance-huge", f"/account.html?id={seed.huge_issuance}", texts=(SUPPLY_TEXT,), selectors=("#system-details .kv", "#balances tbody tr"), amount=True),
         PageCase("account-contract", f"/account.html?id={seed.contract}", selectors=('#account-badges a.badge[href^="/contract.html"]',)),
@@ -131,11 +130,9 @@ def page_cases(seed: Seed) -> list[PageCase]:
         PageCase("currency", f"/currency.html?id={seed.gold}", texts=(seed.gold_symbol,), selectors=("#details .kv", "#history tbody tr"), amount=True),
         PageCase("currency-symbol", f"/currency.html?symbol={seed.gold_symbol}", texts=(seed.gold_symbol,), selectors=("#details .kv",), amount=True),
         PageCase("currency-huge", f"/currency.html?id={seed.huge}", texts=(SUPPLY_TEXT, HUGE_TEXT), selectors=("#details .kv", "#history tbody tr"), amount=True),
-        PageCase("transfer", f"/transfer.html?id={seed.transfer_id}", texts=(gold_amount,), selectors=(".badge--success", ".badge--native")),
+        PageCase("transfer", f"/transfer.html?id={seed.transfer_id}", texts=(gold_amount,), selectors=(".badge--success", '#execution-details a[href^="/execution.html?id="]')),
         PageCase("transfer-huge", f"/transfer.html?id={seed.huge_transfer}", texts=(HUGE_TEXT,), selectors=("#transfer-details .kv",)),
-        PageCase("transfer-legacy", f"/transfer.html?id={seed.legacy_transfer}", texts=(legacy_amount,), selectors=(".badge--legacy",)),
         PageCase("execution", f"/execution.html?id={seed.transfer_execution}", texts=(gold_amount,), selectors=("#execution-badges .badge--success",)),
-        PageCase("execution-legacy", f"/execution.html?id={seed.legacy_execution}", texts=(legacy_amount,), selectors=("#execution-badges .badge--legacy", ".banner--legacy")),
         PageCase("execution-failed", f"/execution.html?id={seed.failed_transfer_execution}", selectors=("#execution-badges .badge--failed",)),
         PageCase("execution-swap", f"/execution.html?id={seed.swap_execution}", selectors=("#execution-badges .badge--success",), amount=True),
         PageCase("execution-stake", f"/execution.html?id={seed.stake_execution}", selectors=("#execution-badges .badge--success",), amount=True),
@@ -144,7 +141,7 @@ def page_cases(seed: Seed) -> list[PageCase]:
         PageCase("execution-call-reverted", f"/execution.html?id={seed.contract_failed_execution}", texts=("always fails",), selectors=("#execution-badges .badge--reverted",)),
         PageCase("pools", "/pools.html", selectors=("#pools tbody tr",), amount=True),
         PageCase("pools-pair", f"/pools.html?x={seed.gold_symbol}&y=SILV", selectors=("#pair-result tbody tr",), amount=True),
-        PageCase("pool", f"/pool.html?id={seed.pool_high}", selectors=("#pool-overview .kv", "#pool-overview .exec-ref .badge--native"), amount=True),
+        PageCase("pool", f"/pool.html?id={seed.pool_high}", selectors=("#pool-overview .kv", '#pool-overview a[href^="/execution.html?id="]'), amount=True),
         PageCase("pool-low", f"/pool.html?id={seed.pool_low}", selectors=("#pool-overview .kv",), amount=True),
         PageCase(
             "contract",
@@ -152,8 +149,9 @@ def page_cases(seed: Seed) -> list[PageCase]:
             texts=(STORAGE_MARKUP,),
             selectors=(
                 "#contract-overview .kv",
-                "#contract-overview .exec-ref .badge--native",
-                "#contract-versions .exec-ref .badge--native",
+                '#contract-overview a[href^="/execution.html?id="]',
+                '#contract-versions a[href^="/execution.html?id="]',
+                "#contract-versions .badge--muted",
                 f'#contract-calls a[href="/execution.html?id={seed.contract_call_execution}"]',
                 f'#contract-calls a[href="/execution.html?id={seed.contract_failed_execution}"]',
             ),

@@ -7,7 +7,7 @@ import {
   currencyLink,
   dataTable,
   executionColumns,
-  executionRef,
+  executionLink,
   formatTime,
   getParam,
   h,
@@ -81,9 +81,9 @@ function renderOverview(contract) {
       ["ロック", lockView(contract)],
       ["ストレージ", `${contract.storage_keys.toLocaleString("en-US")} キー / ${bytesText(contract.storage_bytes)}`],
       ["作成日時", formatTime(contract.created_at)],
-      ["作成の実行", executionRef(contract.created_execution_id, contract.created_execution_origin, contract.created_execution_label_basis)],
+      ["作成の実行", executionLink(contract.created_execution_id)],
       ["更新日時", formatTime(contract.updated_at)],
-      ["更新の実行", executionRef(contract.updated_execution_id, contract.updated_execution_origin, contract.updated_execution_label_basis)],
+      ["更新の実行", executionLink(contract.updated_execution_id)],
       ["削除日時", formatTime(contract.deleted_at)],
     ]),
   );
@@ -136,10 +136,10 @@ async function loadStorage(id) {
 
 function versionColumns(current) {
   return [
-    { label: "版", className: "nowrap", render: (version) => [h("span", { class: "id" }, `v${version.version}`), version.version === current ? [" ", h("span", { class: "badge badge--native" }, "現在")] : null] },
+    { label: "版", className: "nowrap", render: (version) => [h("span", { class: "id" }, `v${version.version}`), version.version === current ? [" ", h("span", { class: "badge badge--muted" }, "現在")] : null] },
     { label: "SHA-256", render: (version) => h("span", { class: "mono" }, version.sha256) },
     { label: "サイズ", className: "num", render: (version) => bytesText(version.size) },
-    { label: "登録の実行", className: "nowrap", render: (version) => executionRef(version.created_execution_id, version.created_execution_origin, version.created_execution_label_basis) },
+    { label: "登録の実行", className: "nowrap", render: (version) => executionLink(version.created_execution_id) },
     { label: "登録日時", className: "nowrap", render: (version) => formatTime(version.created_at) },
   ];
 }

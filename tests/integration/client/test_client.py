@@ -144,7 +144,7 @@ async def test_currency_management_transfers_and_replay(rapidwire: ClientFactory
     assert detail.input["amount"] == "12345"
     executions = await public.list_executions(initiator_id=ALICE, execution_type="transfer")
     assert [item.execution_id for item in executions.items] == [sent.execution_id]
-    assert (executions.items[0].contract_id, executions.items[0].parent_origin) == (None, None)
+    assert (executions.items[0].contract_id, executions.items[0].parent_execution_id) == (None, None)
     assert (await public.list_executions(contract_id=ALICE)).items == ()
     found = await public.search_history(source_id=ALICE, destination_id=BOB, min_amount="12.345", max_amount=Decimal(13), start=datetime.now(UTC) - timedelta(hours=1))
     assert [item.transfer_id for item in found.items] == [sent.transfer_id]
@@ -188,7 +188,7 @@ async def test_claims_allowances_and_staking(rapidwire: ClientFactory, db: Async
     canceled = await alice.cancel_claim(other.claim_id)
     assert canceled.canceled_by == ALICE
     resolved = await alice.get_claim(claim.claim_id)
-    assert (resolved.resolved_execution_id, resolved.created_execution_origin, resolved.resolved_execution_origin) == (paid.execution_id, "native", "native")
+    assert (resolved.created_execution_id, resolved.resolved_execution_id) == (claim.execution_id, paid.execution_id)
     assert [item.claim_id for item in (await alice.list_claims(ALICE, role="claimant")).items] == []
     assert {item.claim_id for item in (await alice.list_claims(ALICE, role="payer")).items} == {claim.claim_id, other.claim_id}
     with pytest.raises(ConflictError) as again:

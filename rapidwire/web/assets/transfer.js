@@ -1,5 +1,5 @@
 // Transfer page: every field of one transfer entry, with the execution that made it.
-import { accountLink, amountView, api, currencyLink, executionRef, executionTypeLabel, formatTime, getParam, h, kindBadge, kvList, mount, originDetail, renderError, renderLoading, statusBadge } from "/assets/app.js";
+import { accountLink, amountView, api, currencyLink, executionLink, executionTypeLabel, formatTime, getParam, h, kindBadge, kvList, mount, renderError, renderLoading, statusBadge } from "/assets/app.js";
 
 const KIND_NOTES = Object.freeze({
   principal: "実行が指定した額そのものの移動です。",
@@ -25,12 +25,11 @@ function render(entry) {
   mount(
     "execution-details",
     kvList([
-      ["実行", executionRef(entry.execution_id, entry.origin, entry.label_basis)],
+      ["実行", executionLink(entry.execution_id)],
       ["種類", [executionTypeLabel(entry.execution_type), h("span", { class: "sub mono" }, entry.execution_type)]],
       ["状態", statusBadge(entry.execution_status)],
-      ["由来", originDetail(entry.origin, entry.label_basis)],
       ["実行者", accountLink(entry.initiator_id, { withName: true })],
-      ["親の実行", entry.parent_execution_id ? executionRef(entry.parent_execution_id, entry.parent_origin, entry.parent_label_basis) : "なし"],
+      ["親の実行", entry.parent_execution_id ? executionLink(entry.parent_execution_id) : "なし"],
       ["コントラクト関数", entry.contract_function ? h("span", { class: "mono" }, entry.contract_function) : "-"],
     ]),
   );

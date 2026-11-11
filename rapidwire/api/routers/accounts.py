@@ -23,7 +23,7 @@ from rapidwire.core.currency import CurrencyInfo, get_currency, get_currency_by_
 from rapidwire.core.db import consistent_snapshot
 from rapidwire.core.errors import AccountNotFound, CurrencyNotFound, NotFoundError
 from rapidwire.core.queries import currency_supplies
-from rapidwire.core.types import AccountKind, ClaimStatus, ExecutionStatus, LabelBasis, Origin, OutboxStatus
+from rapidwire.core.types import AccountKind, ClaimStatus, ExecutionStatus, OutboxStatus
 from rapidwire.db.tables import CONTRACT_FUNCTION_MAX, CURRENCY_SYMBOL_MAX, ENUM_LENGTH
 
 __all__ = ["DISCORD_UNAVAILABLE_CODE", "DISCORD_UNAVAILABLE_MESSAGE", "router"]
@@ -123,24 +123,16 @@ class TransferEntryOut(TransferRecordOut):
     currency_symbol: str = Field(description="The currency's current symbol.")
     execution_type: str = Field(description="The type of the execution that made the transfer.")
     execution_status: ExecutionStatus
-    origin: Origin = Field(description="native for executions of this version, legacy for executions imported from the old version.")
-    label_basis: LabelBasis | None = Field(description="How the type of a legacy execution was decided; null for native executions.")
     initiator_id: IntOut
     parent_execution_id: IntOut | None = Field(description="The calling execution of a nested contract execution, else null.")
-    parent_origin: Origin | None = Field(description="The origin of the parent execution, null without a parent.")
-    parent_label_basis: LabelBasis | None = Field(description="The label basis of a legacy parent execution, else null.")
     contract_function: str | None = Field(description="The called function of a contract call, else null.")
 
 
 class ExecutionOut(BaseModel):
     execution_id: IntOut
-    type: str = Field(description="The operation, such as transfer, swap or contract_call; legacy imports may carry other values.")
-    origin: Origin = Field(description="native for executions of this version, legacy for executions imported from the old version.")
-    label_basis: LabelBasis | None = Field(description="How the type of a legacy execution was decided; null for native executions.")
+    type: str = Field(description="The operation, such as transfer, swap or contract_call; the set of values is open.")
     initiator_id: IntOut
     parent_execution_id: IntOut | None = Field(description="The calling execution of a nested contract execution, else null.")
-    parent_origin: Origin | None = Field(description="The origin of the parent execution, null without a parent.")
-    parent_label_basis: LabelBasis | None = Field(description="The label basis of a legacy parent execution, else null.")
     contract_id: IntOut | None = Field(description="The contract a contract_call called or a contract management execution acted on, else null.")
     status: ExecutionStatus
     input: dict[str, Any] = Field(description="The request as stored; every integer, amounts included, is a decimal string in minimal units. Empty for private types.")
@@ -196,11 +188,7 @@ class ClaimOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_execution_id: IntOut
-    created_execution_origin: Origin = Field(description="The origin of the execution that created the claim.")
-    created_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy creating execution, else null.")
     resolved_execution_id: IntOut | None = Field(description="The execution that paid or canceled the claim, null while pending.")
-    resolved_execution_origin: Origin | None = Field(description="The origin of the resolving execution, null while pending.")
-    resolved_execution_label_basis: LabelBasis | None = Field(description="The label basis of a legacy resolving execution, else null.")
 
 
 class AllowanceOut(BaseModel):
@@ -339,12 +327,8 @@ def _transfer_entry(item: queries.TransferEntry) -> TransferEntryOut:
         currency_symbol=item.currency_symbol,
         execution_type=item.execution_type,
         execution_status=item.execution_status,
-        origin=item.origin,
-        label_basis=item.label_basis,
         initiator_id=item.initiator_id,
         parent_execution_id=item.parent_execution_id,
-        parent_origin=item.parent_origin,
-        parent_label_basis=item.parent_label_basis,
         contract_function=item.contract_function,
     )
 
@@ -353,12 +337,8 @@ def _execution_fields(item: queries.Execution) -> dict[str, Any]:
     return {
         "execution_id": item.execution_id,
         "type": item.type,
-        "origin": item.origin,
-        "label_basis": item.label_basis,
         "initiator_id": item.initiator_id,
         "parent_execution_id": item.parent_execution_id,
-        "parent_origin": item.parent_origin,
-        "parent_label_basis": item.parent_label_basis,
         "contract_id": item.contract_id,
         "status": item.status,
         "input": dict(item.input),
@@ -419,11 +399,7 @@ def _claim(item: claims.Claim) -> ClaimOut:
         created_at=item.created_at,
         updated_at=item.updated_at,
         created_execution_id=item.created_execution_id,
-        created_execution_origin=item.created_execution_origin,
-        created_execution_label_basis=item.created_execution_label_basis,
         resolved_execution_id=item.resolved_execution_id,
-        resolved_execution_origin=item.resolved_execution_origin,
-        resolved_execution_label_basis=item.resolved_execution_label_basis,
     )
 
 

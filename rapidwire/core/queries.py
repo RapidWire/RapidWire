@@ -26,7 +26,7 @@ from rapidwire.core.paging import (
     count_bounded,
     validate_paging,
 )
-from rapidwire.core.types import AccountKind, ExecutionStatus, ExecutionType, JsonObject, LabelBasis, Origin, OutboxStatus
+from rapidwire.core.types import AccountKind, ExecutionStatus, ExecutionType, JsonObject, OutboxStatus
 from rapidwire.core.validation import BIGINT_MAX, require_int_in_range, validate_bigint_id
 from rapidwire.db.tables import CONTRACT_FUNCTION_MAX, ENUM_LENGTH, account, balance, currency, execution, outbox, transfer
 from rapidwire.db.types import AMOUNT_MAX, AMOUNT_MIN
@@ -101,16 +101,12 @@ class BalanceEntry:
 
 @dataclass(frozen=True)
 class Execution:
-    """An execution row without its idempotency key, with the origin and label basis of its parent (None without a parent); type is an open set of strings (see ExecutionType), and contract_id is the contract a contract_call called or a contract management execution acted on."""
+    """An execution row without its idempotency key; type is an open set of strings (see ExecutionType), and contract_id is the contract a contract_call called or a contract management execution acted on."""
 
     execution_id: int
     type: str
-    origin: Origin
-    label_basis: LabelBasis | None
     initiator_id: int
     parent_execution_id: int | None
-    parent_origin: Origin | None
-    parent_label_basis: LabelBasis | None
     status: ExecutionStatus
     input: JsonObject
     output: JsonObject | None
@@ -139,12 +135,8 @@ class TransferEntry(Transfer):
     currency_symbol: str
     execution_type: str
     execution_status: ExecutionStatus
-    origin: Origin
-    label_basis: LabelBasis | None
     initiator_id: int
     parent_execution_id: int | None
-    parent_origin: Origin | None
-    parent_label_basis: LabelBasis | None
     contract_function: str | None
 
 
@@ -235,35 +227,13 @@ def _check_text(name: str, value: object, max_length: int) -> str:
     return value
 
 
-def _origin(value: str | None) -> Origin | None:
-    return Origin(value) if value is not None else None
-
-
-def _label_basis(value: str | None) -> LabelBasis | None:
-    return LabelBasis(value) if value is not None else None
-
-
-# The parent execution, outer-joined on its primary key to give every execution or transfer row the origin of its parent.
-_PARENT: Final = execution.alias("parent")
-_PARENT_COLUMNS: Final = (_PARENT.c.origin.label("parent_origin"), _PARENT.c.label_basis.label("parent_label_basis"))
-
-
-def _executions_with_parent() -> Select[Any]:
-    """Every execution column plus parent_origin and parent_label_basis."""
-    return select(execution, *_PARENT_COLUMNS).select_from(execution.outerjoin(_PARENT, _PARENT.c.execution_id == execution.c.parent_execution_id))
-
-
 def _execution(row: RowMapping) -> Execution:
     private = row["type"] in PRIVATE_EXECUTION_TYPES
     return Execution(
         execution_id=row["execution_id"],
         type=row["type"],
-        origin=Origin(row["origin"]),
-        label_basis=_label_basis(row["label_basis"]),
         initiator_id=row["initiator_id"],
         parent_execution_id=row["parent_execution_id"],
-        parent_origin=_origin(row["parent_origin"]),
-        parent_label_basis=_label_basis(row["parent_label_basis"]),
         status=ExecutionStatus(row["status"]),
         input={} if private else row["input"],
         output=None if private else row["output"],
@@ -292,11 +262,8 @@ _ENTRY_COLUMNS: Final = (
     currency.c.symbol.label("currency_symbol"),
     execution.c.type.label("execution_type"),
     execution.c.status.label("execution_status"),
-    execution.c.origin,
-    execution.c.label_basis,
     execution.c.initiator_id,
     execution.c.parent_execution_id,
-    *_PARENT_COLUMNS,
     execution.c.contract_function,
 )
 
@@ -314,12 +281,8 @@ def _transfer_entry(row: RowMapping) -> TransferEntry:
         currency_symbol=row["currency_symbol"],
         execution_type=row["execution_type"],
         execution_status=ExecutionStatus(row["execution_status"]),
-        origin=Origin(row["origin"]),
-        label_basis=_label_basis(row["label_basis"]),
         initiator_id=row["initiator_id"],
         parent_execution_id=row["parent_execution_id"],
-        parent_origin=_origin(row["parent_origin"]),
-        parent_label_basis=_label_basis(row["parent_label_basis"]),
         contract_function=row["contract_function"],
     )
 
@@ -427,11 +390,11 @@ async def get_execution(db: Db, execution_id: int) -> ExecutionDetail | None:
     """The execution with its transfers and its direct children (each with its own transfers and child IDs), or None when it does not exist."""
     validate_bigint_id("execution_id", execution_id)
     async with consistent_snapshot(db) as conn:
-        row = (await conn.execute(_executions_with_parent().where(execution.c.execution_id == execution_id))).mappings().one_or_none()
+        row = (await conn.execute(select(execution).where(execution.c.execution_id == execution_id))).mappings().one_or_none()
         if row is None:
             return None
         (node,) = await _execution_nodes(conn, [row])
-        child_stmt = _executions_with_parent().where(execution.c.parent_execution_id == execution_id).order_by(execution.c.execution_id)
+        child_stmt = select(execution).where(execution.c.parent_execution_id == execution_id).order_by(execution.c.execution_id)
         child_rows = (await conn.execute(child_stmt)).mappings().all()
         children = await _execution_nodes(conn, child_rows)
     return ExecutionDetail(execution=node.execution, transfers=node.transfers, child_execution_ids=node.child_execution_ids, deliveries=node.deliveries, children=tuple(children))
@@ -444,7 +407,6 @@ async def get_transfer(db: Db, transfer_id: int) -> TransferEntry | None:
         select(*_ENTRY_COLUMNS)
         .join(execution, execution.c.execution_id == transfer.c.execution_id)
         .join(currency, currency.c.currency_id == transfer.c.currency_id)
-        .outerjoin(_PARENT, _PARENT.c.execution_id == execution.c.parent_execution_id)
         .where(transfer.c.transfer_id == transfer_id)
     )
     async with reader(db) as conn:
@@ -536,7 +498,6 @@ def history_statements(
         .join(transfer, transfer.c.transfer_id == matched.c.transfer_id)
         .join(execution, execution.c.execution_id == transfer.c.execution_id)
         .join(currency, currency.c.currency_id == transfer.c.currency_id)
-        .outerjoin(_PARENT, _PARENT.c.execution_id == execution.c.parent_execution_id)
         .order_by(*ordering)
         .limit(per_page)
         .offset(offset)
@@ -563,7 +524,7 @@ async def search_history(
     sort_by: str = "transfer_id",
     sort_order: str = "desc",
 ) -> Page[TransferEntry]:
-    """Search transfers of native and legacy executions alike; every given filter must match.
+    """Search transfers; every given filter must match.
 
     user_id matches either side, start is an inclusive and end an exclusive bound on the transfer time (a date range ends at the next midnight), min_amount and max_amount are inclusive, and execution_type and contract_function filter on the owning execution.
     sort_by is transfer_id, timestamp or amount and sort_order is asc or desc (any case); ties on timestamp or amount are ordered by transfer_id in the same direction.
@@ -627,7 +588,7 @@ def execution_list_statements(
         except ValueError:
             raise InvalidArgument(f"status must be one of {', '.join(ExecutionStatus)}.") from None
         conditions.append(execution.c.status == wanted.value)
-    page_stmt = _executions_with_parent().where(*conditions).order_by(execution.c.execution_id.desc()).limit(per_page).offset(offset)
+    page_stmt = select(execution).where(*conditions).order_by(execution.c.execution_id.desc()).limit(per_page).offset(offset)
     count_source = select(execution.c.execution_id).where(*conditions)
     if contract_id is not None:
         page_stmt = page_stmt.with_hint(execution, _CONTRACT_INDEX_HINT, "mysql")

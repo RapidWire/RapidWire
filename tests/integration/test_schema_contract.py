@@ -38,7 +38,7 @@ HIRAGANA_A = chr(0x3042)
 async def _seed(engine: AsyncEngine) -> int:
     async with engine.begin() as conn:
         await ensure_user_accounts(conn, [ALICE], now=NOW)
-        result = await conn.execute(insert(execution).values(type="contract_update", origin="native", initiator_id=ALICE, status="success", input={}, created_at=NOW))
+        result = await conn.execute(insert(execution).values(type="contract_update", initiator_id=ALICE, status="success", input={}, created_at=NOW))
         assert result.inserted_primary_key is not None
         return int(result.inserted_primary_key[0])
 

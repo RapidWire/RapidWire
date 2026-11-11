@@ -55,9 +55,7 @@ async def test_migration_0007_backfills_and_drops_contract_id(db: AsyncEngine) -
             await conn.execute(text("INSERT INTO account (account_id, kind, created_at) VALUES (:id, 'user', '2026-01-01 00:00:00')"), {"id": ALICE})
             for execution_id, type_, payload, _ in ROWS:
                 await conn.execute(
-                    text(
-                        "INSERT INTO execution (execution_id, type, origin, initiator_id, status, input, created_at) VALUES (:id, :type, 'native', :initiator, 'success', :input, '2026-01-01 00:00:00')"
-                    ),
+                    text("INSERT INTO execution (execution_id, type, initiator_id, status, input, created_at) VALUES (:id, :type, :initiator, 'success', :input, '2026-01-01 00:00:00')"),
                     {"id": execution_id, "type": type_, "initiator": ALICE, "input": payload},
                 )
         async with db.begin() as conn:

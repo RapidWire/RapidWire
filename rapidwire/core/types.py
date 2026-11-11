@@ -57,21 +57,6 @@ class ExecutionStatus(StrEnum):
     REVERTED = "reverted"
 
 
-class Origin(StrEnum):
-    NATIVE = "native"
-    LEGACY = "legacy"
-
-
-class LabelBasis(StrEnum):
-    """How the type of an execution imported from the old version was decided; STATE_IMPORT marks an execution that carries over a state row (a pending claim or an allowance) rather than a transfer."""
-
-    ROW_SHAPE = "row_shape"
-    RECALCULATION = "recalculation"
-    BINLOG = "binlog"
-    OWNER_DECISION = "owner_decision"
-    STATE_IMPORT = "state_import"
-
-
 class TransferKind(StrEnum):
     PRINCIPAL = "principal"
     INTEREST = "interest"

@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rapidwire.core.accounts import ensure_user_accounts
 from rapidwire.core.ledger import LedgerTx, run_operation
-from rapidwire.core.types import ExecutionType, LabelBasis, Origin, TransferKind
+from rapidwire.core.types import ExecutionType
 from rapidwire.db.tables import account, allowance, allowance_history, balance, claim, currency, execution, metadata, stake, transfer
-from tests.integration.factories import create_currency, mint
+from tests.integration.factories import create_currency, insert_transfer, mint
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 ALICE = 111
@@ -42,7 +42,7 @@ async def test_tables_are_innodb_with_binary_collation(engine: AsyncEngine) -> N
 async def _execution(engine: AsyncEngine, **values: Any) -> int:
     async with engine.begin() as conn:
         await ensure_user_accounts(conn, [ALICE], now=NOW)
-        row = {"type": "transfer", "origin": "native", "initiator_id": ALICE, "status": "success", "input": {}, "created_at": NOW, **values}
+        row = {"type": "transfer", "initiator_id": ALICE, "status": "success", "input": {}, "created_at": NOW, **values}
         result = await conn.execute(insert(execution).values(**row))
         assert result.inserted_primary_key is not None
         return int(result.inserted_primary_key[0])
@@ -122,31 +122,27 @@ async def test_notification_permission_needs_two_users(db: AsyncEngine) -> None:
     await _expect_rejected(db, sql, {"a": ALICE}, "ck_notification_permission_distinct_users")
 
 
-async def test_legacy_state_rows_have_state_import_executions(db: AsyncEngine) -> None:
+async def test_loaded_claim_and_allowance_rows_reference_their_executions(db: AsyncEngine) -> None:
     payer, claimant, owner, spender = 960142246257229894, 959782437615976449, 966290198705111051, 1310270419248611390
     await create_currency(db, currency_id=1362038520973103255, symbol="P", name="photon")
     await create_currency(db, currency_id=1138734577360326707, symbol="D", name="Dorago")
     async with db.begin() as conn:
         await ensure_user_accounts(conn, [payer, claimant, owner, spender], now=NOW)
         tx = LedgerTx(conn, NOW)
-        claim_execution = await tx.create_execution(
-            type=ExecutionType.CLAIM_CREATE, initiator_id=claimant, input={"payer_id": payer, "amount": 10_000_000}, origin=Origin.LEGACY, label_basis=LabelBasis.STATE_IMPORT
-        )
+        claim_execution = await tx.create_execution(type=ExecutionType.CLAIM_CREATE, initiator_id=claimant, input={"payer_id": payer, "amount": 10_000_000})
         await conn.execute(
             insert(claim).values(
                 claimant_id=claimant, payer_id=payer, currency_id=1362038520973103255, amount=10_000_000, status="pending", created_at=NOW, updated_at=NOW, created_execution_id=claim_execution
             )
         )
-        approve_execution = await tx.create_execution(
-            type=ExecutionType.APPROVE, initiator_id=owner, input={"spender_id": spender, "amount": 5}, origin=Origin.LEGACY, label_basis=LabelBasis.STATE_IMPORT
-        )
+        approve_execution = await tx.create_execution(type=ExecutionType.APPROVE, initiator_id=owner, input={"spender_id": spender, "amount": 5})
         await conn.execute(insert(allowance).values(owner_id=owner, spender_id=spender, currency_id=1138734577360326707, amount=5, updated_at=NOW))
         await conn.execute(
             insert(allowance_history).values(execution_id=approve_execution, owner_id=owner, spender_id=spender, currency_id=1138734577360326707, old_amount=0, new_amount=5, created_at=NOW)
         )
     async with db.connect() as conn:
-        rows = (await conn.execute(select(execution.c.type, execution.c.origin, execution.c.label_basis).order_by(execution.c.execution_id))).all()
-    assert [tuple(row) for row in rows] == [("claim_create", "legacy", "state_import"), ("approve", "legacy", "state_import")]
+        rows = (await conn.execute(select(execution.c.type).order_by(execution.c.execution_id))).scalars().all()
+    assert rows == ["claim_create", "approve"]
 
 
 async def test_transfer_checks(db: AsyncEngine) -> None:
@@ -218,21 +214,36 @@ async def test_idempotency_key_is_unique_per_initiator(db: AsyncEngine) -> None:
         await _execution(db, idempotency_key="k1")
     async with db.begin() as conn:
         await ensure_user_accounts(conn, [BOB], now=NOW)
-        await conn.execute(insert(execution).values(type="transfer", origin="native", initiator_id=BOB, status="success", input={}, created_at=NOW, idempotency_key="k1"))
+        await conn.execute(insert(execution).values(type="transfer", initiator_id=BOB, status="success", input={}, created_at=NOW, idempotency_key="k1"))
     await _execution(db)
     await _execution(db)
 
 
-async def test_label_basis_matches_origin(db: AsyncEngine) -> None:
-    with pytest.raises(DBAPIError, match="ck_execution_label_basis"):
-        await _execution(db, label_basis="binlog")
-    with pytest.raises(DBAPIError, match="ck_execution_label_basis"):
-        await _execution(db, origin="legacy")
-    with pytest.raises(DBAPIError, match="ck_execution_label_basis"):
-        await _execution(db, origin="legacy", label_basis="guess")
+async def test_execution_status_is_constrained(db: AsyncEngine) -> None:
     with pytest.raises(DBAPIError, match="ck_execution_status"):
         await _execution(db, status="pending")
-    await _execution(db, origin="legacy", label_basis="binlog")
+    await _execution(db, status="reverted")
+
+
+async def test_execution_type_is_an_open_set_without_provenance_columns(db: AsyncEngine) -> None:
+    await _execution(db, type="unlisted_operation")
+    async with db.connect() as conn:
+        columns = {row[0] for row in (await conn.execute(text("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'execution'"))).all()}
+        stored = (await conn.execute(select(execution.c.type))).scalar_one()
+    assert stored == "unlisted_operation"
+    assert columns == {
+        "execution_id",
+        "type",
+        "initiator_id",
+        "parent_execution_id",
+        "status",
+        "input",
+        "output",
+        "idempotency_key",
+        "contract_function",
+        "created_at",
+        "contract_id",
+    }
 
 
 async def test_account_kind_shape(db: AsyncEngine) -> None:
@@ -282,29 +293,23 @@ async def test_explicit_ids_do_not_break_later_allocation(db: AsyncEngine) -> No
     await create_currency(db, currency_id=1, symbol="AAA")
     await mint(db, 1, ALICE, 1_000, now=NOW)
     big_execution, big_transfer = 9_000_000_000, 7_000_000_000
-    async with db.begin() as conn:
-        await ensure_user_accounts(conn, [BOB], now=NOW)
-        tx = LedgerTx(conn, NOW)
-        await tx.lock_currencies([1])
-        await tx.lock_balances([(ALICE, 1), (BOB, 1)])
-        legacy = await tx.create_execution(
-            type=ExecutionType.TRANSFER, initiator_id=ALICE, input={}, execution_id=big_execution, created_at=NOW - timedelta(days=400), origin=Origin.LEGACY, label_basis=LabelBasis.ROW_SHAPE
-        )
-        assert legacy == big_execution
-        moved = await tx.move(legacy, 1, ALICE, BOB, 10, TransferKind.PRINCIPAL, transfer_id=big_transfer, created_at=NOW - timedelta(days=400))
-        assert moved == big_transfer
-        # A smaller explicit ID afterwards must not pull the counter back.
-        await tx.create_execution(type=ExecutionType.TRANSFER, initiator_id=ALICE, input={}, execution_id=5_000, origin=Origin.LEGACY, label_basis=LabelBasis.RECALCULATION)
+    earlier = NOW - timedelta(days=400)
+    inserted = await insert_transfer(
+        db, execution_id=big_execution, transfer_id=big_transfer, type=ExecutionType.TRANSFER, initiator=ALICE, currency_id=1, source=ALICE, destination=BOB, amount=10, at=earlier
+    )
+    assert inserted == big_execution
+    # A smaller explicit ID afterwards must not pull the counter back.
+    await _execution(db, execution_id=5_000)
     execution_id = await mint(db, 1, BOB, 5, now=NOW)
     async with db.connect() as conn:
         transfer_id = (await conn.execute(select(transfer.c.transfer_id).where(transfer.c.execution_id == execution_id))).scalar_one()
-        legacy_created = (await conn.execute(select(transfer.c.created_at).where(transfer.c.transfer_id == big_transfer))).scalar_one()
+        explicit_created = (await conn.execute(select(transfer.c.created_at).where(transfer.c.transfer_id == big_transfer))).scalar_one()
     assert execution_id > big_execution
     assert transfer_id > big_transfer
-    assert legacy_created == NOW - timedelta(days=400)
+    assert explicit_created == earlier
 
 
-async def test_operation_after_legacy_rows_continues_numbering(db: AsyncEngine) -> None:
+async def test_operation_after_explicit_id_rows_continues_numbering(db: AsyncEngine) -> None:
     await create_currency(db, currency_id=1, symbol="AAA")
 
     async def noop(tx: LedgerTx, execution_id: int) -> dict[str, Any]:
@@ -313,9 +318,7 @@ async def test_operation_after_legacy_rows_continues_numbering(db: AsyncEngine) 
     async with db.begin() as conn:
         await ensure_user_accounts(conn, [ALICE], now=NOW)
         await conn.execute(
-            text(
-                "INSERT INTO execution (execution_id, type, origin, label_basis, initiator_id, status, input, created_at) VALUES (123456789, 'mint', 'legacy', 'binlog', :a, 'success', '{}', UTC_TIMESTAMP(6))"
-            ),
+            text("INSERT INTO execution (execution_id, type, initiator_id, status, input, created_at) VALUES (123456789, 'mint', :a, 'success', '{}', UTC_TIMESTAMP(6))"),
             {"a": ALICE},
         )
     result = await run_operation(db, type=ExecutionType.TRANSFER, initiator_id=ALICE, input={}, body=noop, now=NOW)
